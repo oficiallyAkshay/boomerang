@@ -60,6 +60,8 @@ CLI: fetch.py --start YYYY-MM-DD --end YYYY-MM-DD --out DIR [--vendors DIR] [--d
   # with no body and no kept attachment writes nothing and is named on stdout as empty
 CLI: gmail_cli.py auth --client-secret PATH | search QUERY | get RID --out DIR ; token at ~/.config/boomerang/token.json chmod 600
 CLI: render_pdf.py packet.html packet.pdf [--expect N]      # prints the page count; exits 2 when --expect differs
+  # aborts every http and https request the page makes, so nothing is fetched while rendering;
+  # names on stderr any receipt scaled below half size to fit its page
 CLI: attach_pdf.py packet.pdf DATA.json --receipts DIR --out final.pdf          # prints the final page count
   # validates DATA.json against the receipts dir first and exits 2 listing the problems;
   # stamps the output /BoomerangSpliced and refuses a packet that already carries it
