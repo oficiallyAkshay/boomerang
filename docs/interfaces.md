@@ -53,7 +53,7 @@ Each vendor directory holds one, at `vendors/<name>/rules.json`.
 ```text
 CLI: build.py DATA.json --receipts DIR --out packet.html   # totals, then "pages expected N"
 CLI: clean.py IN.html --out OUT.html [--vendor NAME|generic] [--vendors DIR] [--images DIR] [--fetch-images]
-CLI: cards.py RECEIPTS_DIR
+CLI: cards.py RECEIPTS_DIR      # reads .html, .txt and .pdf receipts, so folios are counted too
 CLI: fetch.py --start YYYY-MM-DD --end YYYY-MM-DD --out DIR [--vendors DIR] [--dry-run]
   # writes <rid>.html, <rid>.txt, <rid>.meta.json; the first kept attachment of each kind is
   # <rid>.pdf | <rid>.png | <rid>.jpg and later ones of that kind <rid>.<n>.<ext>; a message
