@@ -52,3 +52,4 @@ jobs:
         run: |
           git fetch origin main --depth=1
           uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=90
+      - run: uv run python examples/build_example.py --check
