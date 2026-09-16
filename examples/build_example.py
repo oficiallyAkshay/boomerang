@@ -489,7 +489,7 @@ def prune_cache(cache: Path) -> tuple[int, int]:
     for path in entries():
         with path.open("rb") as handle:
             head = handle.read(12)
-        if path.stat().st_size < MIN_IMAGE_BYTES or not clean._looks_like_an_image(head):
+        if path.stat().st_size < MIN_IMAGE_BYTES or not clean.looks_like_an_image(head):
             path.unlink()
     for path in entries():
         if path.stat().st_size > MAX_IMAGE_BYTES:

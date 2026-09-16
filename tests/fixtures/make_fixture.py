@@ -8,6 +8,10 @@ produces the same packet and the same totals.
 
 The trip: a two night onsite, AUS to SEA and back, in June 2026. One travel
 day, one working day, one personal day on which only the airport leg is kept.
+
+This is a module the tests import through the ``fixture_dir`` fixture in
+``tests/conftest.py``. It has no command line: ``synth`` is on the path only
+when pytest puts it there, so a ``__main__`` block here could not be run.
 """
 
 from __future__ import annotations
@@ -491,10 +495,3 @@ def make(out_dir: Path, seed: int = 1) -> Path:
     path = out_dir / "expense_data.json"
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return path
-
-
-if __name__ == "__main__":
-    import sys
-
-    target = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("out/fixture")
-    print(make(target))
