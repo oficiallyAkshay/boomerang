@@ -56,6 +56,12 @@ know what was done to the page in front of them.
    the total. The count reads the text a reader would see and not the markup
    around it, because a style attribute is full of decimals
    (``line-height:1.25rem``) and none of them is an amount.
+5. Rewrites. A vendor may also carry an optional ``replace`` list of
+   ``[regex, replacement]`` pairs, applied with ``re.sub`` after the strip
+   patterns and behind the same amount guard. It is for markup a vendor laid
+   out for a mail client's width that a packet's narrower column squeezes: an
+   Uber total row gives the word Total a cell at ``width:100%``, which leaves
+   the amount beside it one character per line.
 
 ``clean_dir`` cleans a whole directory, one thread per receipt, because the
 receipts on disk have nothing to do with each other. It is the stage the
@@ -683,7 +689,28 @@ def _rule_problems(loaded: object) -> list[str]:
             problems.append(f"{key} must be a list")
     if "name" in loaded and not isinstance(loaded["name"], str):
         problems.append("name must be a string")
+    problems.extend(_replace_problems(loaded))
     return problems
+
+
+def _replace_problems(loaded: dict) -> list[str]:
+    """What is wrong with the optional replace field, if the rules carry one.
+
+    The field is optional, so a rules.json without it is complete. A rules.json
+    with it has to hold a list of two string pairs, because every pair is fed
+    straight to ``re.sub`` as a pattern and a replacement.
+    """
+    if "replace" not in loaded:
+        return []
+    pairs = loaded["replace"]
+    if not isinstance(pairs, list):
+        return ["replace must be a list"]
+    for pair in pairs:
+        if not isinstance(pair, list) or len(pair) != 2:
+            return ["replace must hold pairs"]
+        if not all(isinstance(half, str) for half in pair):
+            return ["replace pairs must hold two strings"]
+    return []
 
 
 def load_vendor_rules(vendors_dir: Path) -> dict[str, dict]:
@@ -829,6 +856,35 @@ def _apply_strip_patterns(body: str, rules: dict) -> str:
     return body
 
 
+def _apply_replacements(body: str, rules: dict) -> str:
+    """Apply a vendor's replace pairs, one at a time, keeping every amount.
+
+    A strip pattern takes markup out. A replace pair rewrites it in place, for
+    the cases where the vendor's own markup lays a receipt out for a mail
+    client's width and not for a packet's. Each pair is a regex and a
+    replacement, fed to ``re.sub`` the same way a strip pattern is, and guarded
+    the same way: a pair whose result prints fewer money strings than the
+    fragment did before is skipped and named on stderr, because a rewrite is
+    no better a reason to lose a total than a removal is.
+    """
+    pairs = rules.get("replace") or []
+    vendor = str(rules.get("name") or GENERIC)
+    kept = _printed_amounts(body)
+    for index, (pattern, replacement) in enumerate(pairs):
+        candidate = re.sub(pattern, replacement, body, flags=re.S | re.I)
+        found = _printed_amounts(candidate)
+        if found < kept:
+            print(
+                f"clean: {vendor} replace pattern {index} skipped, "
+                "it would have taken an amount with it",
+                file=sys.stderr,
+            )
+            continue
+        body = candidate
+        kept = found
+    return body
+
+
 def _take_styles(body: str) -> tuple[str, str]:
     """The fragment with every style block out of it, and the CSS that was in them.
 
@@ -864,6 +920,7 @@ def clean_html(raw: str, rules: dict | None = None, image_cache: Path | None = N
     body = IMG_RE.sub(lambda m: "" if _is_tracking_pixel(m.group(0)) else m.group(0), body)
 
     body = _apply_strip_patterns(body, rules)
+    body = _apply_replacements(body, rules)
 
     unwrap = rules.get("unwrap_links_matching") or []
     if unwrap:

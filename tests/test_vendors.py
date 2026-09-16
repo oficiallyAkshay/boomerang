@@ -276,6 +276,54 @@ def test_the_lyft_promo_modules_go_whole_and_the_receipt_stays(rules: dict) -> N
         assert part in fragment, f"lyft lost {part!r} from the receipt itself"
 
 
+# -------------------------------------------------------------------- replace
+
+
+# The total row of an Uber receipt, as it is after cleaning: the title cell, the
+# amount cell, and the text of each. Both folders share the row shape.
+TOTAL_ROW_RE = re.compile(
+    r'(<td[^>]*class="total-fare-title"[^>]*>)(.*?)</td>\s*'
+    r'(<td[^>]*class="total-fare-amount"[^>]*>)(.*?)</td>',
+    re.S,
+)
+
+UBER_TOTALS = {"uber": "$34.86", "uber-eats": "$88.60"}
+
+
+@pytest.mark.parametrize("folder", sorted(UBER_TOTALS))
+def test_the_uber_total_row_gives_the_amount_room_to_sit_on_one_line(
+    folder: str, rules: dict
+) -> None:
+    """The title cell at width:100% squeezed the amount to a character a line.
+
+    Uber lays the total out as two cells, and gives the word Total a cell at
+    ``width:100%``. A mail client is wide enough that the amount beside it
+    still fits; a packet's column is not, and the amount wrapped one character
+    per line. The folder's replace pair turns that one cell's width into
+    ``auto``. Nothing else in the row moves, and the amount is the amount the
+    vendor printed.
+    """
+    fragment = clean.clean_html(samples_for(folder)["sample.html"], rules[folder])
+    row = TOTAL_ROW_RE.search(fragment)
+    assert row, f"{folder} lost its total row"
+    title_cell, title_text, _, amount_text = row.groups()
+    assert amount_text.strip() == UBER_TOTALS[folder]
+    assert title_text.strip() == "Total"
+    assert "width:100%" not in title_cell
+    assert "width:auto" in title_cell
+
+
+@pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
+def test_every_replace_pattern_compiles_and_matches_its_sample(folder: str, rules: dict) -> None:
+    """A replace pair a sample never matches is a pair nothing proves."""
+    samples = samples_for(folder)
+    for index, (pattern, _) in enumerate(rules[folder].get("replace") or []):
+        re.compile(pattern, re.S)
+        assert any(re.search(pattern, text, re.S | re.I) for text in samples.values()), (
+            f"{folder} replace pattern {index} matches no sample"
+        )
+
+
 @pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
 def test_at_least_one_strip_pattern_matches(folder: str, rules: dict) -> None:
     samples = samples_for(folder)

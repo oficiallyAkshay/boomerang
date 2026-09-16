@@ -131,6 +131,17 @@ The rules also carry a pattern for the standalone rate your trip row that the
 shorter Lime and cancelled ride templates use, which this sample does not
 have.
 
+One thing here is rewritten rather than removed. Uber's total row gives the
+word Total a cell at `width:100%`, which is fine at a mail client's width and
+leaves the amount beside it one character per line in a packet's narrower
+column. A `replace` pair turns that one cell's width into `auto` and adds the
+gap the width was holding open, so the total sits on a single line with the
+word and the figure apart; nothing else in the row is touched. The `replace` field
+is optional on any vendor, it holds `[regex, replacement]` pairs applied with
+`re.sub` after the strip patterns, and the amount guard covers a rewrite the
+same way it covers a removal: a pair that would leave the fragment printing
+fewer money strings is skipped and named on stderr.
+
 ## Uber Eats
 
 Uber Eats order receipts arrive in the same shell as Uber ride receipts, from
@@ -147,7 +158,10 @@ The Uber One savings strip stays, because it prints the $14.55 it saved and the
 amount guard will not take an amount out of a receipt. Uber Eats and Uber ride
 mail share the sender domain uber.com, so the domain alone cannot name the
 folder: detection prefers the vendor whose subject patterns fit as well as its
-domain, which sends an order subject here and a trip subject to Uber.
+domain, which sends an order subject here and a trip subject to Uber. The
+order total sits in the same row shape as an Uber ride total, so this folder
+carries the same `replace` pair, turning the title cell's `width:100%` into
+`auto` and a gap so the amount stays on one line.
 
 ## Marriott
 
