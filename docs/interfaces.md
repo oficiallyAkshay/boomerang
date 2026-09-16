@@ -66,6 +66,8 @@ CLI: attach_pdf.py packet.pdf DATA.json --receipts DIR --out final.pdf          
   # validates DATA.json against the receipts dir first and exits 2 listing the problems;
   # stamps the output /BoomerangSpliced and refuses a packet that already carries it
 CLI: check_prose.py [--packet FILE]
+  # scans tracked text files, UTF-16 ones included, for the em dash and the hashed denylist
+  # (runs of up to 4 words); --packet adds the banned word, data-rid= and href="# on the packet
 ```
 
 `--fetch-images` is the only path that opens a socket. It needs `--images DIR` and downloads what

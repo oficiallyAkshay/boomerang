@@ -4,6 +4,17 @@
 Scans tracked text files for two things: the em dash, which the packet style
 forbids, and any phrase whose sha256 appears in the hashed denylist. Hits are
 reported by file and line, never by content.
+
+A file that opens with a UTF-16 byte order mark is decoded as UTF-16 before
+anything else looks at it. Such a file is full of NUL bytes, so the binary
+test used to wave it through unread, which is a hole in a gate whose job is
+to find a name nobody meant to ship.
+
+``--packet`` adds the checks that only make sense on a built packet: the
+standalone banned word, the data-rid attribute, and a link to a fragment of
+the packet itself. A packet is printed and mailed, so an attribute carrying a
+message id and a link that goes nowhere on paper are both noise a reviewer
+should never have to see.
 """
 
 from __future__ import annotations
@@ -23,7 +34,15 @@ SKIP_NAMES = {"uv.lock", "pii_denylist.sha256"}
 SKIP_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2"}
 TOKEN_RE = re.compile(r"[a-z0-9]+")
 BANNED_WORD_RE = re.compile(r"\bdue\b", re.IGNORECASE)
-MAX_NGRAM = 3
+MAX_NGRAM = 4
+
+# Markup that has no business in a finished packet.
+DATA_RID_RE = re.compile(r"data-rid=")
+FRAGMENT_LINK = 'href="#'
+
+# Both UTF-16 orders. A UTF-32 file opens with the first of these too, and
+# reads as mojibake rather than as nothing at all, which is the safer failure.
+UTF16_BOMS = (b"\xff\xfe", b"\xfe\xff")
 
 
 def load_denylist(path: Path = DENYLIST_PATH) -> set[str]:
@@ -47,18 +66,33 @@ def git_files(root: Path | None = None) -> list[Path]:
 
 
 def is_scannable(path: Path) -> bool:
-    """True for text files the gate should read."""
+    """True for text files the gate should read.
+
+    A UTF-16 file is scannable even though it is mostly NUL bytes, because
+    ``read_text`` knows how to decode it.
+    """
     if path.name in SKIP_NAMES or path.suffix.lower() in SKIP_SUFFIXES:
         return False
     try:
-        head = path.open("rb").read(8192)
+        with path.open("rb") as handle:
+            head = handle.read(8192)
     except OSError:
         return False
+    if head.startswith(UTF16_BOMS):
+        return True
     return b"\0" not in head
 
 
+def read_text(path: Path) -> str:
+    """The file's text, decoded as UTF-16 when it opens with a UTF-16 mark."""
+    raw = path.read_bytes()
+    if raw.startswith(UTF16_BOMS):
+        return raw.decode("utf-16", errors="replace")
+    return raw.decode("utf-8", errors="replace")
+
+
 def line_hits_denylist(line: str, denylist: set[str]) -> bool:
-    """True when any 1, 2 or 3 word run of the line is on the denylist."""
+    """True when any run of up to MAX_NGRAM words in the line is on the denylist."""
     if not denylist:
         return False
     tokens = TOKEN_RE.findall(line.lower())
@@ -73,8 +107,18 @@ def line_hits_denylist(line: str, denylist: set[str]) -> bool:
 
 
 def scan_text(
-    name: str, text: str, denylist: set[str], flag_banned_word: bool = False
+    name: str,
+    text: str,
+    denylist: set[str],
+    flag_banned_word: bool = False,
+    flag_packet_markup: bool = False,
 ) -> list[str]:
+    """Every rule that applies, line by line. Returns error strings.
+
+    The two flags are separate because a caller that only wants the prose
+    rules checked on packet text should not have to take the markup rules
+    with them.
+    """
     errors: list[str] = []
     for number, line in enumerate(text.splitlines(), start=1):
         if EM_DASH in line:
@@ -83,6 +127,11 @@ def scan_text(
             errors.append(f"{name}:{number}: denylist hit")
         if flag_banned_word and BANNED_WORD_RE.search(line):
             errors.append(f"{name}:{number}: banned word")
+        if flag_packet_markup:
+            if DATA_RID_RE.search(line):
+                errors.append(f"{name}:{number}: data-rid attribute")
+            if FRAGMENT_LINK in line:
+                errors.append(f"{name}:{number}: fragment link")
     return errors
 
 
@@ -92,8 +141,7 @@ def scan(files: list[Path], denylist: set[str]) -> list[str]:
     for path in files:
         if not path.is_file() or not is_scannable(path):
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        errors.extend(scan_text(path.as_posix(), text, denylist))
+        errors.extend(scan_text(path.as_posix(), read_text(path), denylist))
     return errors
 
 
@@ -106,8 +154,15 @@ def main(argv: list[str] | None = None) -> int:
     denylist = load_denylist(args.denylist)
     errors = scan(git_files(), denylist)
     if args.packet:
-        text = args.packet.read_text(encoding="utf-8", errors="replace")
-        errors.extend(scan_text(args.packet.as_posix(), text, denylist, flag_banned_word=True))
+        errors.extend(
+            scan_text(
+                args.packet.as_posix(),
+                read_text(args.packet),
+                denylist,
+                flag_banned_word=True,
+                flag_packet_markup=True,
+            )
+        )
 
     for error in errors:
         print(error)

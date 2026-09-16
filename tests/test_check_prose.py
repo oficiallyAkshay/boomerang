@@ -47,6 +47,32 @@ def test_single_token_and_bigram_hits(tmp_path: Path) -> None:
     assert check_prose.scan([path], {sha("three four five six")}) == []
 
 
+def test_a_four_word_phrase_is_caught(tmp_path: Path) -> None:
+    """Three words was short of the long names a denylist actually carries."""
+    path = write(tmp_path, "long.md", "the Zephyrine Holdings Group Limited invoice\n")
+    assert check_prose.MAX_NGRAM == 4
+    assert check_prose.scan([path], {sha("zephyrine holdings group limited")})
+    assert check_prose.scan([path], {sha("holdings group limited invoice")})
+    assert check_prose.scan([path], {sha("the zephyrine holdings group limited")}) == []
+
+
+def test_a_utf16_file_is_decoded_and_scanned(tmp_path: Path) -> None:
+    """It is mostly NUL bytes, so the binary test used to wave it straight past."""
+    for name, encoding in (("le.md", "utf-16-le"), ("be.md", "utf-16-be")):
+        path = tmp_path / name
+        bom = "\ufeff"
+        path.write_bytes((bom + f"a line {EM_DASH} here\nand Zephyrine\n").encode(encoding))
+        assert check_prose.is_scannable(path) is True
+        errors = check_prose.scan([path], {sha("zephyrine")})
+        assert errors == [f"{path.as_posix()}:1: em dash", f"{path.as_posix()}:2: denylist hit"]
+
+
+def test_a_real_binary_file_is_still_skipped(tmp_path: Path) -> None:
+    path = tmp_path / "blob.dat"
+    path.write_bytes(b"\x01\x00\x02" + EM_DASH.encode())
+    assert check_prose.is_scannable(path) is False
+
+
 def test_empty_denylist_short_circuits() -> None:
     assert check_prose.line_hits_denylist("anything at all", set()) is False
 
@@ -82,6 +108,44 @@ def test_packet_mode_flags_the_banned_word(tmp_path: Path, monkeypatch, capsys) 
     assert code == 1
     assert "banned word" in out
     assert "check_prose: 1 errors" in out
+
+
+def test_packet_mode_flags_a_data_rid_attribute(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A packet is printed and mailed, so a message id has no business in it."""
+    packet = write(tmp_path, "packet.html", '<section data-rid="abc123">A receipt</section>\n')
+    empty = write(tmp_path, "list.sha256", "")
+    monkeypatch.setattr(check_prose, "git_files", lambda: [])
+    code = check_prose.main(["--packet", str(packet), "--denylist", str(empty)])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert f"{packet.as_posix()}:1: data-rid attribute" in out
+
+
+def test_packet_mode_flags_a_fragment_link(tmp_path: Path, monkeypatch, capsys) -> None:
+    packet = write(tmp_path, "packet.html", '<p>See <a href="#r3">the receipt</a>.</p>\n')
+    empty = write(tmp_path, "list.sha256", "")
+    monkeypatch.setattr(check_prose, "git_files", lambda: [])
+    code = check_prose.main(["--packet", str(packet), "--denylist", str(empty)])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert f"{packet.as_posix()}:1: fragment link" in out
+
+
+def test_the_packet_markup_rules_do_not_apply_to_the_tree(tmp_path: Path) -> None:
+    """The repo is full of source that mentions both, and none of it is a packet."""
+    path = write(tmp_path, "src.py", "DATA_RID = 'data-rid=\"'\nLINK = 'href=\"#top'\n")
+    assert check_prose.scan([path], set()) == []
+
+
+def test_scan_text_takes_the_two_packet_flags_apart(tmp_path: Path) -> None:
+    line = '<section data-rid="abc">Balance Due</section>'
+    assert check_prose.scan_text("p.html", line, set()) == []
+    assert check_prose.scan_text("p.html", line, set(), flag_banned_word=True) == [
+        "p.html:1: banned word"
+    ]
+    assert check_prose.scan_text("p.html", line, set(), flag_packet_markup=True) == [
+        "p.html:1: data-rid attribute"
+    ]
 
 
 def test_main_is_quiet_on_a_clean_tree(tmp_path: Path, monkeypatch, capsys) -> None:
