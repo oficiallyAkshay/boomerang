@@ -665,6 +665,60 @@ def test_the_decimals_in_a_style_attribute_are_not_amounts(
     assert capsys.readouterr().err == ""
 
 
+# -------------------------------------------------------------- vendor replace
+
+
+def test_a_replace_pair_rewrites_the_markup_in_place() -> None:
+    """The field a vendor uses when the markup has to be reshaped, not removed."""
+    rules = {"name": "demo", "replace": [[r'(class="title" style=")width:100%', r"\1width:auto"]]}
+    raw = '<table><tr><td class="title" style="width:100%;font-size:32px">Total</td>'
+    raw += '<td class="amount">$34.86</td></tr></table>'
+    out = clean.clean_html(raw, rules)
+    assert 'style="width:auto;font-size:32px"' in out
+    assert "width:100%" not in out
+    assert "$34.86" in out
+
+
+def test_a_replace_pair_runs_case_insensitively_and_across_lines() -> None:
+    rules = {"name": "demo", "replace": [[r"<td>total\n</td>", "<td>Total</td>"]]}
+    assert clean.clean_html("<td>TOTAL\n</td>", rules) == "<td>Total</td>"
+
+
+def test_a_replace_that_would_drop_an_amount_is_skipped(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A rewrite is no better a reason to lose a total than a removal is."""
+    rules = {"name": "demo", "replace": [[r"<td>\$[0-9.]+</td>", "<td></td>"]]}
+    raw = "<tr><td>Total</td><td>$34.86</td></tr>"
+    out = clean.clean_html(raw, rules)
+    assert "$34.86" in out
+    assert "clean: demo replace pattern 0 skipped" in capsys.readouterr().err
+
+
+def test_a_replace_pair_that_keeps_every_amount_prints_nothing(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    rules = {"name": "demo", "replace": [[r"width:100%", "width:auto"]]}
+    out = clean.clean_html('<td style="width:100%">$34.86</td>', rules)
+    assert "width:auto" in out
+    assert capsys.readouterr().err == ""
+
+
+def test_the_replace_guard_names_a_vendor_that_has_no_name(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    unnamed = {"replace": [[r"<p>.*?</p>", ""]]}
+    assert clean.clean_html("<p>Total $28.93</p>", unnamed) == "<p>Total $28.93</p>"
+    assert "generic replace pattern 0 skipped" in capsys.readouterr().err
+
+
+def test_rules_with_no_replace_field_clean_exactly_as_before(rules: dict) -> None:
+    """The field is optional, so every vendor that does not carry one is unaffected."""
+    assert "replace" not in rules["lyft"]
+    raw = "<table><tr><td>Lyft fare</td><td>$18.40</td></tr></table>"
+    assert clean.clean_html(raw, rules["lyft"]) == clean.clean_html(raw, {"name": "lyft"})
+
+
 # ----------------------------------------------------------------------- links
 
 
@@ -1014,6 +1068,46 @@ def test_load_vendor_rules_rejects_a_key_of_the_wrong_shape(tmp_path: Path) -> N
     target.mkdir()
     (target / "rules.json").write_text(json.dumps(body), encoding="utf-8")
     with pytest.raises(ValueError, match="sender_domains must be a list"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def write_lyft_with(tmp_path: Path, **overrides: object) -> None:
+    body = json.loads((VENDORS_DIR / "lyft" / "rules.json").read_text(encoding="utf-8"))
+    body.update(overrides)
+    target = tmp_path / "lyft"
+    target.mkdir()
+    (target / "rules.json").write_text(json.dumps(body), encoding="utf-8")
+
+
+def test_load_vendor_rules_accepts_rules_without_a_replace_field(tmp_path: Path) -> None:
+    """replace is optional, so the rules that predate it still load."""
+    write_lyft_with(tmp_path)
+    assert "replace" not in clean.load_vendor_rules(tmp_path)["lyft"]
+
+
+def test_load_vendor_rules_accepts_a_well_formed_replace_field(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, replace=[["width:100%", "width:auto"]])
+    assert clean.load_vendor_rules(tmp_path)["lyft"]["replace"] == [["width:100%", "width:auto"]]
+
+
+def test_load_vendor_rules_rejects_a_replace_field_that_is_not_a_list(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, replace="width:100%")
+    with pytest.raises(ValueError, match="replace must be a list"):
+        clean.load_vendor_rules(tmp_path)
+
+
+@pytest.mark.parametrize("bad", [["one"], [["a", "b", "c"]], ["not a pair at all"]])
+def test_load_vendor_rules_rejects_a_replace_entry_that_is_not_a_pair(
+    bad: list, tmp_path: Path
+) -> None:
+    write_lyft_with(tmp_path, replace=bad)
+    with pytest.raises(ValueError, match="replace must hold pairs"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_load_vendor_rules_rejects_a_replace_pair_that_is_not_two_strings(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, replace=[["width:100%", 7]])
+    with pytest.raises(ValueError, match="replace pairs must hold two strings"):
         clean.load_vendor_rules(tmp_path)
 
 
@@ -1525,7 +1619,7 @@ def test_the_amount_guard_warnings_come_out_in_filename_order(
     assert listed == [("a.html", "zulu"), ("b.html", "yankee"), ("c.html", "xray")]
     reported = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
     assert reported == [
-        f"clean: {vendor} strip pattern 0 skipped, " "it would have taken an amount with it"
+        f"clean: {vendor} strip pattern 0 skipped, it would have taken an amount with it"
         for vendor in ("zulu", "yankee", "xray")
     ]
     # The guard held: every total is still on the page it belongs to.

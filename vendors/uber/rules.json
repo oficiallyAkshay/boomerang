@@ -22,6 +22,12 @@
     "<div[^>]*class=\"action-panel-wrapper[^\"]*\"[^>]*>(?:(?!</div>)[\\s\\S])*?(?:Contact support|Report lost item|Forgot something\\?)(?:(?!</div>)[\\s\\S])*</div>",
     "<tr[^>]*>(?:(?!</tr>).)*?(?:Rate your (?:trip|driver|ride)|How was your (?:trip|ride))(?:(?!</tr>).)*?</tr>"
   ],
+  "replace": [
+    [
+      "(<td[^>]*class=\"total-fare-title\"[^>]*style=\")width:100%;",
+      "\\1width:auto;padding-right:16px;"
+    ]
+  ],
   "unwrap_links_matching": [
     "click\\.",
     "/track",
@@ -31,5 +37,5 @@
   ],
   "amount_regex": "data-testid=\"total_fare_amount\"[^>]*>\\s*([£$€₹][0-9][0-9,]*\\.[0-9]{2})\\s*<",
   "date_regex": "<div class=\"date\"[^>]*>\\s*([A-Z][a-z]{2}\\s+\\d{1,2},\\s+\\d{4})",
-  "notes": "Removed from an Uber ride receipt: the app download and Download PDF buttons; the static map image, whose query string carries the pickup and dropoff coordinates; the social link row; the corporate address footer and the account and terms link cluster; and the support panels, matched at the wrapper that holds them so each one goes with its heading and its message rather than leaving those on the page. The last pattern covers the older standalone rate your trip row; no row of that shape is present in this sample, and it is kept because the shorter Lime and cancelled ride templates still carry one. Two patterns here are written and then skipped, because each block prints a figure shaped like an amount and the guard will not take an amount out of a receipt. The Uber One cashback strip prints the $1.18 it credited, which is a real figure on a real receipt and is arguably part of it. The rate and tip module prints the driver's 4.92 rating, which is not money at all but cannot be told from money by its shape, so the module stays, minus its live controls, which are defused like every other link. Kept verbatim: the total, every fare line item including surcharges and promotions, the trip date and clock times, the pickup and dropoff rows, the product tier, and the payment rows with the card last four and the charge posting time."
+  "notes": "Removed from an Uber ride receipt: the app download and Download PDF buttons; the static map image, whose query string carries the pickup and dropoff coordinates; the social link row; the corporate address footer and the account and terms link cluster; and the support panels, matched at the wrapper that holds them so each one goes with its heading and its message rather than leaving those on the page. The last pattern covers the older standalone rate your trip row; no row of that shape is present in this sample, and it is kept because the shorter Lime and cancelled ride templates still carry one. Two patterns here are written and then skipped, because each block prints a figure shaped like an amount and the guard will not take an amount out of a receipt. The Uber One cashback strip prints the $1.18 it credited, which is a real figure on a real receipt and is arguably part of it. The rate and tip module prints the driver's 4.92 rating, which is not money at all but cannot be told from money by its shape, so the module stays, minus its live controls, which are defused like every other link. Kept verbatim: the total, every fare line item including surcharges and promotions, the trip date and clock times, the pickup and dropoff rows, the product tier, and the payment rows with the card last four and the charge posting time. One thing is rewritten rather than removed: the total row gives the word Total a cell at width:100%, which is fine in a mail client and squeezes the amount beside it to one character per line in a packet's narrower column, so a replace pair turns that one cell's width into auto and adds the gap the width was holding open. Nothing else in the row is touched, the figure is the figure the vendor printed, and the amount guard covers the rewrite the same way it covers a strip pattern."
 }
