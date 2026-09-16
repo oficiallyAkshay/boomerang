@@ -1,0 +1,16 @@
+# Codecov reads coverage.xml uploaded by the test job. The project status is
+# advisory: it allows a small dip so an unrelated refactor does not block a
+# pull request. The patch status holds changed lines to the same 90 percent
+# that diff-cover enforces inside CI.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 0.5%
+    patch:
+      default:
+        target: 90%
+
+# CI already reports. A bot comment on every pull request would only repeat it.
+comment: false

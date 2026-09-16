@@ -8,49 +8,131 @@ on:
 permissions:
   contents: read
 
+# A second push to a pull request supersedes the first, so cancel the run it
+# replaced. Pushes to main are never cancelled: every commit on the default
+# branch keeps its own result.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # One runner for everything that reads the tree without running the test
+  # suite: hooks, the packet gate, secrets, workflow lint, dependency audit.
   checks:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
-        with:
-          python-version: "3.12"
-      - run: uv sync --all-extras
-      # The same hooks contributors run locally, so CI and the pre-commit
-      # config cannot drift. gitleaks is skipped here because the secrets job
-      # below scans the whole history rather than the working tree.
-      - run: SKIP=gitleaks uv run pre-commit run --all-files --show-diff-on-failure
-
-  secrets:
-    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
+      # gitleaks reads pull request metadata to report what it finds.
       pull-requests: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          # gitleaks scans the whole history, not the working tree.
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - run: uv sync --all-extras
+
+      # The same hooks contributors run locally, so CI and the pre-commit
+      # config cannot drift. gitleaks is skipped here because the step below
+      # scans the whole history rather than the working tree.
+      - name: pre-commit hooks
+        run: SKIP=gitleaks uv run pre-commit run --all-files --show-diff-on-failure
+
+      # The packet gate is not a pre-commit hook: it needs a built packet to
+      # read, so it is named here rather than inherited from the hook config.
+      - name: packet prose and privacy gate
+        run: uv run python scripts/check_prose.py --packet examples/packet.html
+
+      - name: secrets scan
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: workflow lint
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+        with:
+          version: "1.7.12"
+          files: ".github/workflows/*.yml"
+
+      # Audit the resolved dependency set, runtime and dev alike, against the
+      # advisory database. A known vulnerability fails the job.
+      - name: dependency audit
+        run: |
+          uv export --format requirements-txt --all-extras \
+            --no-emit-project > "${RUNNER_TEMP}/requirements.txt"
+          uvx pip-audit --requirement "${RUNNER_TEMP}/requirements.txt"
+
+  # The declared floor and the newest release. Both legs run to completion so
+  # a version-specific failure is visible on its own.
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Codecov uploads with an OIDC token rather than a repository secret.
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          # diff-cover needs history on both sides to find a merge base.
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
       # No browser download: the ubuntu runner image ships Google Chrome and
       # Microsoft Edge, which is what the renderer asks for first.
       - run: uv sync --all-extras
       - run: uv run pytest --cov=scripts --cov-report=xml --cov-report=term
+
+      # One report per run, so only the newest leg uploads. The upload is
+      # tokenless: it authenticates with the job's OIDC identity, which
+      # Codecov accepts once the repository is public. Until then the step
+      # cannot authenticate and is a no-op that does not fail the run.
+      - name: upload coverage
+        if: matrix.python-version == '3.13'
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
+        with:
+          use_oidc: true
+          files: coverage.xml
+          fail_ci_if_error: false
+
       - name: diff coverage
         if: github.event_name == 'pull_request'
+        # Fetch main in full. A shallow fetch leaves no commit in common with
+        # a rebased branch, and diff-cover then has no merge base to compare
+        # against.
         run: |
-          git fetch origin main --depth=1
+          git fetch origin main
           uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=90
       - run: uv run python examples/build_example.py --check
+
+  # The one context the branch ruleset requires. It exists on every run, forks
+  # included, and it is the only job name the ruleset needs to know.
+  ci:
+    needs: [checks, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: gate
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            if [ "${result}" != "success" ]; then
+              echo "a required job did not succeed" >&2
+              exit 1
+            fi
+          done
