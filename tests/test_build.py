@@ -199,7 +199,40 @@ def test_refund_is_checked_when_it_is_there(data: dict) -> None:
 
     whole_refund = copy.deepcopy(good)
     first_item(whole_refund)["refund"] = 38.93
-    assert build.validate(whole_refund) == []
+    assert "days[0].items[0]: fully refunded, drop it" in build.validate(whole_refund)
+
+
+def test_a_line_amount_below_zero_is_sent_to_the_refund_field(data: dict) -> None:
+    """Money given back is a refund, which nets on the page instead of in silence."""
+    first_item(data)["amt"] = -12.00
+    problems = build.validate(data)
+    assert "days[0].items[0]: amt is less than zero, money given back goes in refund" in problems
+
+
+@pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+def test_an_amount_that_is_not_a_finite_number_is_refused(data: dict, literal: str) -> None:
+    """json.loads reads all three without complaint, so validate has to refuse them."""
+    first_item(data)["amt"] = json.loads(literal)
+    assert "days[0].items[0]: amt is not a finite number" in build.validate(data)
+
+
+def test_a_refund_that_is_not_a_finite_number_is_refused(data: dict) -> None:
+    first_item(data)["refund"] = json.loads("NaN")
+    problems = build.validate(data)
+    assert "days[0].items[0]: refund is not a finite number" in problems
+    assert "days[0].items[0]: fully refunded, drop it" not in problems
+
+
+def test_a_stipend_that_is_not_a_finite_number_is_refused(data: dict) -> None:
+    data["stipend"] = {"desc": "Meal stipend, 2 days worked", "amt": json.loads("Infinity")}
+    assert "stipend: amt is not a finite number" in build.validate(data)
+
+
+@pytest.mark.parametrize("value", [Decimal("NaN"), Decimal("Infinity")])
+def test_a_decimal_that_is_not_a_finite_number_is_refused(data: dict, value: Decimal) -> None:
+    """Data assembled in Python carries Decimals, which have their own infinities."""
+    first_item(data)["amt"] = value
+    assert "days[0].items[0]: amt is not a finite number" in build.validate(data)
 
 
 def test_a_refund_on_a_line_with_no_readable_amount_reports_the_amount_only(data: dict) -> None:
@@ -690,16 +723,26 @@ def test_totals_says_what_is_wrong_rather_than_raising_a_key_error(data: dict) -
     with pytest.raises(ValueError, match="stipend: amt expected a number"):
         build.totals(no_amount)
 
+
+def test_days_of_the_wrong_shape_are_reported_once_and_never_raise(
+    data: dict, tmp_path: Path
+) -> None:
+    """``validate`` owns the sentence, and nothing downstream crashes without it.
+
+    A caller who skipped the check gets an empty summary rather than an
+    AttributeError from the middle of a subtotal, which is the same answer the
+    builder's own CLI reaches by refusing to write the packet at all.
+    """
     bad_days = copy.deepcopy(data)
     bad_days["days"] = {"Monday": []}
-    with pytest.raises(ValueError, match="days: expected a list"):
-        build.totals(bad_days)
+    assert "days: expected a list" in build.validate(bad_days)
+    assert build.totals(bad_days)["expenses"] == Decimal("0.00")
 
-
-def test_render_packet_says_the_same_thing(data: dict, tmp_path: Path) -> None:
-    data["days"] = "Monday"
-    with pytest.raises(ValueError, match="days: expected a list"):
-        build.render_packet(data, tmp_path)
+    text_days = copy.deepcopy(data)
+    text_days["days"] = "Monday"
+    assert "days: expected a list" in build.validate(text_days)
+    rendered = build.render_packet(text_days, tmp_path)
+    assert "Monday" not in summary_region(rendered)
 
 
 def test_pennies_never_drift(data: dict) -> None:
@@ -909,6 +952,79 @@ def test_text_receipts_are_escaped(tmp_path: Path, data: dict) -> None:
     assert "<script>" not in rendered
 
 
+def two_styled_receipts(data: dict, folder: Path, first: str, second: str) -> str:
+    """Two HTML receipts with their own stylesheets, rendered into one packet."""
+    folder.mkdir(parents=True, exist_ok=True)
+    rids = [receipt["rid"] for receipt in data["receipts"][:2]]
+    for rid, fragment in zip(rids, (first, second), strict=True):
+        (folder / f"{rid}.html").write_text(fragment, encoding="utf-8")
+    data["receipts"] = data["receipts"][:2]
+    data["days"] = []
+    del data["stipend"]
+    return build.render_packet(data, folder)
+
+
+def receipt_sections(rendered: str) -> list[str]:
+    """The packet's receipt sections, in the order they were rendered."""
+    return rendered.split(RSEC_OPEN)[1:]
+
+
+def test_one_vendors_stylesheet_never_reaches_another_vendors_receipt(
+    data: dict, tmp_path: Path
+) -> None:
+    """The bug this closes: a squeezed amount column two receipts further down.
+
+    The cleaner scopes every vendor rule to the receipt container class, which
+    is one class shared by every receipt in the packet, so a sender who wraps
+    its own totals with ``word-break`` wrapped everybody's. Each receipt's
+    stylesheet is narrowed to its own ordinal at insert time instead.
+    """
+    rendered = two_styled_receipts(
+        data,
+        tmp_path / "receipts",
+        "<style>.rc table{word-break:break-word}</style><table><tr><td>$34.86</td></tr></table>",
+        "<style>.rc td{color:#222}</style><table><tr><td>$1,240.50</td></tr></table>",
+    )
+    first, second = receipt_sections(rendered)
+
+    # The rule the first receipt brought names the first receipt and nothing else.
+    assert ".rc.r1 table{word-break:break-word}" in first
+    assert ".rc table" not in rendered
+    assert ".rc.r2 td{color:#222}" in second
+
+    # And the second receipt's card carries a class the first one's rule cannot
+    # match, which is the half of the scoping that lives in the markup.
+    assert '<div class="rc r1">' in first
+    assert '<div class="rc r2">' in second
+    assert 'class="rc"' not in rendered
+
+
+def test_scoping_rewrites_selectors_and_leaves_everything_else_alone(
+    data: dict, tmp_path: Path
+) -> None:
+    """A declaration, a comment and an at-rule prelude are the vendor's to write."""
+    rendered = two_styled_receipts(
+        data,
+        tmp_path / "receipts",
+        "<style>/* .rc is ours */@media print{.rc p{font-family:.rc-ish,serif}}</style><p>One</p>",
+        "<style>.rc b{color:#000}</style><p>Two</p>",
+    )
+    first = receipt_sections(rendered)[0]
+    assert "/* .rc is ours */" in first
+    assert "@media print{.rc.r1 p{font-family:.rc-ish,serif}}" in first
+
+
+def test_a_receipt_with_no_stylesheet_is_inserted_as_it_was(data: dict, tmp_path: Path) -> None:
+    rendered = two_styled_receipts(
+        data,
+        tmp_path / "receipts",
+        "<p>Plain markup, .rc and all</p>",
+        "<style>.rc p{margin:0}</style><p>Two</p>",
+    )
+    first = receipt_sections(rendered)[0]
+    assert "<p>Plain markup, .rc and all</p>" in first
+
+
 def test_a_missing_receipt_file_renders_a_placeholder(data: dict, tmp_path: Path) -> None:
     rendered = build.render_packet(data, tmp_path / "nothing_here")
     assert rendered.count('<p class="missing">Receipt file not found</p>') == len(data["receipts"])
@@ -1086,6 +1202,42 @@ def test_a_grouped_amount_on_a_receipt_still_counts(data: dict, tmp_path: Path) 
     ]
     del data["stipend"]
     assert build.unprinted_amounts(data, folder) == []
+
+
+def test_a_line_paid_abroad_counts_the_figure_the_receipt_printed(
+    data: dict, tmp_path: Path
+) -> None:
+    """The claim is the home currency conversion, which the vendor never prints.
+
+    The receipt carries the local total instead, so that is what the reading
+    has to accept, or every foreign line is named as unprinted every time.
+    """
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rid = data["receipts"][0]["rid"]
+    (folder / f"{rid}.txt").write_text("Gesamtbetrag 41.90 EUR\n", encoding="utf-8")
+    data["receipts"] = [data["receipts"][0]]
+    data["days"] = [
+        {
+            "label": "Monday, travel out",
+            "items": [
+                {
+                    "desc": "Dinner, Munich",
+                    "amt": 45.32,
+                    "local_amt": 41.90,
+                    "local_currency": "EUR",
+                    "rid": rid,
+                }
+            ],
+        }
+    ]
+    del data["stipend"]
+    assert build.validate(data, folder) == []
+    assert build.unprinted_amounts(data, folder) == []
+
+    elsewhere = copy.deepcopy(data)
+    elsewhere["days"][0]["items"][0]["local_amt"] = 39.10
+    assert build.unprinted_amounts(elsewhere, folder) == ["Dinner, Munich"]
 
 
 def test_the_amount_reading_reads_a_pdf_and_skips_one_it_cannot(
