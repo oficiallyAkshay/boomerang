@@ -251,7 +251,7 @@ CSS_LEAD_RE = re.compile(r"\A\s*(?:/\*.*?\*/\s*)+", re.S)
 # A money string as a receipt prints one. Counted before and after each vendor
 # strip pattern, never parsed. The comma is there because a euro receipt writes
 # its total as 88,60 and the guard has to see that amount to protect it.
-MONEY_RE = re.compile(r"\d+[.,]\d{2}")
+MONEY_RE = re.compile(r"(?<![\d.,])\d{1,3}(?:,\d{3})*[.,]\d{2}(?!\d)|(?<![\d.,])\d+[.,]\d{2}(?!\d)")
 # Everything between angle brackets, taken out before the counting so that the
 # decimals CSS is made of are never mistaken for money.
 MARKUP_RE = re.compile(r"<[^>]*>")
