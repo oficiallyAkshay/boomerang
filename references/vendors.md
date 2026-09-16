@@ -56,11 +56,13 @@ driver button at the foot; the safety marketing block and the ride safety
 summary widget, which are live controls rather than a record; the credit card
 rewards promo; the help link cluster; the authorization hold notice; the static
 route map, whose URL carries the route geometry, and the OpenStreetMap credit
-it leaves behind; the hidden expense microdata block, which repeats the total
-and carries the recipient's address; the regulatory licence block naming the
+it leaves behind; the regulatory licence block naming the
 dispatching base, the vehicle plate and the driver licence; the copyright and
-CPUC footer; and the Lyft app instruction block. Known gap: Lyft prints no
-Total row at all. The charged total is read out of the hidden microdata block
+CPUC footer; and the Lyft app instruction block. The hidden expense microdata
+block has a pattern of its own and keeps its place anyway: it repeats the
+charged total, and the amount guard skips a pattern that would take an amount
+out of the receipt. Lyft's own styling renders the block as nothing, so it
+costs the page nothing. Known gap: Lyft prints no Total row at all. The charged total is read out of the hidden microdata block
 before the message is cleaned, and the visible total is the sum of the tender
 rows, which stay.
 
@@ -89,28 +91,31 @@ leg with its date and times, the fare, tax, security fee and facility charge
 breakdown, the per passenger total and the ticket total, the eTicket number,
 the Wi-Fi reference number and its charge, the method of payment line, and the
 previous ticket value line, which is what settles who paid. Removed from the
-eTicket: the MileagePlus accrual table and its earning notice, the baggage
-allowance table, the wall of legal boilerplate, and the Travel Ready Center
-promo strip. Removed from the Wi-Fi receipt: the survey block, the additional
+eTicket: the MileagePlus accrual table and its earning notice, the wall of
+legal boilerplate, and the Travel Ready Center promo strip. Removed from the Wi-Fi receipt: the survey block, the additional
 information cross-sell, and the refund boilerplate. Removed from both: the Star
 Alliance footer banner, the privacy and legal footer links, and the hidden
-rows. Note that the baggage allowance table prints two zero amounts for the
-free bags, so cleaning the eTicket removes those two figures along with the
-table; no charged amount is touched.
+rows. The baggage allowance table has a pattern here too, and the table stays:
+it prints 0.00 USD twice for the two free bags, those are amounts, and a
+pattern that would take an amount with it is skipped and named on stderr.
 
 ## Uber
 
 An Uber ride receipt keeps the total, every fare line item including
 surcharges and promotions, the trip date and clock times, the pickup and
 dropoff rows, the product tier, and the payment rows with the card last four
-and the charge posting time. Removed: the rate and tip module; the Uber One
-cashback strip, which takes its own credit figure with it; the app download and
-Download PDF buttons; the static map image, whose query string carries the
-pickup and dropoff coordinates; the social link row; the corporate address
-footer and the account and terms link cluster; and the support, lost item and
-help modules. The rules also carry a pattern for the standalone rate your trip
-row that the shorter Lime and cancelled ride templates use, which this sample
-does not have.
+and the charge posting time. Removed: the app download and Download PDF
+buttons; the static map image, whose query string carries the pickup and
+dropoff coordinates; the social link row; the corporate address footer and the
+account and terms link cluster; and the support, lost item and help modules.
+Two patterns are written and then skipped, so both of their blocks stay. The
+Uber One cashback strip prints the $1.18 it credited, which is a figure on a
+real receipt. The rate and tip module prints the driver's 4.92 rating, which
+is not money but has the shape of money, and the amount guard does not gamble
+on the difference; the module's controls are defused like every other link.
+The rules also carry a pattern for the standalone rate your trip row that the
+shorter Lime and cancelled ride templates use, which this sample does not
+have.
 
 ## Uber Eats
 
@@ -120,13 +125,14 @@ its quantity and options, the subtotal, the delivery and service fees, the tax,
 every discount and credit row, the order total, the order date and the order
 completed timestamp, both tender rows when a voucher and a card split the bill,
 and the card last four. Removed: the rate and tip block for the courier; the
-Uber One savings strip, which takes its own savings figure with it; the app
-download and Download PDF buttons; the merchant and dish photography, whose
+app download and Download PDF buttons; the merchant and dish photography, whose
 paths identify the real merchant; the social link row; the corporate address
-footer and the account and terms link cluster; and the support modules. Known
-gap: Uber Eats and Uber ride mail share the sender domain, so a message from
-that domain is detected as Uber, and the subject line is what separates an
-order from a trip.
+footer and the account and terms link cluster; and the support modules. The
+Uber One savings strip stays, because it prints the $14.55 it saved and the
+amount guard will not take an amount out of a receipt. Uber Eats and Uber ride
+mail share the sender domain uber.com, so the domain alone cannot name the
+folder: detection prefers the vendor whose subject patterns fit as well as its
+domain, which sends an order subject here and a trip subject to Uber.
 
 ## Marriott
 

@@ -426,6 +426,73 @@ def test_empty_style_block_emits_no_style_tag() -> None:
     assert clean.clean_html("<style>   </style><p>x</p>") == "<p>x</p>"
 
 
+# ------------------------------------------------------- unclosed style blocks
+
+
+def test_a_style_block_that_is_never_closed_keeps_the_text_after_it() -> None:
+    """A message truncated mid stylesheet must not swallow the receipt."""
+    raw = "<body><style>.a{color:red}<p>Total $28.93</p></body>"
+    out = clean.clean_html(raw)
+    # The orphan CSS is scoped and re-emitted, like any other block, and the
+    # only style tokens left in the fragment are that one closed block.
+    assert out == "<style>.rc .a{color:red}</style>\n<p>Total $28.93</p>"
+    assert out.lower().count("<style") == 1
+    assert out.lower().count("</style") == 1
+
+
+def test_a_stray_closing_style_tag_is_removed() -> None:
+    out = clean.clean_html("<p>Fare</p></style><p>Total</p>")
+    assert "style" not in out.lower()
+    assert out == "<p>Fare</p><p>Total</p>"
+
+
+def test_a_style_tag_cut_off_before_its_bracket_is_removed() -> None:
+    out = clean.clean_html("<p>Fare</p><style type=")
+    assert "<style" not in out.lower()
+    assert out == "<p>Fare</p>"
+
+
+# ------------------------------------------------------------- page breaks
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    [
+        "page-break-before:always",
+        "page-break-after:always",
+        "page-break-inside:avoid",
+        "break-before:page",
+        "break-after:column",
+        "break-inside:avoid",
+    ],
+)
+def test_a_style_block_loses_every_page_break(declaration: str) -> None:
+    out = clean.clean_html(f"<style>.a{{{declaration};color:red}}</style><p>Fare</p>")
+    assert "break" not in out
+    assert ".rc .a{color:red}" in out
+
+
+@pytest.mark.parametrize(
+    "declaration",
+    ["page-break-after:always", "break-inside:avoid"],
+)
+def test_a_style_attribute_loses_every_page_break(declaration: str) -> None:
+    out = clean.clean_html(f'<div style="{declaration};color:#123456">Fare</div>')
+    assert "break" not in out
+    assert 'style="color:#123456"' in out
+
+
+def test_a_style_attribute_that_was_only_a_page_break_is_dropped() -> None:
+    assert clean.clean_html('<tr style="page-break-inside:avoid"><td>Fare</td></tr>') == (
+        "<tr><td>Fare</td></tr>"
+    )
+
+
+def test_word_break_is_not_a_page_break() -> None:
+    out = clean.clean_html('<div style="word-break:break-all;color:#123456">Fare</div>')
+    assert "word-break:break-all" in out
+
+
 # -------------------------------------------------------------- tracking pixels
 
 
@@ -534,6 +601,61 @@ def test_at_least_one_strip_pattern_matches_the_sample(
 def test_every_strip_pattern_compiles(vendor: str, rules: dict) -> None:
     for pattern in rules[vendor]["strip_regex"]:
         re.compile(pattern, re.S)
+
+
+def test_strip_patterns_run_case_insensitively(rules: dict) -> None:
+    """Vendors shout their markup sometimes, and the pattern is written lower case.
+
+    The Lyft rules name the footer help buttons in the case Lyft normally
+    sends them. This is the same row in capitals, which has to go the same way.
+    """
+    raw = "<TABLE><TR><TD><A>TIP DRIVER</A></TD></TR><TR><TD>Fare</TD></TR></TABLE>"
+    out = clean.clean_html(raw, rules["lyft"])
+    assert "TIP DRIVER" not in out
+    assert "Fare" in out
+
+
+def test_a_strip_pattern_that_would_take_an_amount_is_skipped(
+    rules: dict, capsys: pytest.CaptureFixture
+) -> None:
+    """One table holding the total and the Add tip button keeps both."""
+    raw = '<table><tr><td>Total $28.93</td><td><a href="#">Add tip</a></td></tr></table>'
+    out = clean.clean_html(raw, rules["lyft"])
+    assert "$28.93" in out
+    assert "Add tip" in out
+    assert "lyft strip pattern 0 skipped" in capsys.readouterr().err
+
+
+def test_the_amount_guard_names_a_vendor_that_has_no_name(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    unnamed = {"strip_regex": ["<p>.*?</p>"]}
+    assert clean.clean_html("<p>Total 28.93</p>", unnamed) == "<p>Total 28.93</p>"
+    assert "generic strip pattern 0 skipped" in capsys.readouterr().err
+
+
+def test_a_strip_pattern_that_takes_no_amount_still_runs(
+    rules: dict, capsys: pytest.CaptureFixture
+) -> None:
+    raw = '<table><tr><td><a href="#">Add tip</a></td></tr></table><p>Total $28.93</p>'
+    out = clean.clean_html(raw, rules["lyft"])
+    assert "Add tip" not in out
+    assert "$28.93" in out
+    assert capsys.readouterr().err == ""
+
+
+def test_the_decimals_in_a_style_attribute_are_not_amounts(
+    rules: dict, capsys: pytest.CaptureFixture
+) -> None:
+    """A font size is not money, and a pattern is not skipped over one."""
+    raw = (
+        '<table style="line-height:1.25rem"><tr><td style="letter-spacing:0.15px">'
+        '<a href="#">Add tip</a></td></tr></table><p>Total $28.93</p>'
+    )
+    out = clean.clean_html(raw, rules["lyft"])
+    assert "Add tip" not in out
+    assert "$28.93" in out
+    assert capsys.readouterr().err == ""
 
 
 # ----------------------------------------------------------------------- links
@@ -833,6 +955,27 @@ def test_detect_vendor_returns_none(from_addr: str, subject: str, rules: dict) -
     assert clean.detect_vendor(from_addr, subject, rules) is None
 
 
+@pytest.mark.parametrize(
+    ("from_addr", "expected"),
+    [
+        ("Lyft <no-reply@lyft.com> (via relay)", "lyft"),
+        ("receipts@uber.com, evil@x.com", "uber"),
+        ('"Noodle Bar, Cedar Street" <no-reply@doordash.com>', "doordash"),
+        ("<unitedairlines@united.com>", "united"),
+    ],
+)
+def test_a_wrapped_or_doubled_from_header_still_names_the_sender(
+    from_addr: str, expected: str, rules: dict
+) -> None:
+    """The vendor is whoever sent the message, not whoever the header lists next."""
+    assert clean.detect_vendor(from_addr, "", rules) == expected
+
+
+def test_the_sender_domain_of_a_header_with_no_address_is_empty() -> None:
+    assert clean._sender_domain("no address here") == ""
+    assert clean._sender_domain(None) == ""
+
+
 def test_a_catch_all_never_beats_a_vendor_with_a_domain(rules: dict) -> None:
     # The subject matches plaintext too, but doordash is tried first.
     assert clean.detect_vendor("", "Your dinner order confirmation", rules) == "doordash"
@@ -898,12 +1041,87 @@ def test_cli_cleans_the_lyft_sample(tmp_path: Path, no_network: None) -> None:
     assert "href=" not in written.lower()
 
 
-def test_cli_without_a_vendor_is_the_generic_clean(tmp_path: Path) -> None:
+def test_cli_without_a_vendor_is_the_generic_clean(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
     source = tmp_path / "in.html"
     source.write_text("<html><body><p>Fare</p></body></html>", encoding="utf-8")
     out = tmp_path / "out.html"
     assert clean.main([str(source), "--out", str(out)]) == 0
     assert out.read_text(encoding="utf-8") == "<p>Fare</p>\n"
+    assert "clean: vendor generic" in capsys.readouterr().err
+
+
+def write_meta(source: Path, **fields: str) -> None:
+    """The sidecar fetch.py writes beside a saved message."""
+    source.with_suffix(".meta.json").write_text(json.dumps(fields), encoding="utf-8")
+
+
+def test_cli_reads_the_vendor_from_the_saved_headers(
+    tmp_path: Path, capsys: pytest.CaptureFixture, no_network: None
+) -> None:
+    source = tmp_path / "in.html"
+    shutil.copyfile(sample_path("lyft"), source)
+    write_meta(source, **{"from": "Lyft <no-reply@lyftmail.com>", "subject": "Your ride"})
+    out = tmp_path / "out.html"
+
+    assert clean.main([str(source), "--out", str(out), "--vendors", str(VENDORS_DIR)]) == 0
+    assert "clean: vendor lyft" in capsys.readouterr().err
+    written = out.read_text(encoding="utf-8")
+    assert "$31.20" in written
+    assert "Rides = rewards" not in written
+
+
+def test_cli_falls_back_to_the_subject_then_to_generic(
+    tmp_path: Path, capsys: pytest.CaptureFixture, no_network: None
+) -> None:
+    source = tmp_path / "in.html"
+    shutil.copyfile(sample_path("lyft"), source)
+    write_meta(source, **{"from": "someone@example.org", "subject": "Your ride with Teodoro"})
+    assert (
+        clean.main([str(source), "--out", str(tmp_path / "a.html"), "--vendors", str(VENDORS_DIR)])
+        == 0
+    )
+    assert "clean: vendor lyft" in capsys.readouterr().err
+
+    write_meta(source, **{"from": "someone@example.org", "subject": "Weekly update"})
+    assert (
+        clean.main([str(source), "--out", str(tmp_path / "b.html"), "--vendors", str(VENDORS_DIR)])
+        == 0
+    )
+    assert "clean: vendor generic" in capsys.readouterr().err
+    assert "Rides = rewards" in (tmp_path / "b.html").read_text(encoding="utf-8")
+
+
+def test_cli_ignores_a_meta_file_it_cannot_read(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    source = tmp_path / "in.html"
+    source.write_text("<p>Fare</p>", encoding="utf-8")
+    source.with_suffix(".meta.json").write_text("not json at all", encoding="utf-8")
+    assert clean.main([str(source), "--out", str(tmp_path / "o.html")]) == 0
+    assert "clean: vendor generic" in capsys.readouterr().err
+
+    source.with_suffix(".meta.json").write_text("[1, 2]", encoding="utf-8")
+    assert clean.main([str(source), "--out", str(tmp_path / "o2.html")]) == 0
+    assert "clean: vendor generic" in capsys.readouterr().err
+
+
+def test_cli_vendor_generic_forces_the_generic_clean(
+    tmp_path: Path, capsys: pytest.CaptureFixture, no_network: None
+) -> None:
+    """The headers say Lyft. The flag says otherwise, and the flag wins."""
+    source = tmp_path / "in.html"
+    shutil.copyfile(sample_path("lyft"), source)
+    write_meta(source, **{"from": "Lyft <no-reply@lyftmail.com>", "subject": "Your ride"})
+    out = tmp_path / "out.html"
+
+    code = clean.main(
+        [str(source), "--out", str(out), "--vendor", "generic", "--vendors", str(VENDORS_DIR)]
+    )
+    assert code == 0
+    assert "clean: vendor generic" in capsys.readouterr().err
+    assert "Rides = rewards" in out.read_text(encoding="utf-8")
 
 
 def test_cli_rejects_an_unknown_vendor(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
