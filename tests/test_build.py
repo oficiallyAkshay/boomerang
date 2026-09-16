@@ -77,6 +77,37 @@ def test_cover_fields_must_be_present_and_stringy(data: dict, key: str) -> None:
     assert f"{key}: empty" in build.validate(blank)
 
 
+@pytest.mark.parametrize("key", ["company", "trip", "traveler"])
+def test_cover_fields_are_checked_for_prose(data: dict, key: str) -> None:
+    dashed = copy.deepcopy(data)
+    dashed[key] = f"Acme {EM_DASH} West"
+    assert f"{key}: contains an em dash" in build.validate(dashed)
+
+    banned = copy.deepcopy(data)
+    banned[key] = "Onsite, balance Due on arrival"
+    assert f"{key}: contains a banned word" in build.validate(banned)
+
+
+def test_day_labels_are_checked_for_prose(data: dict) -> None:
+    dashed = copy.deepcopy(data)
+    dashed["days"][0]["label"] = f"Monday {EM_DASH} travel out"
+    assert "days[0]: label contains an em dash" in build.validate(dashed)
+
+    banned = copy.deepcopy(data)
+    banned["days"][0]["label"] = "Monday, balance Due"
+    assert "days[0]: label contains a banned word" in build.validate(banned)
+
+
+def test_receipt_titles_are_checked_for_prose(data: dict) -> None:
+    dashed = copy.deepcopy(data)
+    dashed["receipts"][0]["title"] = f"eTicket {EM_DASH} AUS to SEA"
+    assert "receipts[0]: title contains an em dash" in build.validate(dashed)
+
+    banned = copy.deepcopy(data)
+    banned["receipts"][0]["title"] = "eTicket, balance Due"
+    assert "receipts[0]: title contains a banned word" in build.validate(banned)
+
+
 def test_currency_must_be_a_string(data: dict) -> None:
     data["currency"] = 840
     assert "currency: expected a string" in build.validate(data)
@@ -241,6 +272,10 @@ def test_stipend_is_optional_but_checked_when_present(data: dict) -> None:
     assert "stipend: desc contains an em dash" in problems
     assert "stipend: amt expected a number" in problems
 
+    banned = copy.deepcopy(data)
+    banned["stipend"]["desc"] = "Meal stipend, balance Due"
+    assert "stipend: desc contains a banned word" in build.validate(banned)
+
 
 # ------------------------------------------------------------------- loading
 
@@ -402,10 +437,17 @@ def test_the_pdf_receipt_renders_a_card_with_its_page_count(packet: str) -> None
     assert "PDF attachment, 2 pages, embedded in the PDF packet" in packet
 
 
-def test_an_unreadable_pdf_still_gets_a_card(tmp_path: Path) -> None:
-    broken = tmp_path / "broken.pdf"
-    broken.write_bytes(b"not really a pdf")
-    assert "PDF attachment, 0 pages" in build._receipt_body(broken)
+def test_an_unreadable_pdf_is_reported_and_says_so_on_its_card(data: dict, tmp_path: Path) -> None:
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rid = data["receipts"][0]["rid"]
+    (folder / f"{rid}.pdf").write_bytes(b"not really a pdf")
+
+    assert f"receipt {rid}: pdf cannot be read" in build.validate(data, folder)
+
+    rendered = build.render_packet(data, folder)
+    assert '<div class="card">PDF attachment could not be read</div>' in rendered
+    assert "0 pages" not in rendered
 
 
 def test_the_image_receipt_renders_a_data_uri(packet: str, receipts: Path) -> None:

@@ -11,7 +11,9 @@ pennies never drift. Callers that want floats convert at the edge.
 
 Receipt files are optional at render time. A receipt whose file is not on disk
 renders a visible placeholder rather than failing, so a packet can be built
-before every receipt has been fetched.
+before every receipt has been fetched. A pdf that cannot be opened says so on
+its card and is reported by ``validate``, so a damaged file is never quietly
+shown as an attachment of zero pages.
 """
 
 from __future__ import annotations
@@ -111,26 +113,35 @@ def _too_many_decimals(value: object) -> bool:
     return isinstance(exponent, int) and exponent < -2
 
 
-def _check_text(problems: list[str], data: dict, key: str) -> None:
-    value = data.get(key)
-    if value is None:
-        problems.append(f"{key}: missing")
-    elif not isinstance(value, str):
-        problems.append(f"{key}: expected a string")
-    elif not value.strip():
-        problems.append(f"{key}: empty")
+def _check_packet_text(
+    problems: list[str],
+    where: str,
+    field: str,
+    value: object,
+    *,
+    report_missing: bool = False,
+) -> None:
+    """Check one string that reaches the packet.
 
-
-def _check_desc(problems: list[str], where: str, desc: object) -> None:
-    if not isinstance(desc, str):
-        problems.append(f"{where}: desc expected a string")
+    Every such string has to be a non empty string free of the em dash and of
+    the banned word, because the packet shows it to a reader. ``where`` locates
+    the owning object and is empty for a top level field. ``report_missing``
+    distinguishes a key the schema requires outright from one nested inside an
+    object that is itself reported.
+    """
+    prefix = f"{where}: {field}" if where else f"{field}:"
+    if value is None and report_missing:
+        problems.append(f"{prefix} missing")
         return
-    if not desc.strip():
-        problems.append(f"{where}: desc empty")
-    if EM_DASH in desc:
-        problems.append(f"{where}: desc contains an em dash")
-    if BANNED_WORD_RE.search(desc):
-        problems.append(f"{where}: desc contains a banned word")
+    if not isinstance(value, str):
+        problems.append(f"{prefix} expected a string")
+        return
+    if not value.strip():
+        problems.append(f"{prefix} empty")
+    if EM_DASH in value:
+        problems.append(f"{prefix} contains an em dash")
+    if BANNED_WORD_RE.search(value):
+        problems.append(f"{prefix} contains a banned word")
 
 
 def _check_amount(problems: list[str], where: str, amt: object) -> None:
@@ -153,11 +164,7 @@ def _check_days(problems: list[str], data: dict, receipt_rids: set[str]) -> None
         if not isinstance(day, dict):
             problems.append(f"{where}: expected an object")
             continue
-        label = day.get("label")
-        if not isinstance(label, str):
-            problems.append(f"{where}: label expected a string")
-        elif not label.strip():
-            problems.append(f"{where}: label empty")
+        _check_packet_text(problems, where, "label", day.get("label"))
         items = day.get("items")
         if not isinstance(items, list):
             problems.append(f"{where}: items expected a list")
@@ -167,7 +174,7 @@ def _check_days(problems: list[str], data: dict, receipt_rids: set[str]) -> None
             if not isinstance(item, dict):
                 problems.append(f"{spot}: expected an object")
                 continue
-            _check_desc(problems, spot, item.get("desc"))
+            _check_packet_text(problems, spot, "desc", item.get("desc"))
             _check_amount(problems, spot, item.get("amt"))
             rid = item.get("rid")
             if not isinstance(rid, str) or not RID_RE.match(rid):
@@ -198,21 +205,26 @@ def _check_receipts(problems: list[str], data: dict, receipts_dir: Path | None) 
             problems.append(f"{where}: rid appears twice")
         else:
             seen.add(rid)
-        for key in ("title", "vendor"):
-            value = receipt.get(key)
-            if not isinstance(value, str):
-                problems.append(f"{where}: {key} expected a string")
-            elif not value.strip():
-                problems.append(f"{where}: {key} empty")
+        _check_packet_text(problems, where, "title", receipt.get("title"))
+        # vendor never reaches the packet, so it is checked for shape only.
+        vendor = receipt.get("vendor")
+        if not isinstance(vendor, str):
+            problems.append(f"{where}: vendor expected a string")
+        elif not vendor.strip():
+            problems.append(f"{where}: vendor empty")
+
+        found = None
+        if receipts_dir is not None and isinstance(rid, str):
+            found = find_receipt_file(receipts_dir, rid)
+        if found is not None and found.suffix.lower() == ".pdf" and _pdf_pages(found) == 0:
+            problems.append(f"receipt {rid}: pdf cannot be read")
+
         kind = receipt.get("kind")
         if kind is None:
             continue
         if kind not in KNOWN_KINDS:
             problems.append(f"{where}: kind is not one of {', '.join(KNOWN_KINDS)}")
             continue
-        if receipts_dir is None or not isinstance(rid, str):
-            continue
-        found = find_receipt_file(receipts_dir, rid)
         if found is None:
             continue
         actual = SUFFIX_KIND[found.suffix.lower()]
@@ -228,7 +240,7 @@ def _check_stipend(problems: list[str], data: dict) -> None:
     if not isinstance(stipend, dict):
         problems.append("stipend: expected an object")
         return
-    _check_desc(problems, "stipend", stipend.get("desc"))
+    _check_packet_text(problems, "stipend", "desc", stipend.get("desc"))
     _check_amount(problems, "stipend", stipend.get("amt"))
 
 
@@ -236,15 +248,17 @@ def validate(data: dict, receipts_dir: Path | None = None) -> list[str]:
     """Check expense data against the schema. An empty list means valid.
 
     ``receipts_dir`` is optional. When it is given, a receipt whose declared
-    kind disagrees with the file actually on disk is reported too. A receipt
-    with no file at all is never a problem: packets render placeholders.
+    kind disagrees with the file actually on disk is reported too, and so is a
+    pdf on disk that cannot be opened, which would otherwise reach the packet
+    as a card with no pages. A receipt with no file at all is never a problem:
+    packets render placeholders.
     """
     problems: list[str] = []
     if not isinstance(data, dict):
         return ["expense data: expected an object"]
 
     for key in ("company", "trip", "traveler"):
-        _check_text(problems, data, key)
+        _check_packet_text(problems, "", key, data.get(key), report_missing=True)
     currency = data.get("currency")
     if currency is not None and not isinstance(currency, str):
         problems.append("currency: expected a string")
@@ -312,7 +326,8 @@ def _pdf_pages(path: Path) -> int:
 
         return len(PdfReader(str(path)).pages)
     except Exception:
-        # A damaged or unreadable pdf still gets a card, with no page count.
+        # A damaged or unreadable pdf reads as zero pages. Callers say so
+        # rather than presenting the zero as a real count.
         return 0
 
 
@@ -330,6 +345,8 @@ def _receipt_body(path: Path | None) -> str:
         return f'<pre class="plain">{body}</pre>'
     if kind == "pdf":
         pages = _pdf_pages(path)
+        if pages == 0:
+            return '<div class="card">PDF attachment could not be read</div>'
         return (
             f'<div class="card">PDF attachment, {pages} pages, ' "embedded in the PDF packet</div>"
         )
