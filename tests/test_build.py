@@ -985,7 +985,7 @@ def test_the_rendered_packet_passes_the_prose_gate(packet: str, tmp_path: Path) 
     path.write_text(packet, encoding="utf-8")
 
     assert check_prose.scan([path], denylist) == []
-    assert check_prose.scan_text("packet.html", packet, denylist, flag_banned_word=True) == []
+    assert check_prose.scan_text("packet.html", packet, denylist, packet=True) == []
 
 
 # ----------------------------------------------------------------------- cli

@@ -95,8 +95,8 @@ def rendered(fixture_dir: Path, fixture_data: dict, tmp_path_factory) -> dict:
     out = tmp_path_factory.mktemp("rendered")
     html = write_packet(out / "packet.html", fixture_data, fixture_dir / "receipts")
     pdf = out / "packet.pdf"
-    pages = render_pdf.render(html, pdf)
-    return {"html": html, "pdf": pdf, "pages": pages}
+    pages, channel = render_pdf.render(html, pdf)
+    return {"html": html, "pdf": pdf, "pages": pages, "channel": channel}
 
 
 def test_one_page_per_receipt_plus_summary(rendered: dict, fixture_data: dict) -> None:
@@ -261,8 +261,8 @@ def test_the_env_override_pins_the_run_to_one_browser(monkeypatch) -> None:
     """BOOMERANG_BROWSER skips the search and asks for that browser only."""
     chromium = FakeChromium(working="chromium")
     monkeypatch.setenv(render_pdf.BROWSER_ENV, "chromium")
-    monkeypatch.setattr(render_pdf, "sync_playwright", FakePlaywright(chromium))
-    assert render_pdf.browser_channel() == "chromium"
+    _browser, channel = render_pdf.launch_browser(FakePlaywright(chromium))
+    assert channel == "chromium"
     assert chromium.tried == ["chromium"]
 
 
@@ -272,10 +272,9 @@ def test_an_unknown_env_override_is_refused(monkeypatch) -> None:
         render_pdf.wanted_channels()
 
 
-def test_the_real_machine_renders_with_one_of_the_three(monkeypatch) -> None:
-    """Whatever this machine has, the helper names it and it is a real one."""
-    monkeypatch.delenv(render_pdf.BROWSER_ENV, raising=False)
-    assert render_pdf.browser_channel() in render_pdf.CHANNELS
+def test_a_render_names_the_browser_that_did_it(rendered: dict) -> None:
+    """One launch per render, and the channel it came from comes back with it."""
+    assert rendered["channel"] in render_pdf.CHANNELS
 
 
 def test_other_playwright_errors_are_not_reworded(monkeypatch, tmp_path: Path) -> None:
@@ -362,7 +361,7 @@ def test_the_render_never_reaches_out_over_http(counting_server, tmp_path: Path)
         encoding="utf-8",
     )
     pdf = tmp_path / "packet.pdf"
-    assert render_pdf.render(packet, pdf) == 2
+    assert render_pdf.render(packet, pdf)[0] == 2
     assert CountingHandler.asked == []
     assert "A receipt body" in (PdfReader(str(pdf)).pages[1].extract_text() or "")
 
@@ -392,7 +391,7 @@ def test_a_table_wider_than_the_page_keeps_its_rightmost_cell(tmp_path: Path) ->
     """The fit pass scales on width as well as height, so nothing is cut off."""
     packet = wide_table_packet(tmp_path / "wide.html")
     pdf = tmp_path / "wide.pdf"
-    assert render_pdf.render(packet, pdf) == 2
+    assert render_pdf.render(packet, pdf)[0] == 2
     text = "\n".join(page.extract_text() or "" for page in PdfReader(str(pdf)).pages)
     assert "Col0" in text
     assert "Col24" in text
@@ -424,7 +423,7 @@ def measure(packet: Path) -> list[dict]:
             page.route("**/*", render_pdf.block_remote_requests)
             page.goto(packet.resolve().as_uri(), wait_until="load")
             page.emulate_media(media="print")
-            return render_pdf.fit_sections(page)
+            return page.evaluate(render_pdf.FIT_JS)
         finally:
             browser.close()
 

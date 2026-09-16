@@ -68,11 +68,6 @@ def _read_receipt(source: Path, rid: str) -> PdfReader:
         raise ValueError(f"receipt {rid}: pdf cannot be read") from exc
 
 
-def is_spliced(pdf_path: Path) -> bool:
-    """True when this PDF already carries the splice mark."""
-    return SPLICED_KEY in (PdfReader(str(pdf_path)).metadata or {})
-
-
 def splice(packet_pdf: Path, data: dict, receipts_dir: Path, out_pdf: Path) -> int:
     """Insert each PDF receipt after its card page. Returns the final page count.
 
