@@ -76,7 +76,8 @@ each strip pattern takes a whole element. Prove every pattern fires on that
 sample in `tests/test_vendors.py`. The amount guard skips any pattern that would
 carry a money string away, so no vendor gets an allowance to lose a figure its
 sample printed, and a promotional module that prints an amount stays on the
-receipt for the same reason.
+receipt for the same reason. Bump the vendor count in the README badge; the
+test tells you the number.
 
 **Adding a policy rule.** One bullet in the right section of `policy.md`, its
 basis in brackets from the closed set: `necessary to attend`, `personal
