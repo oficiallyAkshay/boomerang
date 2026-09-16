@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from cards import find_last4, fingerprint, main, singletons, strip_tags
-from fixtures.make_fixture import CARD_LAST4, RIDS
+from cards import find_last4, fingerprint, main, receipt_text, singletons, strip_tags
+from fixtures.make_fixture import CARD_LAST4, RIDS, pdf_bytes
 
 COMPANY_CARD = "8802"
 
@@ -25,6 +25,14 @@ COMPANY_CARD = "8802"
         ("Mastercard XXXXXX4321", {"4321"}),
         ("Visa •••• 4321", {"4321"}),
         ("Visa ••4321", {"4321"}),
+        ("Mastercard *4321", {"4321"}),
+        ("VISA ****4321", {"4321"}),
+        ("ending in 4321", {"4321"}),
+        ("Card ending 4321", {"4321"}),
+        ("card x4321", {"4321"}),
+        ("Amex xxxx-4321", {"4321"}),
+        ("Amex xxxx.4321", {"4321"}),
+        ("**** **** **** 4321", {"4321"}),
     ],
 )
 def test_each_printed_shape_is_read(text: str, expected: set[str]):
@@ -39,6 +47,11 @@ def test_a_body_can_name_two_cards():
 @pytest.mark.parametrize(
     "text",
     [
+        "Total *4321",
+        "Flight UA *1234",
+        "* 1500 bonus miles",
+        "Footnote: *2025 terms",
+        "x4321",
         "Order 998877 total",
         "Confirmation ending 123",
         "ending in 123456",
@@ -47,8 +60,14 @@ def test_a_body_can_name_two_cards():
         "•••• 123456789",
     ],
 )
-def test_a_longer_digit_run_is_not_a_card(text: str):
+def test_a_footnote_marker_or_a_longer_digit_run_is_not_a_card(text: str):
     assert find_last4(text) == set()
+
+
+def test_one_mask_character_needs_a_card_word_close_in_front():
+    """Twenty characters of room, and not one more."""
+    assert find_last4("card" + " " * 15 + "*4321") == {"4321"}
+    assert find_last4("card" + " " * 17 + "*4321") == set()
 
 
 def test_digits_before_the_marker_do_not_confuse_the_match():
@@ -66,12 +85,35 @@ def test_strip_tags_drops_script_and_style_bodies():
     assert find_last4(stripped) == {"4321"}
 
 
-def test_fingerprint_reads_html_and_text_and_ignores_other_files(tmp_path: Path):
+def test_fingerprint_reads_html_text_and_pdf_and_ignores_the_rest(tmp_path: Path):
     (tmp_path / "one.html").write_text("<p>Visa *4321</p>", encoding="utf-8")
     (tmp_path / "two.txt").write_text("Card on file Visa ending 4321", encoding="utf-8")
-    (tmp_path / "three.pdf").write_bytes(b"%PDF ending 9999")
+    (tmp_path / "three.pdf").write_bytes(pdf_bytes([["Charged to Visa ending 8802"]]))
+    (tmp_path / "four.png").write_bytes(b"\x89PNG Visa ending 1111")
     (tmp_path / "sub").mkdir()
-    assert fingerprint(tmp_path) == {"4321": ["one", "two"]}
+    assert fingerprint(tmp_path) == {"4321": ["one", "two"], "8802": ["three"]}
+
+
+def test_a_folio_names_the_card_that_paid_for_the_room(tmp_path: Path):
+    """The folio is a PDF, and it is the receipt most likely to name a second card."""
+    (tmp_path / "stay.pdf").write_bytes(
+        pdf_bytes([["Harborview folio page 1"], ["Charged to Visa ending 8802"]])
+    )
+    (tmp_path / "ride.html").write_text("<p>Visa *4321</p>", encoding="utf-8")
+    assert fingerprint(tmp_path) == {"4321": ["ride"], "8802": ["stay"]}
+    assert singletons(fingerprint(tmp_path)) == {"4321", "8802"}
+
+
+def test_a_pdf_that_will_not_open_names_no_card_and_stops_nothing(tmp_path: Path):
+    (tmp_path / "torn.pdf").write_bytes(b"%PDF-1.4 and then nothing at all")
+    (tmp_path / "ride.txt").write_text("Visa ending 4321", encoding="utf-8")
+    assert fingerprint(tmp_path) == {"4321": ["ride"]}
+
+
+def test_receipt_text_refuses_a_file_that_is_not_a_receipt(tmp_path: Path):
+    other = tmp_path / "notes.meta.json"
+    other.write_text("{}", encoding="utf-8")
+    assert receipt_text(other) is None
 
 
 def test_singletons_are_the_last4_seen_once():

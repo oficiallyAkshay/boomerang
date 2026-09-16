@@ -134,7 +134,7 @@ def test_walk_parts_finds_both_bodies_and_the_attachment():
     walked = walk_parts(MESSAGE["payload"])
     assert walked["html"] == "<p>rich body</p>"
     assert walked["text"] == "plain body"
-    assert walked["attachments"] == [("folio.pdf", "att-1")]
+    assert walked["attachments"] == [("folio.pdf", "att-1", None)]
 
 
 def test_walk_parts_on_a_single_part_message():
@@ -145,6 +145,40 @@ def test_walk_parts_on_a_single_part_message():
 
 def test_walk_parts_on_an_empty_payload():
     assert walk_parts({}) == {"html": None, "text": None, "attachments": []}
+
+
+def test_a_part_with_a_filename_and_inline_data_is_an_attachment():
+    """Gmail hands back a small attachment inline, with no attachmentId."""
+    payload = {
+        "mimeType": "multipart/mixed",
+        "parts": [
+            {"mimeType": "text/plain", "body": {"data": b64("plain body")}},
+            {
+                "mimeType": "application/pdf",
+                "filename": "short-folio.pdf",
+                "body": {"size": 11, "data": b64("%PDF inline")},
+            },
+        ],
+    }
+    walked = walk_parts(payload)
+    assert walked["text"] == "plain body"
+    assert walked["attachments"] == [("short-folio.pdf", None, b"%PDF inline")]
+
+
+def test_an_inline_attachment_needs_no_second_call():
+    payload = {
+        "mimeType": "application/pdf",
+        "filename": "folio.pdf",
+        "body": {"data": b64("%PDF inline")},
+    }
+    messages = FakeMessages([{}], {"payload": payload}, {})
+    result = GmailSource(service=FakeService(messages)).get("rid1")
+    assert result["attachments"] == [("folio.pdf", b"%PDF inline")]
+
+
+def test_a_filename_part_with_no_body_at_all_is_ignored():
+    payload = {"parts": [{"mimeType": "application/pdf", "filename": "empty.pdf", "body": {}}]}
+    assert walk_parts(payload)["attachments"] == []
 
 
 def test_the_first_body_of_each_kind_wins():
@@ -254,8 +288,16 @@ def test_the_get_command_writes_through_the_shared_writer(tmp_path: Path, monkey
     monkeypatch.setattr(gmail_cli, "GmailSource", lambda: GmailSource(FakeService(messages)))
     assert gmail_cli.main(["get", "rid1", "--out", str(tmp_path)]) == 0
     assert (tmp_path / "rid1.html").read_text(encoding="utf-8") == "<p>rich body</p>"
-    assert (tmp_path / "rid1.0.pdf").read_bytes() == b"%PDF folio"
-    assert "rid1.0.pdf" in capsys.readouterr().out
+    assert (tmp_path / "rid1.pdf").read_bytes() == b"%PDF folio"
+    assert "rid1.pdf" in capsys.readouterr().out
+
+
+def test_the_get_command_says_so_when_the_message_is_empty(tmp_path: Path, monkeypatch, capsys):
+    messages = FakeMessages([{}], {"payload": {}}, {})
+    monkeypatch.setattr(gmail_cli, "GmailSource", lambda: GmailSource(FakeService(messages)))
+    assert gmail_cli.main(["get", "rid1", "--out", str(tmp_path)]) == 1
+    assert "nothing written" in capsys.readouterr().out
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_the_search_command_prints_one_id_per_line(tmp_path: Path, monkeypatch, capsys):

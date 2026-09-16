@@ -15,7 +15,6 @@ from pathlib import Path
 
 import build
 import check_prose
-import clean
 import pytest
 from check_prose import EM_DASH
 
@@ -35,19 +34,6 @@ def data(fixture_dir: Path) -> dict:
 def receipts(fixture_dir: Path) -> Path:
     """The receipts as they arrive: raw vendor mail, straight off the fetch."""
     return fixture_dir / "receipts"
-
-
-@pytest.fixture(scope="session")
-def cleaned_receipts(fixture_dir: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """The receipts as step 5 leaves them, which is what a packet is built from."""
-    target = tmp_path_factory.mktemp("cleaned")
-    for path in sorted((fixture_dir / "receipts").iterdir()):
-        if path.suffix.lower() == ".html":
-            fragment = clean.clean_html(path.read_text(encoding="utf-8"))
-            (target / path.name).write_text(fragment, encoding="utf-8")
-        else:
-            shutil.copy2(path, target / path.name)
-    return target
 
 
 @pytest.fixture(scope="session")
