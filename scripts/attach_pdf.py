@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 """Splice PDF receipt attachments into a rendered packet.
 
-The packet renders one page per receipt. A receipt that arrived as a PDF, such
-as a hotel folio, renders as a short card saying the attachment follows. This
-script inserts the attachment's own pages right after that card page, so the
+Every receipt in the packet starts on a page of its own, and a long one runs
+on to the next page. A receipt that arrived as a PDF, such as a hotel folio,
+renders as a short card saying the attachment follows. This script inserts the
+attachment's own pages right after the last page of that card's receipt, so the
 folio reads in place instead of living outside the packet.
+
+Which page that is comes from the page map ``render_pdf`` writes beside the
+packet, ``<packet>.pages.json``. Counting it out instead, one page per receipt,
+is what the splice used to do, and it is wrong the moment any receipt runs to
+two pages: every folio after it lands a page early. Without a map the splice
+still counts, but it refuses rather than guesses when the count does not
+describe the file it was handed.
 
 Every rid is checked against ``build.RID_RE`` and the file it names has to
 resolve to somewhere inside the resolved receipts directory. A rid arrives here
@@ -33,6 +41,7 @@ import sys
 from pathlib import Path
 
 import build
+import render_pdf
 from build import RID_RE
 from pypdf import PdfReader, PdfWriter
 
@@ -68,6 +77,35 @@ def _read_receipt(source: Path, rid: str) -> PdfReader:
         raise ValueError(f"receipt {rid}: pdf cannot be read") from exc
 
 
+def _page_map(packet_pdf: Path, total: int, receipts: list) -> tuple[int, list[int]]:
+    """The summary's pages and each receipt's, from the map or from counting.
+
+    The map beside the packet is the render's own record of where each receipt
+    went. Without one, every receipt is taken to be one page, which is what the
+    packet was before a long receipt was allowed to run on; a packet whose page
+    count does not fit that is refused rather than spliced into the wrong
+    order.
+    """
+    side = render_pdf.page_map_path(packet_pdf)
+    if side.is_file():
+        mapping = json.loads(side.read_text(encoding="utf-8"))
+        pages = [int(count) for count in mapping["pages"]]
+        summary_pages = int(mapping["summary_pages"])
+        if len(pages) != len(receipts) or total != summary_pages + sum(pages):
+            raise ValueError(
+                f"{side.name} describes {len(pages)} receipts over "
+                f"{summary_pages + sum(pages)} pages, not {len(receipts)} over {total}"
+            )
+    else:
+        pages = [1] * len(receipts)
+        summary_pages = total - len(receipts)
+    if summary_pages < 1:
+        raise ValueError(
+            f"packet has {total} pages for {len(receipts)} receipts, leaving no summary page"
+        )
+    return summary_pages, pages
+
+
 def splice(packet_pdf: Path, data: dict, receipts_dir: Path, out_pdf: Path) -> int:
     """Insert each PDF receipt after its card page. Returns the final page count.
 
@@ -80,26 +118,25 @@ def splice(packet_pdf: Path, data: dict, receipts_dir: Path, out_pdf: Path) -> i
     if SPLICED_KEY in (reader.metadata or {}):
         raise ValueError(f"{Path(packet_pdf).name} has been spliced already")
     receipts = data.get("receipts", [])
-    summary_pages = len(reader.pages) - len(receipts)
-    if summary_pages < 1:
-        raise ValueError(
-            f"packet has {len(reader.pages)} pages for {len(receipts)} receipts, "
-            "leaving no summary page"
-        )
+    # Every rid is checked before anything is read or counted, so a packet is
+    # never half spliced against a receipt list that names a file it should not.
+    sources = [_receipt_pdf(receipts_dir, receipt.get("rid")) for receipt in receipts]
+    summary_pages, per_receipt = _page_map(packet_pdf, len(reader.pages), receipts)
 
     writer = PdfWriter()
     for page in reader.pages:
         writer.add_page(page)
 
     offset = 0
+    last_page = summary_pages - 1
     for index, receipt in enumerate(receipts):
-        source = _receipt_pdf(receipts_dir, receipt.get("rid"))
+        last_page += per_receipt[index]
+        source = sources[index]
         if not source.exists():
             continue
         attachment = _read_receipt(source, receipt["rid"])
-        card_index = summary_pages + index + offset
         for step, page in enumerate(attachment.pages, start=1):
-            writer.insert_page(page, card_index + step)
+            writer.insert_page(page, last_page + offset + step)
         offset += len(attachment.pages)
 
     metadata = {SPLICED_KEY: "1"}
