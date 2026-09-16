@@ -13,7 +13,8 @@ import attach_pdf
 import pytest
 import render_pdf
 from fixtures.make_fixture import pdf_bytes
-from test_render_pdf import write_packet
+from pypdf import PdfReader
+from test_render_pdf import PACKET_TITLE, write_packet
 
 FOLIO_MARK_ONE = "folio page 1 of 2"
 FOLIO_MARK_TWO = "folio page 2 of 2"
@@ -30,7 +31,7 @@ def packet(fixture_dir: Path, fixture_data: dict, tmp_path_factory) -> dict:
     html = write_packet(out / "packet.html", fixture_data, fixture_dir / "receipts")
     pdf = out / "packet.pdf"
     pages = render_pdf.render(html, pdf)
-    return {"dir": out, "pdf": pdf, "pages": pages}
+    return {"dir": out, "html": html, "pdf": pdf, "pages": pages}
 
 
 def _pdf_receipt_indexes(data: dict, receipts_dir: Path) -> list[int]:
@@ -84,6 +85,42 @@ def test_the_output_is_stamped_and_a_second_splice_is_refused(
     with pytest.raises(ValueError, match="spliced already"):
         attach_pdf.splice(once, fixture_data, receipts_dir, twice)
     assert not twice.exists()
+
+
+def test_the_spliced_packet_keeps_the_title_and_gains_no_author(
+    packet: dict, fixture_dir: Path, fixture_data: dict, tmp_path: Path
+) -> None:
+    """The splice writes a new document, and the title has to survive it.
+
+    render_pdf stamps the packet's own <title> onto the rendered PDF. The
+    splice builds a fresh writer, so anything not carried across is lost, and
+    a packet whose title is gone shows up in a viewer as its file name. The
+    title is carried; the author is not written, here or anywhere.
+    """
+    out = tmp_path / "titled.pdf"
+    attach_pdf.splice(packet["pdf"], fixture_data, fixture_dir / "receipts", out)
+
+    metadata = PdfReader(str(out)).metadata or {}
+    assert metadata.get("/Title") == PACKET_TITLE
+    assert metadata.get("/Title") == render_pdf.html_title(packet["html"])
+    assert "/Author" not in metadata
+    assert metadata.get(attach_pdf.SPLICED_KEY) == "1"
+
+
+def test_a_packet_with_no_title_splices_without_inventing_one(
+    fixture_dir: Path, fixture_data: dict, tmp_path: Path
+) -> None:
+    html = write_packet(
+        tmp_path / "untitled.html", fixture_data, fixture_dir / "receipts", title=None
+    )
+    pdf = tmp_path / "untitled.pdf"
+    render_pdf.render(html, pdf)
+    out = tmp_path / "untitled_final.pdf"
+    attach_pdf.splice(pdf, fixture_data, fixture_dir / "receipts", out)
+
+    metadata = PdfReader(str(out)).metadata or {}
+    assert "/Title" not in metadata
+    assert "/Author" not in metadata
 
 
 def test_a_receipt_pdf_that_will_not_open_names_the_receipt(packet: dict, tmp_path: Path) -> None:
