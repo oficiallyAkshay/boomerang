@@ -6,13 +6,13 @@ replaced before the file reached this repository. They are static files, not
 generated, so these tests are what keeps a rules.json honest about the markup
 it claims to describe.
 
-Five things are proved here for each folder. Every strip pattern matches the
-sample, unless the folder's notes say the module is absent from it. Every
-strip pattern takes a whole element with it and never half of one. Every
-amount and date pattern that is not null captures on the sample. Cleaning the
-sample leaves the money alone, drops every script and leaves no inline event
-handler. And a From header built from the folder's first sender domain, with
-the subject line that vendor really sends, resolves back to the folder.
+Four things are proved here for each folder. Every strip pattern matches the
+sample: a pattern nothing proves is a pattern nobody can say still works, so
+it does not stay. Every strip pattern takes a whole element with it and never
+half of one. Cleaning the sample leaves the money alone, drops every script
+and leaves no inline event handler. And a From header built from the folder's
+first sender domain, with the subject line that vendor really sends, resolves
+back to the folder.
 """
 
 from __future__ import annotations
@@ -135,9 +135,6 @@ def test_every_pattern_compiles(folder: str, rules: dict) -> None:
     for key in ("strip_regex", "subject_patterns", "unwrap_links_matching"):
         for pattern in rule[key]:
             re.compile(pattern, re.S)
-    for key in ("amount_regex", "date_regex"):
-        if rule[key] is not None:
-            re.compile(rule[key], re.S)
 
 
 # -------------------------------------------------------------- strip patterns
@@ -145,24 +142,23 @@ def test_every_pattern_compiles(folder: str, rules: dict) -> None:
 
 @pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
 def test_every_strip_pattern_is_proven_on_the_sample(folder: str, rules: dict) -> None:
-    """A pattern either matches a sample here, or the notes say why it cannot.
+    """Every pattern matches a sample in its own folder. No allowance.
 
-    A folder is allowed to carry a pattern for a module its own sample does not
-    have, because one vendor sends several templates through the same shell.
-    What it is not allowed to do is carry that pattern silently.
+    A folder used to be allowed to carry a pattern for a module its own sample
+    does not have, as long as the notes said so, on the argument that one
+    vendor sends several templates through the same shell. What that bought
+    was six patterns nobody could run, describing markup nobody in this repo
+    has a copy of. A pattern no sample exercises is a pattern that could have
+    stopped matching a year ago and nothing here would say so, so it goes, and
+    comes back with the sample that proves it.
     """
     samples = samples_for(folder)
-    notes = rules[folder]["notes"]
     unmatched = [
-        pattern
-        for pattern in rules[folder]["strip_regex"]
+        index
+        for index, pattern in enumerate(rules[folder]["strip_regex"])
         if not any(re.search(pattern, text, re.S) for text in samples.values())
     ]
-    if unmatched:
-        assert "present in this sample" in notes, (
-            f"{folder} carries {len(unmatched)} strip patterns that match no sample "
-            "and says nothing about it in notes"
-        )
+    assert unmatched == [], f"{folder} strip patterns {unmatched} match no sample in the folder"
 
 
 def tag_balance(fragment: str) -> dict[str, int]:
@@ -324,6 +320,26 @@ def test_every_replace_pattern_compiles_and_matches_its_sample(folder: str, rule
         )
 
 
+@pytest.mark.parametrize("folder", FOLDERS)
+def test_no_folder_repeats_a_generic_unwrap_pattern(folder: str, rules: dict) -> None:
+    """The four shapes every vendor sends are listed once, in clean.py.
+
+    A folder that repeated them was four lines that had to be kept in step
+    with eleven other folders and with the cleaner, for a rule that was never
+    the vendor's own.
+    """
+    repeated = set(rules[folder]["unwrap_links_matching"]) & set(clean.GENERIC_UNWRAP)
+    assert repeated == set(), f"{folder} repeats {sorted(repeated)} from clean.GENERIC_UNWRAP"
+
+
+def test_the_generic_unwrap_shapes_reach_a_vendor_that_lists_none(rules: dict) -> None:
+    """njtransit names no tracking shape of its own and still unwraps the four."""
+    assert rules["njtransit"]["unwrap_links_matching"] == []
+    raw = '<p><a href="https://example.com/x?utm_source=email">Manage trip</a></p>'
+    out = clean.clean_html(raw, rules["njtransit"])
+    assert out == "<p>Manage trip</p>"
+
+
 @pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
 def test_at_least_one_strip_pattern_matches(folder: str, rules: dict) -> None:
     samples = samples_for(folder)
@@ -333,32 +349,29 @@ def test_at_least_one_strip_pattern_matches(folder: str, rules: dict) -> None:
     ), f"{folder} strips nothing at all from its own sample"
 
 
-# ------------------------------------------------------------ amount and date
+# --------------------------------------------------------------- the schema
 
 
-@pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
-def test_amount_and_date_capture_on_the_sample(folder: str, rules: dict) -> None:
-    """Null means the vendor prints no such value, and the notes have to say so."""
-    rule = rules[folder]
-    samples = samples_for(folder)
-    for key in ("amount_regex", "date_regex"):
-        pattern = rule[key]
-        if pattern is None:
-            assert "null" in rule["notes"], f"{folder} {key} is null and unexplained"
-            continue
-        captures = [
-            match.group(1)
-            for match in (re.search(pattern, text, re.S) for text in samples.values())
-            if match
-        ]
-        assert captures, f"{folder} {key} captures nothing on its sample"
-        assert all(capture.strip() for capture in captures)
+def test_no_folder_carries_a_field_nothing_reads(rules: dict) -> None:
+    """amount_regex and date_regex were read by no script and are gone.
+
+    They were written and kept in step for eleven folders, and the only thing
+    that ever ran them was the test that checked they still captured. The
+    amounts and dates a packet prints come from expense_data.json, which a
+    person fills in from the receipt in front of them.
+    """
+    for folder, rule in rules.items():
+        assert "amount_regex" not in rule, f"{folder} still carries amount_regex"
+        assert "date_regex" not in rule, f"{folder} still carries date_regex"
 
 
-def test_the_two_search_folders_read_no_values(rules: dict) -> None:
-    for name in SEARCH_ONLY:
-        assert rules[name]["amount_regex"] is None
-        assert rules[name]["date_regex"] is None
+def test_the_reference_page_carries_the_same_keys() -> None:
+    """The schema line names every key a rules.json is allowed to hold."""
+    page = (VENDORS_DIR.parent / "references" / "interfaces.md").read_text(encoding="utf-8")
+    for key in ("strip_regex", "unwrap_links_matching", "replace", "notes"):
+        assert f'"{key}"' in page, f"references/interfaces.md never names {key}"
+    for gone in ("amount_regex", "date_regex"):
+        assert gone not in page, f"references/interfaces.md still names {gone}"
 
 
 # -------------------------------------------------------------------- cleaning
@@ -473,8 +486,8 @@ def test_the_reference_page_covers_every_folder() -> None:
         assert rule["display"] in headings, f"references/vendors.md has no section for {folder}"
 
 
-def test_the_reference_page_names_every_known_gap() -> None:
-    """A folder with a null pattern is a gap, and the page has to say so."""
+def test_the_reference_page_names_every_folder_that_ships_no_sample() -> None:
+    """A search folder cleans nothing, and the page has to say which they are."""
     page = (VENDORS_DIR.parent / "references" / "vendors.md").read_text(encoding="utf-8")
     sections = {}
     current = None
@@ -484,11 +497,7 @@ def test_the_reference_page_names_every_known_gap() -> None:
             sections[current] = []
         elif current:
             sections[current].append(line)
-    for folder in FOLDERS:
-        if folder in SEARCH_ONLY:
-            continue
+    for folder in sorted(SEARCH_ONLY):
         rule = json.loads((VENDORS_DIR / folder / "rules.json").read_text(encoding="utf-8"))
-        if rule["amount_regex"] is not None and rule["date_regex"] is not None:
-            continue
         body = " ".join(sections[rule["display"]])
-        assert "Known gap" in body, f"references/vendors.md hides a gap in {folder}"
+        assert "no sample" in body.lower(), f"references/vendors.md hides the gap in {folder}"

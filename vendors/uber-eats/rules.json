@@ -19,20 +19,14 @@
     "<a[^>]*>\\s*My Account\\s*</a>[\\s\\S]{0,4000}?Terms and Conditions\\s*</a>",
     "<div[^>]*class=\"action-panel-wrapper[^\"]*\"[^>]*>(?:(?!</div>)[\\s\\S])*?(?:Contact support|Need help\\?)(?:(?!</div>)[\\s\\S])*</div>"
   ],
+  "unwrap_links_matching": [
+    "uber\\.com"
+  ],
   "replace": [
     [
       "(<td[^>]*class=\"total-fare-title\"[^>]*style=\")width:100%;",
       "\\1width:auto;padding-right:16px;"
     ]
   ],
-  "unwrap_links_matching": [
-    "click\\.",
-    "/track",
-    "utm_",
-    "email\\.",
-    "uber\\.com"
-  ],
-  "amount_regex": "data-testid=\"total_fare_amount\"[^>]*>\\s*([£$€₹][0-9][0-9,]*\\.[0-9]{2})\\s*<",
-  "date_regex": "<div class=\"date\"[^>]*>\\s*([A-Z][a-z]{2}\\s+\\d{1,2},\\s+\\d{4})",
   "notes": "Uber Eats order receipts use the same shell as Uber ride receipts but a different set of modules. Removed: the rate and tip block for the courier; the app download and Download PDF buttons; the merchant and dish photography served from S3, whose paths identify the real merchant; the social link row; the corporate address footer and the account and terms link cluster; and the support panel, matched at the wrapper that holds it so the heading and the message go with the button. The Uber One savings strip has a pattern here and is kept anyway: it prints the $14.55 it saved, and the amount guard skips a pattern that would take an amount with it, so the strip stays as part of what the order cost. Kept verbatim: every basket line with its quantity and options, the subtotal, the delivery and service fees, the tax, every discount and credit row, the order total, the order date and the order completed timestamp, both tender rows when a voucher and a card split the bill, and the card last four. Uber Eats and Uber ride mail share the sender domain uber.com, so the domain alone cannot name the folder; detect_vendor prefers the vendor whose subject patterns also fit, and an order subject resolves here while a trip subject resolves to uber. One thing is rewritten rather than removed: the total row gives the word Total a cell at width:100%, which is fine in a mail client and squeezes the amount beside it to one character per line in a packet's narrower column, so a replace pair turns that one cell's width into auto and adds the gap the width was holding open. Nothing else in the row is touched, the figure is the figure the vendor printed, and the amount guard covers the rewrite the same way it covers a strip pattern."
 }

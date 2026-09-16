@@ -45,16 +45,23 @@ because a packet is built from the output of clean.py, not from the mailbox.
 Each vendor directory holds one, at `vendors/<name>/rules.json`.
 
 ```text
-{ "name": str, "display": str, "sender_domains": [str], "subject_patterns": [regex], "strip_regex": [regex applied with re.S over the HTML], "unwrap_links_matching": [regex on href], "amount_regex": str|null, "date_regex": str|null, "notes": str }
+{ "name": str, "display": str, "sender_domains": [str], "subject_patterns": [regex], "strip_regex": [regex applied with re.S over the HTML], "unwrap_links_matching": [regex on href, vendor specific only], "replace": [[regex, re.sub replacement]] (optional), "notes": str }
 ```
+
+`unwrap_links_matching` carries only the tracking shapes that are a vendor's own. The four every
+vendor sends, `click\.`, `/track`, `utm_` and `email\.`, are `clean.GENERIC_UNWRAP` and apply to
+every receipt, generic ones included. Every pattern in `strip_regex`, `subject_patterns`,
+`unwrap_links_matching` and `replace` is compiled when the rules load, so a pattern that does not
+compile names its key and its index instead of raising halfway through a receipt. `replace` pairs
+run before every pass that sanitises, so a replacement cannot put anything active into a fragment.
 
 ## Command lines
 
 ```text
 CLI: build.py DATA.json --receipts DIR --out packet.html   # totals, then "pages expected N"
 CLI: clean.py IN.html --out OUT.html [--vendor NAME|generic] [--vendors DIR] [--images DIR] [--fetch-images]
-CLI: clean.py --dir RECEIPTS --out CLEAN [--vendors DIR] [--images DIR] [--fetch-images] [--workers N]
-  # cleans every .html in RECEIPTS at once (4 at a time by default), reading each file's vendor
+CLI: clean.py --dir RECEIPTS --out CLEAN [--vendors DIR] [--images DIR] [--fetch-images]
+  # cleans every .html in RECEIPTS, one after another in filename order, reading each file's vendor
   # from its own <rid>.meta.json; .txt, .pdf, .png and .jpg are copied through unchanged and
   # everything else, meta files included, stays behind. One "clean: <file> vendor <name>" line
   # per receipt on stderr, in filename order, and the amount guard warnings in that order too
@@ -67,14 +74,17 @@ CLI: fetch.py --start YYYY-MM-DD --end YYYY-MM-DD --out DIR [--vendors DIR] [--d
   # with no body and no kept attachment writes nothing and is named on stdout as empty
 CLI: gmail_cli.py auth --client-secret PATH | search QUERY | get RID --out DIR ; token at ~/.config/boomerang/token.json chmod 600
 CLI: render_pdf.py packet.html packet.pdf [--expect N]      # prints the page count; exits 2 when --expect differs
+  # names the browser it rendered with on stderr; render() returns (pages, channel)
   # aborts every http and https request the page makes, so nothing is fetched while rendering;
   # names on stderr any receipt scaled below half size to fit its page
 CLI: attach_pdf.py packet.pdf DATA.json --receipts DIR --out final.pdf          # prints the final page count
   # validates DATA.json against the receipts dir first and exits 2 listing the problems;
   # stamps the output /BoomerangSpliced and refuses a packet that already carries it
 CLI: check_prose.py [--packet FILE]
-  # scans tracked text files, UTF-16 ones included, for the em dash and the hashed denylist
-  # (runs of up to 4 words); --packet adds the banned word, data-rid= and href="# on the packet
+  # with no flag: scans every tracked text file, UTF-16 ones included, for the em dash and the
+  # hashed denylist (runs of up to 4 words), resolving the repo root and the denylist from its
+  # own path so it runs from anywhere, and exiting 1 when the denylist is missing or empty
+  # --packet FILE scans only that file, and adds the banned word, data-rid= and href="#
 ```
 
 `--fetch-images` is the only path that opens a socket. It needs `--images DIR` and downloads what
@@ -96,9 +106,10 @@ nothing the other two need, so they run at once. `cards.py` and `attach_pdf.extr
 no argument they did not already have; the cleaner's directory form is:
 
 ```text
-clean.clean_dir(src_dir, out_dir, vendors_dir, image_cache=None, fetch_images=False, workers=4)
+clean.clean_dir(src_dir, out_dir, vendors_dir, image_cache=None, fetch_images=False)
   -> list[tuple[str, str]]   # (filename, vendor or "generic") per .html, in filename order
 ```
 
 It raises `ValueError` when `fetch_images` is asked for with no `image_cache`. `fetch.fetch_all`
-takes the same kind of argument, `workers=3`, and its four lists stay in first seen order.
+takes a `workers=3` argument, and its four lists stay in first seen order: a message the source
+refuses is named on stdout and lands in `failed`, so the four lists always account for every rid.

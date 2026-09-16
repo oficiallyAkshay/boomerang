@@ -361,8 +361,6 @@ def write_vendor_rules(vendors_dir: Path, name: str, sender_domains: list[str]) 
                 "subject_patterns": [],
                 "strip_regex": [],
                 "unwrap_links_matching": [],
-                "amount_regex": None,
-                "date_regex": None,
                 "notes": "",
             }
         ),
