@@ -362,11 +362,8 @@ rect.c-bg-rect { fill: var(--bg); }
         <path data-edge-from="cards" data-edge-to="candidates" data-edge-key="10" data-edge-id="cards-candidates" data-composition-points="884,221;937,221;937,251;990,251" d="M 884 221 L 929 221 Q 937 221 937 229 L 937 243 Q 937 251 945 251 L 990 251" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="folio" data-edge-to="candidates" data-edge-key="11" data-edge-id="folio-candidates" data-composition-points="884,321;937,321;937,265;990,265" d="M 884 321 L 929 321 Q 937 321 937 313 L 937 273 Q 937 265 945 265 L 990 265" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <path data-edge-from="policy" data-edge-to="candidates" data-edge-key="12" data-edge-id="policy-candidates" data-composition-points="1080,152;1080,220" d="M 1080 152 L 1080 220" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="candidates" data-edge-to="expense" data-edge-label="you answer" data-edge-key="13" data-edge-id="candidates-expense" data-composition-points="1080,282;1080,402;114,402;114,446" d="M 1080 282 L 1080 394 Q 1080 402 1072 402 L 122 402 Q 114 402 114 410 L 114 446" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="expense" data-edge-to="build" data-edge-key="14" data-edge-id="expense-build" data-composition-points="196,477;276,477" d="M 196 477 L 276 477" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="build" data-edge-to="render" data-edge-label="HTML" data-edge-key="15" data-edge-id="build-render" data-composition-points="440,477;519,477" d="M 440 477 L 519 477" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="render" data-edge-to="splice" data-edge-label="PDF" data-edge-key="16" data-edge-id="render-splice" data-composition-points="683,477;762,477" d="M 683 477 L 762 477" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="splice" data-edge-to="packet" data-edge-key="17" data-edge-id="splice-packet" data-composition-points="926,477;990,477" d="M 926 477 L 990 477" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="candidates" data-edge-to="packet_build" data-edge-label="you answer" data-edge-key="13" data-edge-id="candidates-packet_build" data-composition-points="1080,282;1080,402;740,402;740,446" d="M 1080 282 L 1080 394 Q 1080 402 1072 402 L 748 402 Q 740 402 740 410 L 740 446" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="packet_build" data-edge-to="packet" data-edge-key="14" data-edge-id="packet_build-packet" data-composition-points="880,477;990,477" d="M 880 477 L 990 477" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
 
         <!-- Components -->
         <g id="node-calendar" data-node-id="calendar" data-node-label="Calendar" tabindex="0" role="button" aria-label="Focus Calendar, trip dates, Architecture component" aria-pressed="false" data-node-kind="external" data-node-sublabel="trip dates" data-node-context="Architecture component">
@@ -507,52 +504,16 @@ rect.c-bg-rect { fill: var(--bg); }
         <text x="1080" y="274" class="t-cloud" font-size="7" text-anchor="middle">model</text>
         </g>
 
-        <g id="node-expense" data-node-id="expense" data-node-label="expense_data.json" tabindex="0" role="button" aria-label="Focus expense_data.json, what goes in, Architecture component" aria-pressed="false" data-node-kind="database" data-node-sublabel="what goes in" data-node-context="Architecture component">
-          <title>expense_data.json · what goes in · Architecture component</title>
-          <rect x="32" y="446" width="164" height="62" rx="6" class="c-mask"/>
-          <rect x="32" y="446" width="164" height="62" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(38 452) scale(0.6875)">
-            <ellipse cx="8" cy="4" rx="5" ry="2"/>
-            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
-          </g>
-          <text data-node-label="" x="114" y="475" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">expense_data.json</text>
-        <text x="114" y="491" class="t-muted" font-size="9" text-anchor="middle">what goes in</text>
-        </g>
-
-        <g id="node-build" data-node-id="build" data-node-label="Build packet.html" tabindex="0" role="button" aria-label="Focus Build packet.html, build.py, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="build.py" data-node-tag="code" data-node-context="Architecture component">
-          <title>Build packet.html · build.py · Architecture component · code</title>
-          <rect x="276" y="446" width="164" height="62" rx="6" class="c-mask"/>
-          <rect x="276" y="446" width="164" height="62" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(282 452) scale(0.6875)">
+        <g id="node-packet_build" data-node-id="packet_build" data-node-label="Build the packet" tabindex="0" role="button" aria-label="Focus Build the packet, HTML and PDF, receipts behind the summary, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="HTML and PDF, receipts behind the summary" data-node-tag="code" data-node-context="Architecture component">
+          <title>Build the packet · HTML and PDF, receipts behind the summary · Architecture component · code</title>
+          <rect x="600" y="446" width="280" height="62" rx="6" class="c-mask"/>
+          <rect x="600" y="446" width="280" height="62" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(606 452) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" x="358" y="475" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Build packet.html</text>
-        <text x="358" y="491" class="t-muted" font-size="9" text-anchor="middle">build.py</text>
-        <text x="358" y="500" class="t-backend" font-size="7" text-anchor="middle">code</text>
-        </g>
-
-        <g id="node-render" data-node-id="render" data-node-label="Render packet.pdf" tabindex="0" role="button" aria-label="Focus Render packet.pdf, render_pdf.py, Chrome, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="render_pdf.py, Chrome" data-node-tag="code" data-node-context="Architecture component">
-          <title>Render packet.pdf · render_pdf.py, Chrome · Architecture component · code</title>
-          <rect x="519" y="446" width="164" height="62" rx="6" class="c-mask"/>
-          <rect x="519" y="446" width="164" height="62" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(525 452) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="601" y="475" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Render packet.pdf</text>
-        <text x="601" y="491" class="t-muted" font-size="9" text-anchor="middle">render_pdf.py, Chrome</text>
-        <text x="601" y="500" class="t-backend" font-size="7" text-anchor="middle">code</text>
-        </g>
-
-        <g id="node-splice" data-node-id="splice" data-node-label="Splice folios" tabindex="0" role="button" aria-label="Focus Splice folios, attach_pdf.py, Architecture component" aria-pressed="false" data-node-kind="backend" data-node-sublabel="attach_pdf.py" data-node-tag="code" data-node-context="Architecture component">
-          <title>Splice folios · attach_pdf.py · Architecture component · code</title>
-          <rect x="762" y="446" width="164" height="62" rx="6" class="c-mask"/>
-          <rect x="762" y="446" width="164" height="62" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(768 452) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" x="844" y="475" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Splice folios</text>
-        <text x="844" y="491" class="t-muted" font-size="9" text-anchor="middle">attach_pdf.py</text>
-        <text x="844" y="500" class="t-backend" font-size="7" text-anchor="middle">code</text>
+          <text data-node-label="" x="740" y="475" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Build the packet</text>
+        <text x="740" y="491" class="t-muted" font-size="9" text-anchor="middle">HTML and PDF, receipts behind the summary</text>
+        <text x="740" y="500" class="t-backend" font-size="7" text-anchor="middle">code</text>
         </g>
 
         <g id="node-packet" data-node-id="packet" data-node-label="Packet" tabindex="0" role="button" aria-label="Focus Packet, HTML master + PDF, Architecture component" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="HTML master + PDF" data-node-context="Architecture component">
@@ -583,18 +544,9 @@ rect.c-bg-rect { fill: var(--bg); }
 
 
 
-        <g data-edge-from="candidates" data-edge-to="expense" data-edge-label="you answer" data-edge-key="13" data-edge-id="candidates-expense">
-          <rect x="571" y="378" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="600" y="388" class="t-backend" font-size="8" text-anchor="middle">you answer</text>
-        </g>
-
-        <g data-edge-from="build" data-edge-to="render" data-edge-label="HTML" data-edge-key="15" data-edge-id="build-render">
-          <rect x="464.5" y="457" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="479.5" y="467" class="t-muted" font-size="8" text-anchor="middle">HTML</text>
-        </g>
-        <g data-edge-from="render" data-edge-to="splice" data-edge-label="PDF" data-edge-key="16" data-edge-id="render-splice">
-          <rect x="707.5" y="457" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="722.5" y="467" class="t-muted" font-size="8" text-anchor="middle">PDF</text>
+        <g data-edge-from="candidates" data-edge-to="packet_build" data-edge-label="you answer" data-edge-key="13" data-edge-id="candidates-packet_build">
+          <rect x="881" y="378" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="910" y="388" class="t-backend" font-size="8" text-anchor="middle">you answer</text>
         </g>
 
 
@@ -615,21 +567,17 @@ rect.c-bg-rect { fill: var(--bg); }
             <rect x="160" y="551" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
             <text x="182" y="560" class="t-muted" font-size="10" font-weight="500">Code (script)</text>
           </g>
-          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="File on disk" data-legend-x="290" data-legend-baseline="560" data-legend-width="103">
-            <rect x="290" y="551" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
-            <text x="312" y="560" class="t-muted" font-size="10" font-weight="500">File on disk</text>
+          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="Model judgment" data-legend-x="290" data-legend-baseline="560" data-legend-width="113">
+            <rect x="290" y="551" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+            <text x="312" y="560" class="t-muted" font-size="10" font-weight="500">Model judgment</text>
           </g>
-          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="Model judgment" data-legend-x="415" data-legend-baseline="560" data-legend-width="113">
-            <rect x="415" y="551" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
-            <text x="437" y="560" class="t-muted" font-size="10" font-weight="500">Model judgment</text>
+          <g data-legend-semantic-kind="messagebus" data-legend-kind="messagebus" data-legend-label="Tool call the model issues" data-legend-x="425" data-legend-baseline="560" data-legend-width="172">
+            <rect x="425" y="551" width="16" height="10" rx="2.5" class="c-messagebus" stroke-width="1"/>
+            <text x="447" y="560" class="t-muted" font-size="10" font-weight="500">Tool call the model issues</text>
           </g>
-          <g data-legend-semantic-kind="messagebus" data-legend-kind="messagebus" data-legend-label="Tool call the model issues" data-legend-x="550" data-legend-baseline="560" data-legend-width="172">
-            <rect x="550" y="551" width="16" height="10" rx="2.5" class="c-messagebus" stroke-width="1"/>
-            <text x="572" y="560" class="t-muted" font-size="10" font-weight="500">Tool call the model issues</text>
-          </g>
-          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="Source outside the skill" data-legend-x="744" data-legend-baseline="560" data-legend-width="163">
-            <rect x="744" y="551" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
-            <text x="766" y="560" class="t-muted" font-size="10" font-weight="500">Source outside the skill</text>
+          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="Source outside the skill" data-legend-x="619" data-legend-baseline="560" data-legend-width="163">
+            <rect x="619" y="551" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+            <text x="641" y="560" class="t-muted" font-size="10" font-weight="500">Source outside the skill</text>
           </g>
         </g>
       </svg>

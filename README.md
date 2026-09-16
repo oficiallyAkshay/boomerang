@@ -23,51 +23,41 @@
   <a href="references/hosts.md#codex"><img alt="Codex" src="https://img.shields.io/badge/Codex-3f3f46"></a>
   <a href="references/hosts.md#openclaw"><img alt="OpenClaw" src="https://img.shields.io/badge/OpenClaw-3f3f46"></a>
   <a href="references/hosts.md#hermes"><img alt="Hermes" src="https://img.shields.io/badge/Hermes-3f3f46"></a>
-  <br>
-  <sub>Install paths and limits per host: <a href="references/hosts.md">references/hosts.md</a></sub>
 </p>
 
 <p align="center"><img alt="Inbox and calendar feed receipts of every kind into one PDF packet with the receipts behind the summary" src="assets/readme/flow.svg" width="900"></p>
 
 <p align="center">
-  <b><a href="examples/packet.pdf">See the example packet (PDF)</a></b> <b><a href="examples/packet.html">or the HTML master</a></b>
-  <br>
-  <sub>Every name, address, card and amount in it is fully synthetic.</sub>
+  <b><a href="examples/packet.pdf">See the example packet (PDF)</a></b>
 </p>
 
-You spent your own money on someone else's behalf. An onsite interview, a client trip, a contract gig. Now the receipts are scattered across your personal inbox and a company is waiting on a claim you haven't had time to build.
+You spent your own money on someone else's behalf. An onsite interview, a client trip, a contract gig. Now the receipts are scattered across your personal inbox. You already spent the time. Getting the money back should not cost you more of it.
 
 Boomerang builds it. Every receipt, the right total, one PDF.
 
-| Summary page | Receipt pages |
-| --- | --- |
-| <img alt="Page one of the packet: the trip header, the days with their items and subtotals, and the Expenses, Stipend and Total rows" src="assets/readme/packet-page-1.png" width="232"> | <img alt="Eight receipt pages from the packet: two rides, a meal order, a grocery delivery, a flight eticket, a hotel stay, a bus fare and a software licence, one per page" src="assets/readme/packet-receipt-pages.png" width="465"> |
-
-<p align="center">
-  <sub>Page one and eight receipt pages from the synthetic example in <a href="examples/packet.pdf"><code>examples/packet.pdf</code></a>, each receipt fitted to a Letter page.</sub>
-</p>
-
 ## Features
 
-- **Every dollar captured.** Flights, hotel nights and resort fees, rides, scooters, transit, tolls and parking, meals on travel and working days. Rides that landed in your inbox a day late, airport Wi-Fi, the scooter to the office, the resort fee at checkout. Boomerang searches your whole trip window so nothing gets missed
-- **The right split, mixed payees.** Some things they paid, some things you paid. Boomerang spots the company card, follows the eTicket chain, counts the flight credit in and the points out, drops the flight and room they covered, and claims the rest
-- **Real receipts.** Rendered from the vendor's own email, markup and amounts untouched, one per page. Lyft looks like Lyft, United looks like United. Nobody has to ask what a line means
-- **Multi-currency.** The claim carries the posted home-currency amount, and the line notes what it was in the local one
-- **Multi-company per trip.** Two onsites inside one trip, with the shared flight and the shared nights split between them
-- **Change fees and cancelled trips.** The fee you ate and the trip that never happened both land in the claim, labelled for the reviewer
-- **Personal days handled.** The days you added for yourself come out, and the airport legs at either end stay in
-- **Stipends and per diems.** Counted by the days you actually worked, and shown as their own rows above the total
-- **Time saved.** One ask, one question back, one PDF. Days, subtotals, total. Send it and move on
+| Feature | What it means |
+| --- | --- |
+| **Finds everything** | The whole trip window, late receipts, folios sent as attachments |
+| **Splits who paid** | Company card from yours, eTicket chains, credits in and points out |
+| **Multi-company trips** | Two onsites in one trip, the shared flight and nights split |
+| **Real receipts** | The vendor's own email, amounts untouched, one per page |
+| **One PDF** | Summary page first, every receipt behind it |
+| **Multi-currency** | Claims the posted home amount, notes the local one |
+| **Change fees and cancellations** | The fee you ate and the trip that never happened, both labelled |
+| **Personal days** | Your own days come out, the four airport legs stay in |
+| **Stipends** | Counted by days worked, shown as their own rows above the total |
 
 Full ruleset in [`policy.md`](policy.md).
 
 ## How it works
 
 <p align="center">
-  <img alt="How boomerang works: two search passes feed a fetch step; cleaning, card fingerprinting and folio text run in parallel; the model applies the policy and shows a candidate list; then build, render and splice produce the packet" src="assets/diagram/architecture.svg" width="900">
+  <img alt="How boomerang works: two search passes feed a fetch step; cleaning, card fingerprinting and folio text run in parallel; the model applies the policy and shows a candidate list; then one build step produces the packet" src="assets/diagram/architecture.svg" width="900">
 </p>
 
-Code does the mechanical work (search, fetch, clean, who paid, totals, render); the model supplies judgment (the trip, the policy, the candidate list, the one question). Cleaning, card fingerprinting and folio text run at the same time over the receipts on disk. The diagram is rendered once from [`assets/diagram/architecture.archify.json`](assets/diagram/architecture.archify.json) with Archify and committed; nothing here depends on it.
+Two search passes, then cleaning, who paid and folio text in parallel, then the model's judgment, then one packet.
 
 ## Quick start
 
@@ -86,15 +76,49 @@ Code does the mechanical work (search, fetch, clean, who paid, totals, render); 
 `python scripts/doctor.py` prints what is present, what is missing, and the one
 command that fixes each thing.
 
-## What you need
+## Configuration and security
 
-- Your email connected
-- Your calendar connected (optional, helps find the dates)
+| Setting | Where | Default |
+| --- | --- | --- |
+| The shared ruleset | [`policy.md`](policy.md) | Ships with the skill, yours to edit |
+| Your own overrides | `policy.local.md`, ignored by git ([template](references/policy.local.example.md)) | Tips out, ride extras in, alcohol flagged, upgrades out, seat fees in, 60 minute meal window, USD |
+| Browser for the PDF | `BOOMERANG_BROWSER` | Chrome, then Edge, then Chromium, first one found |
+| Gmail fallback | `BOOMERANG_GMAIL_CLIENT_SECRET` | Off, the host's own email tool is used |
 
-## Contributing and license
+### What leaves your machine: nothing
 
-Bug reports, vendor samples and fixes are welcome, and
-[`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md) says what the project takes
-and how to run the checks first.
+| Concern | What actually happens | The guard |
+| --- | --- | --- |
+| Reading your mail | Read only, never a write and never a delete | The Gmail fallback asks for the read-only scope |
+| Where the token sits | In your home config folder, readable by you alone | Mode 600 inside a 700 directory |
+| Sending data anywhere | No uploads, no telemetry, no analytics | Only your mail provider, plus vendor images when you ask |
+| The packet phoning home | Nothing loads when a reviewer opens it | A content security policy in the packet, scripts off at render |
+| Vendor tracking | Pixels and tracking links are gone before the build | Beacon images dropped, links unwrapped to their own text |
+| A vendor email running code | Nothing inside a receipt can act | Scripts, handlers, iframes and style imports removed first |
+| Dependencies | Two runtime packages, pinned to exact versions | Audited against the advisory database on every run of CI |
+| This repo leaking data | Every sample and example is synthetic | A hashed denylist gate runs on each commit and in CI |
 
-MIT, see [`LICENSE`](LICENSE).
+Receipts, the packet and the PDF are files on your disk; you send the claim yourself.
+
+## Common workflows
+
+| Situation | What you say | What comes back |
+| --- | --- | --- |
+| They booked the flight and hotel | "Build my packet for the Redwood onsite on June 11." | Rides, meals and Wi-Fi claimed, their flight and room dropped |
+| You paid in full, with a stipend | "Client trip June 3 to 6, stipend 75 a day." | Flight, hotel and rides claimed, four stipend days above the total |
+| Two companies in one city | "Redwood on Tuesday, Foxglove on Thursday, same trip." | Two packets, the shared flight and nights split evenly |
+| Personal days added | "I stayed through the weekend for myself." | Weekend nights and rides out, all four airport legs kept |
+| The onsite was cancelled | "Redwood cancelled June 11 after I had booked." | Change fee and the non-refundable night in, labelled for the reviewer |
+| A trip abroad | "Berlin onsite, everything was charged in euros." | Posted dollar amounts claimed, each line noting the euro total |
+| The sweep before you send | "Anything new since we built it?" | Late rides added, totals restated, the PDF rebuilt |
+
+## How it compares
+
+| | Corporate expense tools | Receipt scanner apps | Asking a chat model | Boomerang |
+| --- | --- | --- | --- | --- |
+| Needs a company account | Yes | No | No | No |
+| Finds receipts for you | From the card feed | You forward each one | You paste each one | Searches your mailbox |
+| Knows who paid | From the card feed | No | Only if you say so | Card fingerprint, in code |
+| Money math in code | Yes | Yes | No, the model adds up | Yes |
+| Real vendor receipts in the output | Photos you upload | Photos you upload | None | The vendor's own email |
+| Follows a written policy you can edit | An admin sets it | No | Only what you retype | Yes, a file you own |
