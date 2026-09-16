@@ -57,6 +57,12 @@ know what was done to the page in front of them.
    around it, because a style attribute is full of decimals
    (``line-height:1.25rem``) and none of them is an amount.
 
+``clean_dir`` cleans a whole directory, one thread per receipt, because the
+receipts on disk have nothing to do with each other. It is the stage the
+workflow runs beside ``cards.py`` and the folio read, and the one place where
+the strip-pattern warnings need handling: each worker collects its own and
+they are printed together, in filename order, once the pool is finished.
+
 Stdlib only. Regex over the markup, deliberately: these are email tables, the
 input is one saved message at a time, and a parser dependency buys nothing here.
 """
@@ -71,8 +77,11 @@ import ipaddress
 import json
 import mimetypes
 import re
+import shutil
 import socket
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from email.utils import parseaddr
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -96,6 +105,12 @@ IMAGE_SIGNATURES = (
     b"GIF87a",
     b"GIF89a",
 )
+
+# What a directory clean carries across untouched. A text body, a folio and a
+# receipt photo are already what the packet needs; only markup gets cleaned.
+COPY_SUFFIXES = (".txt", ".pdf", ".png", ".jpg")
+CLEAN_SUFFIX = ".html"
+DIR_WORKERS = 4
 
 REQUIRED_KEYS = (
     "name",
@@ -865,13 +880,159 @@ def clean_html(raw: str, rules: dict | None = None, image_cache: Path | None = N
     return fragment
 
 
+# ------------------------------------------------------------- whole directory
+
+
+_COLLECTED = threading.local()
+
+
+class _WarningRouter:
+    """Stands in for stderr while a directory clean is running.
+
+    ``_apply_strip_patterns`` names a skipped pattern on stderr as it works,
+    and four cleans at once would shuffle those lines into each other. For the
+    length of the pool this object is ``sys.stderr``, and it hands every worker
+    thread its own list to write into. What the workers collect is printed
+    afterwards in filename order. A thread that has no list of its own, which
+    is any thread but a worker, writes straight through to the real stream.
+    """
+
+    def __init__(self, target):
+        self._target = target
+
+    def write(self, text: str) -> int:
+        collected = getattr(_COLLECTED, "lines", None)
+        if collected is None:
+            return self._target.write(text)
+        collected.append(text)
+        return len(text)
+
+    def flush(self) -> None:
+        self._target.flush()
+
+    def __getattr__(self, name: str):
+        return getattr(object.__getattribute__(self, "_target"), name)
+
+
+def _clean_one(
+    source: Path, out_dir: Path, vendors_dir: Path, image_cache: Path | None, download: bool
+) -> tuple[str, str, str]:
+    """One receipt, in one worker. Returns its name, its vendor and its warnings.
+
+    The vendor is read from the headers saved beside the message, exactly as
+    the single file CLI reads them, so a directory run and a file run choose
+    the same rules. The fragment is written here rather than handed back, so
+    no worker holds a receipt once it is done with it.
+    """
+    name, rules = detect_from_meta(source, vendors_dir)
+    collected: list[str] = []
+    _COLLECTED.lines = collected
+    try:
+        cleaned = clean_html(source.read_text(encoding="utf-8", errors="replace"), rules)
+        if download:
+            fetch_images(cleaned, image_cache)
+        if image_cache is not None:
+            cleaned = inline_images(cleaned, image_cache)
+    finally:
+        _COLLECTED.lines = None
+    (out_dir / source.name).write_text(cleaned + "\n", encoding="utf-8")
+    return source.name, name, "".join(collected)
+
+
+def clean_dir(
+    src_dir: Path,
+    out_dir: Path,
+    vendors_dir: Path,
+    image_cache: Path | None = None,
+    fetch_images: bool = False,
+    workers: int = DIR_WORKERS,
+) -> list[tuple[str, str]]:
+    """Clean every receipt in a directory at once, and carry the rest across.
+
+    Each ``.html`` file is cleaned in its own thread: they share no state, and
+    the vendor for each is read from its own ``.meta.json``. A ``.txt``,
+    ``.pdf``, ``.png`` or ``.jpg`` beside them is copied through unchanged,
+    because a plaintext body, a folio and a receipt photo are already what the
+    packet wants. Anything else, the meta files included, stays behind.
+
+    Returns ``(filename, vendor)`` for each file cleaned, in filename order,
+    with ``"generic"`` for a receipt whose sender no rules claim. The order is
+    the sorted order of the directory whatever the threads did, so two runs
+    over one directory read the same.
+
+    ``fetch_images`` is the one flag that opens a socket, it needs an
+    ``image_cache`` to fill, and it downloads from the cleaned fragment, never
+    from the raw message.
+    """
+    src_dir = Path(src_dir)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if fetch_images and image_cache is None:
+        raise ValueError("clean_dir: fetch_images needs an image_cache directory")
+
+    sources: list[Path] = []
+    for path in sorted(src_dir.iterdir()):
+        if not path.is_file():
+            continue
+        suffix = path.suffix.lower()
+        if suffix == CLEAN_SUFFIX:
+            sources.append(path)
+        elif suffix in COPY_SUFFIXES:
+            shutil.copy2(path, out_dir / path.name)
+    if not sources:
+        return []
+
+    cache = None if image_cache is None else Path(image_cache)
+    real_stderr = sys.stderr
+    sys.stderr = _WarningRouter(real_stderr)
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, min(workers, len(sources)))) as pool:
+            done = list(
+                pool.map(
+                    lambda path: _clean_one(path, out_dir, vendors_dir, cache, fetch_images),
+                    sources,
+                )
+            )
+    finally:
+        sys.stderr = real_stderr
+
+    for _, _, warnings in done:
+        if warnings:
+            real_stderr.write(warnings)
+    return [(name, vendor) for name, vendor, _ in done]
+
+
 # ------------------------------------------------------------------------ cli
+
+
+def _run_dir(args: argparse.Namespace) -> int:
+    """The ``--dir`` form: one directory in, one directory out, threads between.
+
+    Every line it prints is in filename order, the vendor lines and the strip
+    pattern warnings alike, so the output of a run reads the same whatever
+    order the pool happened to finish in.
+    """
+    listed = clean_dir(
+        args.dir,
+        args.out,
+        args.vendors,
+        image_cache=args.images,
+        fetch_images=args.fetch_images,
+        workers=args.workers,
+    )
+    for name, vendor in listed:
+        print(f"clean: {name} vendor {vendor}", file=sys.stderr)
+    print(f"clean: wrote {len(listed)} receipts into {Path(args.out).as_posix()}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Clean a vendor receipt email for a packet.")
-    parser.add_argument("source", type=Path, help="the saved receipt HTML")
-    parser.add_argument("--out", type=Path, required=True, help="where to write the fragment")
+    parser.add_argument("source", type=Path, nargs="?", help="the saved receipt HTML")
+    parser.add_argument("--dir", type=Path, help="clean every receipt in this directory at once")
+    parser.add_argument(
+        "--out", type=Path, required=True, help="where to write the fragment, or the directory"
+    )
     parser.add_argument(
         "--vendor",
         help="vendor name, or generic to force the generic clean; "
@@ -882,7 +1043,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--fetch-images", action="store_true", help="download missing images into the cache"
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=DIR_WORKERS,
+        help=f"how many receipts --dir cleans at once (default {DIR_WORKERS})",
+    )
     args = parser.parse_args(argv)
+
+    if args.fetch_images and args.images is None:
+        print("clean: --fetch-images needs --images DIR", file=sys.stderr)
+        return 2
+    if args.dir is not None:
+        if args.source is not None:
+            print("clean: give one receipt or --dir DIR, not both", file=sys.stderr)
+            return 2
+        if args.vendor:
+            print(
+                "clean: --vendor is for one receipt; --dir reads each saved meta file",
+                file=sys.stderr,
+            )
+            return 2
+        return _run_dir(args)
+    if args.source is None:
+        print("clean: give a receipt to clean, or --dir DIR", file=sys.stderr)
+        return 2
 
     raw = args.source.read_text(encoding="utf-8", errors="replace")
 
@@ -898,10 +1083,6 @@ def main(argv: list[str] | None = None) -> int:
     else:
         name, rules = detect_from_meta(args.source, args.vendors)
         print(f"clean: vendor {name}", file=sys.stderr)
-
-    if args.fetch_images and args.images is None:
-        print("clean: --fetch-images needs --images DIR", file=sys.stderr)
-        return 2
 
     # Fetch from the cleaned fragment, never the raw message. The raw message
     # still holds the tracking pixels, and downloading one is exactly the
