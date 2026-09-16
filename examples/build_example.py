@@ -47,7 +47,11 @@ Running it
 the receipts, writes the expense data, downloads any vendor images the cache is
 missing, prunes the cache back under its size cap, cleans the whole directory
 through ``clean_dir``, and then runs cards, build, render_pdf and attach_pdf
-exactly as SKILL.md documents them.
+exactly as SKILL.md documents them. It exits 1, naming the URLs, if the packet
+it just built still carries a remote image source, however that source was
+quoted: an image is either inlined from the cache or printed as its alt text,
+and a live ``http`` source is a packet that reaches for the network when it is
+opened.
 
 ``python examples/build_example.py --check`` rebuilds into a temporary
 directory with the network switched off, inlining only what the committed cache
@@ -63,7 +67,9 @@ against the pruned cache. That way the committed packet matches the committed
 cache exactly, which is what ``--check`` verifies. The fetch also leaves a
 record of the URLs that answered with an error page rather than a picture, and
 that record is committed beside the cached images, so the offline pass prints
-those images' alt text exactly as the fetching pass would.
+those images' alt text exactly as the fetching pass would. That record is
+merged into, never replaced, so a rebuild on a machine that cannot resolve a
+vendor host keeps the entries that run learned nothing about.
 
 Stdlib only, plus the repo's own scripts.
 """
@@ -72,6 +78,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -110,6 +117,15 @@ MAX_CACHE_BYTES = 1_500 * 1024
 # carries whatever the server said, so it is dropped before the cache is
 # committed.
 MIN_IMAGE_BYTES = 100
+
+# Every remote image source a packet could still be carrying, whichever way the
+# vendor quoted it. A committed packet must hold none: an image is either
+# inlined from the cache as a data URI or printed as its alt text, and a
+# surviving http source is a picture this machine could not fetch and did not
+# record, which would reach for the network from whatever opens the packet.
+REMOTE_SRC_RE = re.compile(
+    r"""src\s*=\s*(?:"(https?://[^"]*)"|'(https?://[^']*)'|(https?://[^\s>]+))""", re.I
+)
 
 COMPANY = "Northwind Labs, Inc."
 TRAVELER = "Jordan Rivera"
@@ -548,6 +564,22 @@ def pdf_pages(path: Path) -> int:
     return len(PdfReader(str(path)).pages)
 
 
+def remote_sources(html: str) -> list[str]:
+    """Every remote image URL still live in a packet, in the order they appear.
+
+    Each match names one image the packet would reach out for when it is
+    opened, which is the one thing a committed packet must never do. The URLs
+    come back rather than a count, because the useful thing to print is which
+    picture went unfetched and unrecorded.
+    """
+    found: list[str] = []
+    for match in REMOTE_SRC_RE.finditer(html):
+        url = next(group for group in match.groups() if group is not None)
+        if url not in found:
+            found.append(url)
+    return found
+
+
 # ----------------------------------------------------------------------- main
 
 
@@ -572,6 +604,18 @@ def build() -> int:
 
     pages = build_packet(DATA_PATH, CLEAN, PACKET_HTML, PACKET_PDF)
     print(f"[example] packet.pdf is {pages} pages")
+
+    live = remote_sources(PACKET_HTML.read_text(encoding="utf-8"))
+    if live:
+        print("[example] the rebuilt packet still reaches for these images:")
+        for url in live:
+            print(f"[example]   {url}")
+        print(
+            "[example] each one was neither fetched into the cache nor recorded as failed. "
+            "Rerun the fetch with those hosts reachable, or add them to "
+            f"{(IMAGE_CACHE / clean.FAILED_RECORD).name} so the packet prints their alt text."
+        )
+        return 1
     return 0
 
 

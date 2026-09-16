@@ -533,9 +533,12 @@ def _record_failures(cache_dir: Path, failed: set[str]) -> None:
     """Merge this run's failures into the record, minus anything now cached.
 
     Merged rather than overwritten because a fetch is run one receipt at a
-    time against one shared cache, and each run sees only its own URLs. A URL
-    that answers with a picture on a later run is dropped from the record, so
-    the record never outlives the failure it describes.
+    time against one shared cache, and each run sees only its own URLs. The
+    same holds for a run that could not reach a host at all: it learns nothing
+    about that URL and so takes nothing away from the record. The one thing
+    that does come out is a URL that answers with a picture on a later run,
+    because at that point it is cached and the record would be describing a
+    failure that is over.
     """
     cache_dir = Path(cache_dir)
     listed = sorted(

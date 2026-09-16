@@ -1026,6 +1026,45 @@ def test_the_failure_record_merges_across_fetches(
     assert clean.failed_images(tmp_path) == {first, second}
 
 
+def test_a_fetch_that_resolves_no_host_takes_nothing_out_of_the_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rebuild on a machine with no DNS must not empty a committed record.
+
+    This is the shape that costs a packet: someone rebuilds the example, the
+    vendor hosts do not resolve here, and every URL the record already named
+    is one this run refused before it ever asked. Nothing was learned about
+    any of them, so nothing comes out, and the offline pass still knows to
+    print their alt text.
+    """
+    kept = [
+        "https://cache.marriott.com/marriottassets/map_icon.png",
+        "https://images.noti.swiss.com/lh_edialog/success.png",
+    ]
+    (tmp_path / clean.FAILED_RECORD).write_text(json.dumps(kept), encoding="utf-8")
+
+    def no_dns(host: str) -> str:
+        raise OSError("name or service not known")
+
+    monkeypatch.setattr(clean.socket, "gethostbyname", no_dns)
+    monkeypatch.setattr(clean, "urlopen", _explode)
+    html = "".join(f'<img src="{url}">' for url in [*kept, "https://cdn.example.com/new.png"])
+    assert clean.fetch_images(html, tmp_path) == 0
+    assert clean.failed_images(tmp_path) == set(kept)
+
+
+def test_a_fetch_that_learns_one_new_failure_keeps_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, public_dns: None
+) -> None:
+    """The record grows by what this run learned and loses nothing else."""
+    old = "https://cache.marriott.com/marriottassets/map_icon.png"
+    new = "https://cdn.example.com/logo.png"
+    (tmp_path / clean.FAILED_RECORD).write_text(json.dumps([old]), encoding="utf-8")
+    _answer_with(monkeypatch, HTTPError(new, 403, "Forbidden", {}, None))
+    assert clean.fetch_images(f'<img src="{new}">', tmp_path) == 0
+    assert clean.failed_images(tmp_path) == {old, new}
+
+
 def test_a_url_that_answers_later_leaves_the_failure_record(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, public_dns: None
 ) -> None:
