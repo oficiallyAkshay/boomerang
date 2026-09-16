@@ -16,8 +16,7 @@
     "<table[^>]*component-name=\"get-feedback\"[^>]*>(?=[\\s\\S]{0,800}How would you rate the helpfulness of this email\\?)(?:[\\s\\S]*?</table>){2}",
     "<table[^>]*component-name=\"quick-services\"[^>]*>(?=[\\s\\S]{0,800}Assistance should you need it)(?:[\\s\\S]*?</table>){2}",
     ">\\s*(?:Lufthansa Group Notification|Thank you for flying with us|Please do not reply to this email\\.)\\s*<",
-    "<a[^>]*>(?:(?!</?a\\b)[\\s\\S])*?>\\s*(?:Lufthansa\\.com|Help and contact|Privacy statement|Imprint)\\s*<(?:(?!</?a\\b)[\\s\\S])*?</a>",
-    "<tr[^>]*>(?:(?!<tr\\b)[\\s\\S])*?Corporate Headquarters:[\\s\\S]*?MID:\\s*\\d+[\\s\\S]{0,400}?</tr>"
+    "<table[^>]*component-name=\"footer\"[^>]*>(?:[\\s\\S]*?</table>){6}"
   ],
   "unwrap_links_matching": [
     "my\\.information\\.lufthansa\\.com"
@@ -38,5 +37,5 @@
     "currency"
   ],
   "endpoints": false,
-  "notes": "Removed from a Lufthansa service mail: the app download banner, the rate this email feedback widget, the assistance and report damaged baggage call to action, the preheader lines, the service and contact link row, and the corporate footer carrying the registered office, the executive board and the court registration. Kept verbatim: the baggage tag number and its status, the drop off date, the itinerary block with flight number, departure and arrival codes, cities and dates, and the passenger line. Known gap: the sample is a baggage receipt, which is receipt shaped but carries no monetary amount at all. Treat this folder as the Lufthansa layout reference. A Lufthansa document that does carry a price puts it in a right aligned cell after its label, in the same shape the Lufthansa Group templates use everywhere. Timing and reading: a service mail lands within a day of the flight. The baggage receipt names no tender and no line at all, and the missing facts are the total and the currency."
+  "notes": "Removed from a Lufthansa service mail: the app download banner, the rate this email feedback widget, the assistance and report damaged baggage call to action, the preheader lines, and the whole service and contact footer, taken at the one table that holds it. The footer was stripped a piece at a time before, its four links by one pattern and its corporate row by another, and what that left was a navy block with a heading over four empty cells. One pattern anchored on the footer component takes the registered office, the executive board, the court registration, the link row and the block they sat on. Kept verbatim: the baggage tag number and its status, the drop off date, the itinerary block with flight number, departure and arrival codes, cities and dates, and the passenger line. Known gap: the sample is a baggage receipt, which is receipt shaped but carries no monetary amount at all. Treat this folder as the Lufthansa layout reference. A Lufthansa document that does carry a price puts it in a right aligned cell after its label, in the same shape the Lufthansa Group templates use everywhere. Timing and reading: a service mail lands within a day of the flight. The baggage receipt names no tender and no line at all, and the missing facts are the total and the currency."
 }
