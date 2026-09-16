@@ -1,0 +1,19 @@
+{
+  "name": "lyft",
+  "display": "Lyft",
+  "sender_domains": ["lyftmail.com", "lyft.com"],
+  "subject_patterns": [
+    "^Your ride with ",
+    "^Your Lyft ride receipt",
+    "^Here'?s your ride receipt"
+  ],
+  "strip_regex": [
+    "<tr[^>]*>(?:(?!</tr>).)*?(?:ride pass|Add a tip|Lyft Cash back|100% of tips go to drivers|Promos-Large)(?:(?!</tr>).)*?</tr>",
+    "<tr[^>]*>(?:(?!</tr>).)*?Ride History(?:(?!</tr>).)*?</tr>",
+    "<tr[^>]*>(?:(?!</tr>).)*?CPUC ID No(?:(?!</tr>).)*?</tr>"
+  ],
+  "unwrap_links_matching": ["click\\.", "/track", "utm_", "email\\."],
+  "amount_regex": "Total</td>\\s*<td[^>]*>\\s*(-?\\$[\\d,]+\\.\\d{2})",
+  "date_regex": "((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,\\s*[A-Z][a-z]+\\s+\\d{1,2},\\s+\\d{4})",
+  "notes": "Removed from a Lyft ride receipt: the ride pass and Lyft Cash promo rows, the add a tip module, and the two footer blocks that carry the in app help pointer and the California regulator registration. Kept verbatim: the fare table with every line and the total, the payment line, the pickup and dropoff rows, the driver thanks line and the ride date."
+}

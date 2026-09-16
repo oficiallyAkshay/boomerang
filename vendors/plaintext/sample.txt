@@ -1,0 +1,19 @@
+From: reservations@harborview.example
+Date: Thu, 4 Jun 2026 09:12:00 -0700
+Subject: Your Harborview Hotel stay is confirmed
+
+Harborview Hotel
+Confirmation AZPGXN
+
+Guest        Jordan Rivera
+Check in     Monday, June 8, 2026
+Check out    Wednesday, June 10, 2026
+Room         King, 2 nights
+
+Room rate    $231.11 per night
+Estimated tax $38.73
+Facility fee $24.51 for the stay, payable at the front desk
+
+Card on file Visa ending 4321
+
+Questions? Reply to this message and the front desk will pick it up.
