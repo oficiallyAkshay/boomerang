@@ -1,12 +1,12 @@
 """SKILL.md is the thing a host loads, so it is checked like code.
 
-The frontmatter is parsed by reading lines, not with a YAML dependency: the
-block is three keys of plain text and a parser would be the only runtime
-dependency the tests add. Everything else here guards the promises the body
-makes. A script named in a command the model is told to run has to exist, every
-other repo path it prints in backticks has to exist too, the two policy files
-both have to be pointed at, and the one standing question has to still be in
-there word for word.
+The frontmatter is parsed by reading lines, not with a YAML dependency: every
+value is plain text on one line, inline `metadata` map included, and a parser
+would be the only runtime dependency the tests add. Everything else here
+guards the promises the body makes. A script named in a command the model is
+told to run has to exist, every other repo path it prints in backticks has to
+exist too, the two policy files both have to be pointed at, and the one
+standing question has to still be in there word for word.
 """
 
 from __future__ import annotations
@@ -89,19 +89,30 @@ def test_the_name_is_the_skill_name(skill: dict):
     assert skill["fields"]["name"] == "boomerang"
 
 
-def test_the_description_is_present_and_short_enough(skill: dict):
+def test_the_description_says_what_and_when(skill: dict):
+    """Short enough for every host, and carrying the two words a user's own
+    request is most likely to contain, so the skill triggers on it.
+    """
     description = skill["fields"].get("description", "")
     assert description.strip()
     assert len(description) < MAX_DESCRIPTION, f"description is {len(description)} characters"
+    lowered = description.lower()
+    for word in ("expense", "reimburse"):
+        assert word in lowered, f"description never says {word!r}"
 
 
 def test_a_license_is_declared(skill: dict):
     assert skill["fields"].get("license", "").strip()
 
 
-def test_the_icon_is_declared(skill: dict):
-    """Cursor shows it; every other host ignores the field."""
-    assert skill["fields"].get("icon", "").strip()
+def test_the_icon_travels_under_metadata(skill: dict):
+    """Anthropic's validator rejects unknown top-level keys, and `metadata` is
+    the string map the specification allows, so the icon lives in there.
+    """
+    assert "icon" not in skill["fields"], "the icon must not be a top-level key"
+    metadata = skill["fields"].get("metadata", "")
+    assert "icon" in metadata, f"metadata does not carry an icon: {metadata!r}"
+    assert "\U0001fa83" in metadata
 
 
 def test_every_script_the_body_names_exists(skill: dict):
