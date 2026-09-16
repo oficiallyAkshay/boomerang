@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from clean import load_vendor_rules
+
 GENERIC_TERMS = [
     "receipt",
     "your receipt",
@@ -181,14 +183,6 @@ def fetch_all(source, queries: list[Query], out_dir: Path) -> list[str]:
     return FetchReport(written, rejected, skipped)
 
 
-def read_vendor_rules(vendors_dir: Path) -> dict[str, dict]:
-    """vendors/<name>/rules.json, keyed by folder name."""
-    rules: dict[str, dict] = {}
-    for path in sorted(Path(vendors_dir).glob("*/rules.json")):
-        rules[path.parent.name] = json.loads(path.read_text(encoding="utf-8"))
-    return rules
-
-
 def _parse_date(value: str) -> date:
     return datetime.strptime(value, "%Y-%m-%d").date()
 
@@ -203,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="print the queries and stop")
     args = parser.parse_args(argv)
 
-    rules = read_vendor_rules(args.vendors) if args.vendors else {}
+    rules = load_vendor_rules(args.vendors) if args.vendors else {}
     queries = build_queries(args.start, args.end, rules)
 
     if args.dry_run:
