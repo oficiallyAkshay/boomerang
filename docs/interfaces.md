@@ -61,6 +61,8 @@ CLI: fetch.py --start YYYY-MM-DD --end YYYY-MM-DD --out DIR [--vendors DIR] [--d
 CLI: gmail_cli.py auth --client-secret PATH | search QUERY | get RID --out DIR ; token at ~/.config/boomerang/token.json chmod 600
 CLI: render_pdf.py packet.html packet.pdf [--expect N]      # prints the page count; exits 2 when --expect differs
 CLI: attach_pdf.py packet.pdf DATA.json --receipts DIR --out final.pdf          # prints the final page count
+  # validates DATA.json against the receipts dir first and exits 2 listing the problems;
+  # stamps the output /BoomerangSpliced and refuses a packet that already carries it
 CLI: check_prose.py [--packet FILE]
 ```
 

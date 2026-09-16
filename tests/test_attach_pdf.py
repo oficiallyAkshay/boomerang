@@ -69,6 +69,32 @@ def test_splice_adds_the_folio_pages_right_after_its_card(
     assert FOLIO_MARK_ONE not in pages[card_index]
 
 
+def test_the_output_is_stamped_and_a_second_splice_is_refused(
+    packet: dict, fixture_dir: Path, fixture_data: dict, tmp_path: Path
+) -> None:
+    """Splicing a spliced packet would post every folio to the wrong page."""
+    receipts_dir = fixture_dir / "receipts"
+    once = tmp_path / "once.pdf"
+    attach_pdf.splice(packet["pdf"], fixture_data, receipts_dir, once)
+
+    assert attach_pdf.is_spliced(once) is True
+    assert attach_pdf.is_spliced(packet["pdf"]) is False
+
+    twice = tmp_path / "twice.pdf"
+    with pytest.raises(ValueError, match="spliced already"):
+        attach_pdf.splice(once, fixture_data, receipts_dir, twice)
+    assert not twice.exists()
+
+
+def test_a_receipt_pdf_that_will_not_open_names_the_receipt(packet: dict, tmp_path: Path) -> None:
+    receipts_dir = tmp_path / "receipts"
+    receipts_dir.mkdir()
+    (receipts_dir / "torn.pdf").write_bytes(b"%PDF-1.4 and then nothing at all")
+    data = {"receipts": [{"rid": "torn", "title": "A folio"}]}
+    with pytest.raises(ValueError, match="receipt torn: pdf cannot be read"):
+        attach_pdf.splice(packet["pdf"], data, receipts_dir, tmp_path / "final.pdf")
+
+
 def test_splice_keeps_two_attachments_in_place(tmp_path: Path) -> None:
     """Two PDF receipts, so the second insertion has to allow for the first."""
     receipts_dir = tmp_path / "receipts"
@@ -156,3 +182,27 @@ def test_cli_prints_the_final_page_count(
     assert code == 0
     assert capsys.readouterr().out.strip() == str(packet["pages"] + 2)
     assert out.exists()
+
+
+def test_the_cli_validates_before_it_touches_the_packet(
+    packet: dict, fixture_dir: Path, fixture_data: dict, tmp_path: Path, capsys
+) -> None:
+    """A packet is only spliced when the data still describes what is on disk."""
+    broken = json.loads(json.dumps(fixture_data))
+    broken["receipts"][0]["title"] = ""
+    data_path = tmp_path / "broken.json"
+    data_path.write_text(json.dumps(broken), encoding="utf-8")
+    out = tmp_path / "never.pdf"
+    code = attach_pdf.main(
+        [
+            str(packet["pdf"]),
+            str(data_path),
+            "--receipts",
+            str(fixture_dir / "receipts"),
+            "--out",
+            str(out),
+        ]
+    )
+    assert code == 2
+    assert "title" in capsys.readouterr().err
+    assert not out.exists()
