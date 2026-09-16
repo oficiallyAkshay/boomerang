@@ -53,12 +53,21 @@ Each vendor directory holds one, at `vendors/<name>/rules.json`.
 ```text
 CLI: build.py DATA.json --receipts DIR --out packet.html   # totals, then "pages expected N"
 CLI: clean.py IN.html --out OUT.html [--vendor NAME|generic] [--vendors DIR] [--images DIR] [--fetch-images]
-CLI: cards.py RECEIPTS_DIR
+CLI: cards.py RECEIPTS_DIR      # reads .html, .txt and .pdf receipts, so folios are counted too
 CLI: fetch.py --start YYYY-MM-DD --end YYYY-MM-DD --out DIR [--vendors DIR] [--dry-run]
+  # writes <rid>.html, <rid>.txt, <rid>.meta.json; the first kept attachment of each kind is
+  # <rid>.pdf | <rid>.png | <rid>.jpg and later ones of that kind <rid>.<n>.<ext>; a message
+  # with no body and no kept attachment writes nothing and is named on stdout as empty
 CLI: gmail_cli.py auth --client-secret PATH | search QUERY | get RID --out DIR ; token at ~/.config/boomerang/token.json chmod 600
 CLI: render_pdf.py packet.html packet.pdf [--expect N]      # prints the page count; exits 2 when --expect differs
+  # aborts every http and https request the page makes, so nothing is fetched while rendering;
+  # names on stderr any receipt scaled below half size to fit its page
 CLI: attach_pdf.py packet.pdf DATA.json --receipts DIR --out final.pdf          # prints the final page count
+  # validates DATA.json against the receipts dir first and exits 2 listing the problems;
+  # stamps the output /BoomerangSpliced and refuses a packet that already carries it
 CLI: check_prose.py [--packet FILE]
+  # scans tracked text files, UTF-16 ones included, for the em dash and the hashed denylist
+  # (runs of up to 4 words); --packet adds the banned word, data-rid= and href="# on the packet
 ```
 
 `--fetch-images` is the only path that opens a socket. It needs `--images DIR` and downloads what

@@ -6,6 +6,15 @@ one receipt in the whole mailbox is almost never the traveler's own card,
 it is the company card that paid for one booking. A last-4 on many receipts
 is the card the traveler carries.
 
+PDF receipts are read too. Hotel folios are the receipt most likely to name
+a different card from the rest of the trip, and they are the receipt that
+arrives as a PDF, so leaving them out left the one answer that mattered off
+the table.
+
+A bare asterisk in front of four digits is a footnote at least as often as
+it is a card, so one mask character only counts when a card word stands
+close in front of it. Two or more mask characters count on their own.
+
 Nothing here is a payment detail. A last-4 is the only fragment receipts
 print, and it is read, counted and thrown away.
 """
@@ -18,19 +27,27 @@ import re
 import sys
 from pathlib import Path
 
-# The five shapes vendor receipts actually print. Case insensitive, since
-# the same vendor writes "Ending in" in one template and "ending" in another.
-PATTERNS = [
-    re.compile(r"\*\s?(\d{4})\b"),
-    re.compile(r"ending in (\d{4})", re.IGNORECASE),
-    re.compile(r"ending (\d{4})", re.IGNORECASE),
-    re.compile(r"x{2,}(\d{4})", re.IGNORECASE),
-    re.compile(r"•{2,}\s?(\d{4})"),
-]
+import attach_pdf
+
+# A run of mask characters, then the four digits, with at most one space, dot
+# or hyphen between them. "Amex xxxx-4321" and "Visa •••• 4321" both land here.
+MASK_RE = re.compile(r"(\*+|x+|•+)[ .-]?(\d{4})", re.IGNORECASE)
+
+# "ending 4321" and "ending in 4321", which need no mask at all.
+ENDING_RE = re.compile(r"ending\s+(?:in\s+)?(\d{4})", re.IGNORECASE)
+
+# What has to stand within CONTEXT characters in front of a single mask
+# character for it to read as a card rather than as a footnote marker.
+CARD_WORD_RE = re.compile(
+    r"\b(card|visa|mastercard|amex|discover|ending|debit|credit)", re.IGNORECASE
+)
+CONTEXT = 20
+LONE_MASK = 1
 
 SCRIPT_RE = re.compile(r"<(script|style)\b.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
 TAG_RE = re.compile(r"<[^>]+>")
 TEXT_SUFFIXES = {".html", ".txt"}
+PDF_SUFFIX = ".pdf"
 
 
 def strip_tags(raw: str) -> str:
@@ -51,24 +68,65 @@ def _isolated(text: str, start: int, end: int) -> bool:
     return not before.isdigit() and not after.isdigit()
 
 
+def _has_card_word(text: str, before: int) -> bool:
+    """True when a card word stands in the CONTEXT characters before before."""
+    return CARD_WORD_RE.search(text[max(0, before - CONTEXT) : before]) is not None
+
+
 def find_last4(text: str) -> set[str]:
-    """Every card last-4 the text prints, in any of the known shapes."""
+    """Every card last-4 the text prints, in any of the known shapes.
+
+    A single mask character is only read as a card when a card word stands
+    close in front of it, so "Visa *4321" is a card and "Flight UA *1234",
+    "Total *4321" and "Footnote: *2025 terms" are not. Two or more mask
+    characters are a card on their own, because nothing else prints them.
+    """
     found: set[str] = set()
-    for pattern in PATTERNS:
-        for match in pattern.finditer(text):
-            if _isolated(text, match.start(1), match.end(1)):
-                found.add(match.group(1))
+    for match in ENDING_RE.finditer(text):
+        if _isolated(text, match.start(1), match.end(1)):
+            found.add(match.group(1))
+    for match in MASK_RE.finditer(text):
+        if not _isolated(text, match.start(2), match.end(2)):
+            continue
+        if len(match.group(1)) <= LONE_MASK and not _has_card_word(text, match.start(1)):
+            continue
+        found.add(match.group(2))
     return found
 
 
+def _pdf_text(path: Path) -> str:
+    """The text of a PDF receipt, or nothing at all when it will not open.
+
+    A folio that pypdf cannot read is reported by build.validate and by
+    attach_pdf. Here it simply names no card, because refusing to count the
+    other thirty receipts over one torn attachment helps nobody.
+    """
+    try:
+        return attach_pdf.extract_text(path)
+    except Exception:
+        return ""
+
+
+def receipt_text(path: Path) -> str | None:
+    """The readable text of one receipt file, or None when it is not one."""
+    suffix = path.suffix.lower()
+    if suffix == PDF_SUFFIX:
+        return _pdf_text(path)
+    if suffix not in TEXT_SUFFIXES:
+        return None
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    return strip_tags(raw) if suffix == ".html" else raw
+
+
 def fingerprint(receipts_dir: Path) -> dict[str, list[str]]:
-    """last4 -> sorted rids, over every html and text receipt in the directory."""
+    """last4 -> sorted rids, over every html, text and pdf receipt found."""
     hits: dict[str, set[str]] = {}
     for path in sorted(Path(receipts_dir).iterdir()):
-        if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
+        if not path.is_file():
             continue
-        raw = path.read_text(encoding="utf-8", errors="replace")
-        text = strip_tags(raw) if path.suffix.lower() == ".html" else raw
+        text = receipt_text(path)
+        if text is None:
+            continue
         for last4 in find_last4(text):
             hits.setdefault(last4, set()).add(path.stem)
     return {last4: sorted(rids) for last4, rids in sorted(hits.items())}

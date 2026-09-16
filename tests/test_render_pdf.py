@@ -13,12 +13,16 @@ script, so it cannot change a number on its way to the PDF.
 from __future__ import annotations
 
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import build
 import pytest
 import render_pdf
+from fixtures.make_fixture import png_bytes
 from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import sync_playwright
 from pypdf import PdfReader
 
 PACKET_TITLE = "Packet, AUS to SEA onsite"
@@ -221,3 +225,160 @@ def test_cli_exits_two_on_a_page_count_mismatch(tiny_packet: Path, tmp_path: Pat
     captured = capsys.readouterr()
     assert captured.out.strip() == "2"
     assert "expected 9 pages, got 2" in captured.err
+
+
+# ------------------------------------------------------------- no fetching
+
+
+class CountingHandler(BaseHTTPRequestHandler):
+    """Records every path asked for, so the test can prove none was."""
+
+    asked: list[str] = []
+
+    def do_GET(self) -> None:  # noqa: N802  (the stdlib spells it this way)
+        CountingHandler.asked.append(self.path)
+        self.send_response(404)
+        self.end_headers()
+
+    def log_message(self, *args: object) -> None:
+        return
+
+
+@pytest.fixture()
+def counting_server():
+    """A local server that answers nothing and remembers being asked."""
+    CountingHandler.asked = []
+    server = HTTPServer(("127.0.0.1", 0), CountingHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_the_render_never_reaches_out_over_http(counting_server, tmp_path: Path) -> None:
+    """A tracking pixel in a receipt is not fetched, and the packet still renders."""
+    port = counting_server.server_address[1]
+    remote = f"http://127.0.0.1:{port}/pixel.png"
+    packet = tmp_path / "packet.html"
+    packet.write_text(
+        "<html><head><title>Remote</title></head><body>"
+        '<div class="summary">Summary</div>'
+        '<section class="rsec"><div class="rhead">A receipt</div>'
+        f'<div class="rc"><p>A receipt body</p><img src="{remote}"></div></section>'
+        "</body></html>",
+        encoding="utf-8",
+    )
+    pdf = tmp_path / "packet.pdf"
+    assert render_pdf.render(packet, pdf) == 2
+    assert CountingHandler.asked == []
+    assert "A receipt body" in (PdfReader(str(pdf)).pages[1].extract_text() or "")
+
+
+# ------------------------------------------------------------ nothing cropped
+
+
+def wide_table_packet(target: Path, columns: int = 25, width: int = 5000) -> Path:
+    """One section holding a table far wider than any page."""
+    cells = "".join(
+        f'<td style="min-width:{width // columns}px;font-size:14px">Col{index}</td>'
+        for index in range(columns)
+    )
+    target.write_text(
+        '<html><head><title>Wide</title></head><body style="margin:0">'
+        '<div class="summary">Summary</div>'
+        '<section class="rsec"><div class="rhead">A very wide receipt</div>'
+        f'<div class="rc" style="overflow:auto">'
+        f'<table style="width:{width}px;table-layout:fixed"><tr>{cells}</tr></table>'
+        "</div></section></body></html>",
+        encoding="utf-8",
+    )
+    return target
+
+
+def test_a_table_wider_than_the_page_keeps_its_rightmost_cell(tmp_path: Path) -> None:
+    """The fit pass scales on width as well as height, so nothing is cut off."""
+    packet = wide_table_packet(tmp_path / "wide.html")
+    pdf = tmp_path / "wide.pdf"
+    assert render_pdf.render(packet, pdf) == 2
+    text = "\n".join(page.extract_text() or "" for page in PdfReader(str(pdf)).pages)
+    assert "Col0" in text
+    assert "Col24" in text
+
+
+def tall_image_packet(target: Path) -> Path:
+    """A 1700 by 6800 receipt image, the shape a phone screenshot of a folio takes."""
+    (target.parent / "tall.png").write_bytes(png_bytes(1700, 6800, (28, 92, 148)))
+    target.write_text(
+        "<html><head><title>Tall</title>"
+        "<style>body{margin:0}.rc{overflow:auto;padding:16px}.rc img{max-width:100%}"
+        ".rhead{font-size:15px;padding:12px 16px}</style></head><body>"
+        '<div class="summary">Summary</div>'
+        '<section class="rsec"><div class="rhead">A tall image receipt</div>'
+        '<div class="rc"><img src="tall.png"></div></section>'
+        "</body></html>",
+        encoding="utf-8",
+    )
+    return target
+
+
+def measure(packet: Path) -> list[dict]:
+    """Open the packet the way the renderer does and run the real fit pass."""
+    with sync_playwright() as play:
+        browser = play.chromium.launch()
+        try:
+            context = browser.new_context(viewport=render_pdf.VIEWPORT, java_script_enabled=False)
+            page = context.new_page()
+            page.route("**/*", render_pdf.block_remote_requests)
+            page.goto(packet.resolve().as_uri(), wait_until="load")
+            page.emulate_media(media="print")
+            return render_pdf.fit_sections(page)
+        finally:
+            browser.close()
+
+
+def test_a_tall_image_receipt_ends_up_inside_the_page_budget(tmp_path: Path) -> None:
+    """An image at max-width:100% used to grow back and be cropped in half."""
+    sections = measure(tall_image_packet(tmp_path / "tall.html"))
+    assert len(sections) == 1
+    assert sections[0]["height"] <= sections[0]["budget"] + TOLERANCE
+    assert sections[0]["scale"] < 1
+
+
+def small_packet(target: Path) -> Path:
+    """A receipt that already fits, so the fit pass has nothing to do."""
+    target.write_text(
+        "<html><head><title>Small</title></head><body>"
+        '<section class="rsec"><div class="rhead">A short receipt</div>'
+        '<div class="rc"><p>Two lines and no more.</p></div></section>'
+        "</body></html>",
+        encoding="utf-8",
+    )
+    return target
+
+
+def test_a_receipt_that_needs_no_scaling_is_left_alone(tmp_path: Path) -> None:
+    sections = measure(small_packet(tmp_path / "small.html"))
+    assert sections[0]["scale"] == 1
+
+
+# --------------------------------------------------------------- the warning
+
+
+def test_a_heavily_scaled_receipt_is_named_on_stderr(
+    fixture_dir: Path, fixture_data: dict, tmp_path: Path, capsys
+) -> None:
+    """The oversized receipt in the helper packet lands well below half size."""
+    html = write_packet(tmp_path / "packet.html", fixture_data, fixture_dir / "receipts")
+    render_pdf.render(html, tmp_path / "packet.pdf")
+    err = capsys.readouterr().err
+    heading = fixture_data["receipts"][0].get("title", fixture_data["receipts"][0]["rid"])
+    assert f"render_pdf: {heading} was scaled to" in err
+
+
+def test_a_packet_that_fits_says_nothing(tmp_path: Path, capsys) -> None:
+    render_pdf.render(small_packet(tmp_path / "small.html"), tmp_path / "quiet.pdf")
+    assert capsys.readouterr().err == ""

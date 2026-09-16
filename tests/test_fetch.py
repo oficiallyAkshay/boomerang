@@ -8,6 +8,7 @@ import types
 from datetime import date
 from pathlib import Path
 
+import build
 import pytest
 from fetch import (
     GENERIC_TERMS,
@@ -137,9 +138,9 @@ def test_a_query_with_both_terms_and_domains_renders_both_groups():
 def test_fetch_all_writes_body_and_meta(tmp_path: Path):
     rid = "e20f48c14c0aa535"
     source = FakeSource({GENERIC_QUERY: [rid]}, {rid: message()})
-    written, rejected, skipped = fetch_all(source, build_queries(START, END, {}), tmp_path)
+    written, rejected, skipped, failed = fetch_all(source, build_queries(START, END, {}), tmp_path)
 
-    assert (written, rejected, skipped) == ([rid], [], [])
+    assert (written, rejected, skipped, failed) == ([rid], [], [], [])
     assert (tmp_path / f"{rid}.html").read_text(encoding="utf-8") == "<p>a ride</p>"
     assert (tmp_path / f"{rid}.txt").read_text(encoding="utf-8") == "a ride"
     meta = json.loads((tmp_path / f"{rid}.meta.json").read_text(encoding="utf-8"))
@@ -163,7 +164,7 @@ def test_ids_are_deduped_across_queries_keeping_first_seen_order(tmp_path: Path)
         {rid: message() for rid in ("aaa", "bbb", "ccc")},
     )
     queries = [build_queries(START, END, VENDORS)[0], build_queries(START, END, VENDORS)[1]]
-    written, _, _ = fetch_all(source, queries, tmp_path)
+    written, _, _, _ = fetch_all(source, queries, tmp_path)
     assert written == ["aaa", "bbb", "ccc"]
     assert source.fetched == ["aaa", "bbb", "ccc"]
 
@@ -172,12 +173,12 @@ def test_a_message_already_on_disk_is_not_fetched_again(tmp_path: Path):
     rid = "alreadyhere"
     (tmp_path / f"{rid}.meta.json").write_text("{}", encoding="utf-8")
     source = FakeSource({GENERIC_QUERY: [rid]}, {rid: message()})
-    written, rejected, skipped = fetch_all(source, build_queries(START, END, {}), tmp_path)
-    assert (written, rejected, skipped) == ([], [], [rid])
+    written, rejected, skipped, failed = fetch_all(source, build_queries(START, END, {}), tmp_path)
+    assert (written, rejected, skipped, failed) == ([], [], [rid], [])
     assert source.fetched == []
 
 
-def test_attachments_are_written_with_a_sanitised_extension(tmp_path: Path):
+def test_the_first_attachment_of_each_kind_takes_the_plain_name(tmp_path: Path):
     rid = "withfolio"
     source = FakeSource(
         {GENERIC_QUERY: [rid]},
@@ -191,10 +192,59 @@ def test_attachments_are_written_with_a_sanitised_extension(tmp_path: Path):
         },
     )
     fetch_all(source, build_queries(START, END, {}), tmp_path)
-    assert (tmp_path / f"{rid}.0.pdf").read_bytes() == b"%PDF-1.4 folio"
-    assert (tmp_path / f"{rid}.1.jpeg").read_bytes() == b"\xff\xd8jpeg"
+    assert (tmp_path / f"{rid}.pdf").read_bytes() == b"%PDF-1.4 folio"
+    assert (tmp_path / f"{rid}.jpg").read_bytes() == b"\xff\xd8jpeg"
     meta = json.loads((tmp_path / f"{rid}.meta.json").read_text(encoding="utf-8"))
-    assert meta["attachments"] == [f"{rid}.0.pdf", f"{rid}.1.jpeg"]
+    assert meta["attachments"] == [f"{rid}.pdf", f"{rid}.jpg"]
+
+
+def test_later_attachments_of_one_kind_are_numbered(tmp_path: Path):
+    rid = "twofolios"
+    source = FakeSource(
+        {GENERIC_QUERY: [rid]},
+        {
+            rid: message(
+                attachments=[
+                    ("first.pdf", b"%PDF one"),
+                    ("second.pdf", b"%PDF two"),
+                    ("third.pdf", b"%PDF three"),
+                    ("shot.png", b"\x89PNG"),
+                ]
+            )
+        },
+    )
+    fetch_all(source, build_queries(START, END, {}), tmp_path)
+    assert (tmp_path / f"{rid}.pdf").read_bytes() == b"%PDF one"
+    assert (tmp_path / f"{rid}.1.pdf").read_bytes() == b"%PDF two"
+    assert (tmp_path / f"{rid}.2.pdf").read_bytes() == b"%PDF three"
+    assert (tmp_path / f"{rid}.png").read_bytes() == b"\x89PNG"
+    meta = json.loads((tmp_path / f"{rid}.meta.json").read_text(encoding="utf-8"))
+    assert meta["attachments"] == [f"{rid}.pdf", f"{rid}.1.pdf", f"{rid}.2.pdf", f"{rid}.png"]
+
+
+@pytest.mark.parametrize(
+    "filename,expected_suffix",
+    [("Folio.PDF", ".pdf"), ("shot.png", ".png"), ("scan.JPEG", ".jpg"), ("photo.jpg", ".jpg")],
+)
+def test_what_write_message_names_is_what_build_finds(
+    tmp_path: Path, filename: str, expected_suffix: str
+):
+    """The round trip: the writer's name is the name the builder looks for."""
+    rid = "roundtrip"
+    attachment = message(html=None, text=None, attachments=[(filename, b"x")])
+    meta = write_message(tmp_path, rid, attachment)
+    assert meta["attachments"] == [f"{rid}{expected_suffix}"]
+    found = build.find_receipt_file(tmp_path, rid)
+    assert found is not None
+    assert found.name == f"{rid}{expected_suffix}"
+
+
+def test_a_second_attachment_of_a_kind_is_not_the_one_build_finds(tmp_path: Path):
+    rid = "twopdfs"
+    write_message(tmp_path, rid, message(attachments=[("a.pdf", b"first"), ("b.pdf", b"second")]))
+    # build prefers .html, and the plain name is the only one it would ever read.
+    assert build.find_receipt_file(tmp_path, rid).name == f"{rid}.html"
+    assert (tmp_path / f"{rid}.1.pdf").exists()
 
 
 def test_an_executable_attachment_is_skipped_and_noted(tmp_path: Path):
@@ -206,15 +256,44 @@ def test_an_executable_attachment_is_skipped_and_noted(tmp_path: Path):
     fetch_all(source, build_queries(START, END, {}), tmp_path)
     assert not list(tmp_path.glob("*.exe"))
     meta = json.loads((tmp_path / f"{rid}.meta.json").read_text(encoding="utf-8"))
-    assert meta["attachments"] == [f"{rid}.1.pdf"]
+    assert meta["attachments"] == [f"{rid}.pdf"]
     assert meta["attachments_skipped"] == ["invoice.exe"]
+
+
+# ------------------------------------------------------------------- failed
+
+
+def test_a_message_with_no_body_and_no_kept_attachment_writes_nothing(tmp_path: Path):
+    rid = "emptyone"
+    source = FakeSource(
+        {GENERIC_QUERY: [rid]},
+        {rid: message(html=None, text="", attachments=[("invoice.exe", b"MZ")])},
+    )
+    written, rejected, skipped, failed = fetch_all(source, build_queries(START, END, {}), tmp_path)
+    assert (written, rejected, skipped, failed) == ([], [], [], [rid])
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_empty_message_is_asked_for_again_on_the_next_run(tmp_path: Path):
+    """No meta file means no skip, which is the whole point of failing loudly."""
+    rid = "emptytwo"
+    source = FakeSource({GENERIC_QUERY: [rid]}, {rid: message(html=None, text=None)})
+    queries = build_queries(START, END, {})
+    fetch_all(source, queries, tmp_path)
+    fetch_all(source, queries, tmp_path)
+    assert source.fetched == [rid, rid]
+
+
+def test_write_message_returns_none_for_an_empty_message(tmp_path: Path):
+    assert write_message(tmp_path, "nothing", message(html=None, text=None)) is None
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize("bad", ["../x", "a/b", "", "x" * 65, "has space", "dot.dot"])
 def test_a_message_id_that_is_not_a_safe_file_name_is_refused(tmp_path: Path, bad: str):
     source = FakeSource({GENERIC_QUERY: [bad]}, {})
-    written, rejected, skipped = fetch_all(source, build_queries(START, END, {}), tmp_path)
-    assert (written, rejected, skipped) == ([], [bad], [])
+    written, rejected, skipped, failed = fetch_all(source, build_queries(START, END, {}), tmp_path)
+    assert (written, rejected, skipped, failed) == ([], [bad], [], [])
     assert source.fetched == []
     assert list(tmp_path.iterdir()) == []
 
@@ -231,7 +310,7 @@ def test_the_out_directory_is_created(tmp_path: Path):
         ("a.pdf", "pdf"),
         ("a.PNG", "png"),
         ("a.jpg", "jpg"),
-        ("a.jpeg", "jpeg"),
+        ("a.jpeg", "jpg"),
         ("a.exe", None),
         ("noext", None),
         ("", None),
@@ -317,3 +396,17 @@ def test_the_cli_fetches_through_the_gmail_source(tmp_path: Path, capsys, monkey
     assert code == 0
     assert (tmp_path / "receipts" / f"{rid}.html").exists()
     assert "1 written" in capsys.readouterr().out
+
+
+def test_the_cli_names_every_message_that_came_back_empty(tmp_path: Path, capsys, monkeypatch):
+    rid = "emptyRid"
+    source = FakeSource({GENERIC_QUERY: [rid]}, {rid: message(html=None, text=None)})
+    fake = types.ModuleType("gmail_cli")
+    fake.GmailSource = lambda: source
+    monkeypatch.setitem(sys.modules, "gmail_cli", fake)
+
+    code = main(["--start", "2026-06-08", "--end", "2026-06-09", "--out", str(tmp_path / "r")])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert f"fetch: {rid} came back empty" in out
+    assert "1 empty" in out
