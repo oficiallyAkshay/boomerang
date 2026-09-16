@@ -17,7 +17,7 @@ bullet carries the norm it rests on in parentheses. It is reviewed, tested, and
 merged like code.
 
 `policy.local.md` is the user's own layer. It is gitignored, it is read after
-`policy.md`, and its lines win. A user copies `policy.local.example.md`, edits
+`policy.md`, and its lines win. A user copies `references/policy.local.example.md`, edits
 it, and keeps their company's wording on their own machine. Local files are
 never merged into this repo, and pull requests that add one will be closed.
 The split exists so that a personal or employer-specific rule never has to be
@@ -73,7 +73,7 @@ how `build.py` should render it.
 
 ### 4. Verified host install notes
 
-`docs/hosts.md` lists where each host reads a skill folder. Every line there is
+`references/hosts.md` lists where each host reads a skill folder. Every line there is
 backed by a citation. If you add a host or correct a row, include the URL you
 read it from and the date you read it. Anything you cannot cite goes in the
 "Not verified" list at the bottom, not in the table.
@@ -97,7 +97,7 @@ expected to fail.
   number, not a verb phrase.
 - A rule that encodes one person's preference, or one company's policy, is
   declined. The answer is not "no", it is "put it in `policy.local.md`", and
-  the reviewer will point you at `policy.local.example.md`.
+  the reviewer will point you at `references/policy.local.example.md`.
 
 ## How to run the checks
 
