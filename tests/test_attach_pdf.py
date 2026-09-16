@@ -108,6 +108,35 @@ def test_splice_rejects_a_packet_with_no_summary_page(packet: dict, tmp_path: Pa
         attach_pdf.splice(packet["pdf"], crowded, tmp_path, tmp_path / "final.pdf")
 
 
+@pytest.mark.parametrize("rid", ["../x", "a/b", "", "x" * 65, "has space", 7, None])
+def test_splice_refuses_a_rid_that_is_not_an_id(packet: dict, tmp_path: Path, rid: object) -> None:
+    data = {"receipts": [{"rid": rid, "title": "Folio"}]}
+    with pytest.raises(ValueError, match="not a valid id"):
+        attach_pdf.splice(packet["pdf"], data, tmp_path, tmp_path / "final.pdf")
+    assert not (tmp_path / "final.pdf").exists()
+
+
+def test_splice_refuses_an_absolute_rid(packet: dict, tmp_path: Path) -> None:
+    outside = tmp_path / "elsewhere" / "secret"
+    outside.parent.mkdir()
+    data = {"receipts": [{"rid": str(outside), "title": "Folio"}]}
+    with pytest.raises(ValueError, match="not a valid id"):
+        attach_pdf.splice(packet["pdf"], data, tmp_path / "receipts", tmp_path / "final.pdf")
+
+
+def test_splice_refuses_a_symlink_that_points_outside(packet: dict, tmp_path: Path) -> None:
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "secret.pdf").write_bytes(pdf_bytes([["Somebody else's folio"]]))
+    receipts_dir = tmp_path / "receipts"
+    receipts_dir.mkdir()
+    (receipts_dir / "leak.pdf").symlink_to(outside / "secret.pdf")
+
+    data = {"receipts": [{"rid": "leak", "title": "Folio"}]}
+    with pytest.raises(ValueError, match="resolves outside the receipts directory"):
+        attach_pdf.splice(packet["pdf"], data, receipts_dir, tmp_path / "final.pdf")
+
+
 def test_cli_prints_the_final_page_count(
     packet: dict, fixture_dir: Path, fixture_data: dict, tmp_path: Path, capsys
 ) -> None:

@@ -248,6 +248,13 @@ def test_write_message_returns_the_meta_it_wrote(tmp_path: Path):
     assert meta["subject"] == "Your ride with a driver"
 
 
+@pytest.mark.parametrize("bad", ["../x", "a/b", "", "x" * 65, "has space", "dot.dot", 7, None])
+def test_write_message_refuses_a_rid_that_is_not_a_safe_file_name(tmp_path: Path, bad: object):
+    with pytest.raises(ValueError, match="not a valid id"):
+        write_message(tmp_path, bad, message())
+    assert list(tmp_path.iterdir()) == []
+
+
 # --------------------------------------------------------------------- cli
 
 

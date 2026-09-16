@@ -91,11 +91,17 @@ def money(x: float, currency: str = "USD") -> str:
 
 
 def _decimal(value: object) -> Decimal:
-    """Amount as a Decimal quantized to cents. Strings keep their exact digits."""
+    """Amount as a Decimal quantized to cents. Strings keep their exact digits.
+
+    Junk raises rather than reading as zero. ``validate`` rejects a
+    non-numeric amount before anything renders, so an amount that reaches
+    here and cannot be read is a bug, and a packet that quietly totals a bug
+    as 0.00 is worse than one that refuses to build.
+    """
     try:
         return Decimal(str(value)).quantize(CENTS)
-    except (InvalidOperation, ValueError):
-        return Decimal("0.00")
+    except (InvalidOperation, ValueError) as error:
+        raise ValueError(f"amount is not a number: {value!r}") from error
 
 
 # ------------------------------------------------------------------ validate
@@ -106,10 +112,12 @@ def _is_number(value: object) -> bool:
 
 
 def _too_many_decimals(value: object) -> bool:
-    try:
-        exponent = Decimal(str(value)).normalize().as_tuple().exponent
-    except (InvalidOperation, ValueError):
-        return True
+    """True when a number carries more precision than cents.
+
+    Only ever called on a value ``_is_number`` has already accepted, so the
+    Decimal conversion cannot fail.
+    """
+    exponent = Decimal(str(value)).normalize().as_tuple().exponent
     return isinstance(exponent, int) and exponent < -2
 
 
@@ -269,10 +277,15 @@ def validate(data: dict, receipts_dir: Path | None = None) -> list[str]:
     return problems
 
 
-def load_expense_data(path: Path) -> dict:
-    """Read and validate expense data. Raises ValueError listing every problem."""
+def load_expense_data(path: Path, receipts_dir: Path | None = None) -> dict:
+    """Read and validate expense data. Raises ValueError listing every problem.
+
+    ``receipts_dir`` is passed straight through to ``validate``, so a caller
+    that knows where the receipts are gets the kind-versus-disk check and the
+    unreadable-pdf check as well as the schema check.
+    """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    problems = validate(data)
+    problems = validate(data, receipts_dir)
     if problems:
         raise ValueError("\n".join(problems))
     return data
@@ -312,11 +325,26 @@ def totals(data: dict) -> dict:
 
 
 def find_receipt_file(receipts_dir: Path, rid: str) -> Path | None:
-    """The receipt file for a rid, or None when none is on disk."""
+    """The receipt file for a rid, or None when none is on disk.
+
+    A rid is a file name, never a path. It has to match ``RID_RE``, and the
+    file it names has to resolve to somewhere inside the resolved receipts
+    directory, so neither a traversal in the data nor a symlink on disk can
+    pull a file from outside the folder the caller named into a packet.
+    """
+    if not isinstance(rid, str) or not RID_RE.match(rid):
+        return None
+    try:
+        root = Path(receipts_dir).resolve(strict=True)
+    except OSError:
+        return None
     for suffix in SUFFIX_ORDER:
-        candidate = Path(receipts_dir) / f"{rid}{suffix}"
-        if candidate.is_file():
-            return candidate
+        candidate = root / f"{rid}{suffix}"
+        if not candidate.is_file():
+            continue
+        resolved = candidate.resolve()
+        if resolved.is_relative_to(root):
+            return resolved
     return None
 
 
@@ -431,7 +459,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True, help="packet html to write")
     args = parser.parse_args(argv)
 
-    data = load_expense_data(args.data)
+    data = load_expense_data(args.data, args.receipts)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(render_packet(data, args.receipts), encoding="utf-8")
 

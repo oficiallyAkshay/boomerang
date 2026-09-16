@@ -121,10 +121,17 @@ def attachment_ext(filename: str) -> str | None:
 def write_message(out_dir: Path, rid: str, message: dict) -> dict:
     """Write one message body, its attachments and its meta file.
 
+    The rid is checked first. It becomes a file name several times over, so a
+    rid that is not a safe file name raises here rather than writing anywhere.
+    ``fetch_all`` already refuses such rids, and the check is repeated because
+    this function is callable on its own.
+
     The meta file is written last. A run cut short halfway leaves no meta
     file, so the next run fetches that message again instead of trusting a
     half written body.
     """
+    if not isinstance(rid, str) or not RID_RE.match(rid):
+        raise ValueError(f"message id is not a valid id: {rid!r}")
     out_dir = Path(out_dir)
     html = message.get("html")
     if html:
