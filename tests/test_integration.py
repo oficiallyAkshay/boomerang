@@ -30,6 +30,7 @@ import check_prose
 import clean
 import pytest
 import render_pdf
+from playwright.sync_api import sync_playwright
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VENDORS_DIR = REPO_ROOT / "vendors"
@@ -44,6 +45,20 @@ FOLIO_FIRST_PAGE_MARK = "folio page 1 of 2"
 # An address that belongs to no vendor in vendors/, for a receipt whose vendor
 # is not one the rules know.
 UNKNOWN_SENDER = "billing@an-unlisted-vendor.example"
+
+# The committed example, and the one row in it that has cost a correction: the
+# Uber total, set at 32px over a 40px line. It is the widest figure on any
+# receipt, and it sits two receipts below a sender whose stylesheet wraps long
+# words, so it is the first thing to break when a vendor's CSS escapes its own
+# receipt. These bounds are the rendered box at the render viewport: one line
+# tall, and wide enough to be holding all six characters.
+EXAMPLE_PACKET = REPO_ROOT / "examples" / "packet.html"
+EXAMPLE_DATA = REPO_ROOT / "examples" / "expense_data.json"
+UBER_RECEIPT_TITLE = "Ride, home to airport"
+UBER_TOTAL_TESTID = "total_fare_amount"
+UBER_TOTAL_TEXT = "$34.86"
+ONE_LINE = 48
+TOTAL_WIDTH = (90, 106)
 
 
 def sender_for(vendor: str, rules: dict[str, dict]) -> str:
@@ -235,3 +250,42 @@ def test_the_documented_clis_run_the_same_pipeline(
     ).stdout
     reported = [line for line in gate.splitlines() if not line.startswith("check_prose:")]
     assert all(line.endswith(": data-rid attribute") for line in reported), gate
+
+
+def measure(url: str, selector: str) -> dict:
+    """The bounding box of one element, at the viewport the render uses."""
+    with sync_playwright() as play:
+        browser, _ = render_pdf.launch_browser(play)
+        try:
+            page = browser.new_page(viewport=render_pdf.VIEWPORT)
+            page.route("**/*", render_pdf.block_remote_requests)
+            page.goto(url, wait_until="load")
+            found = page.locator(selector)
+            assert found.count() == 1, f"{found.count()} elements match {selector}"
+            box = found.first.bounding_box()
+            return {"box": box, "text": found.first.inner_text()}
+        finally:
+            browser.close()
+
+
+def test_the_examples_uber_total_prints_on_one_line():
+    """The committed packet, measured rather than eyeballed.
+
+    The selector is half the assertion. A receipt card carries ``rc`` and its
+    own ordinal, and a fragment's stylesheet is rewritten to match that pair,
+    so finding the cell under ``.rc.rN`` says the scoping reached the packet
+    that is committed. The box says the rule from two receipts up did not.
+    """
+    data = json.loads(EXAMPLE_DATA.read_text(encoding="utf-8"))
+    ordinal = next(
+        index
+        for index, receipt in enumerate(data["receipts"], start=1)
+        if receipt["title"] == UBER_RECEIPT_TITLE
+    )
+    selector = f'.rc.r{ordinal} [data-testid="{UBER_TOTAL_TESTID}"]'
+    found = measure(EXAMPLE_PACKET.resolve().as_uri(), selector)
+
+    assert found["text"] == UBER_TOTAL_TEXT
+    low, high = TOTAL_WIDTH
+    assert low <= found["box"]["width"] <= high, found["box"]
+    assert found["box"]["height"] <= ONE_LINE, found["box"]
