@@ -41,56 +41,195 @@ not overwrite each other's styles.
 Each vendor below has a machine-readable form at `vendors/<name>/rules.json`.
 The `notes` field there must agree with the paragraph here. If they disagree,
 one of them is wrong and the pull request that changes either should change
-both.
+both. The sample beside each `rules.json` is a real message from that vendor
+with every name, address, card number, amount, date, identifier and tracking
+URL replaced, and `tests/test_vendors.py` checks each rule against it.
 
 ## Lyft
 
-A Lyft ride receipt arrives as a styled HTML email built around a fare table.
-The fare table, the pickup and dropoff addresses, the ride time, and every
-charge line are kept exactly as sent. Removed: the tip prompt and its buttons,
-the rate-your-driver controls, the promotional footer offering credit for
-referrals, the map hero image, the app-store badges, and the tracking pixel at
-the end of the body. Link wrappers on the remaining text are unwrapped so the
-receipt reads as text rather than as a page of redirects.
+A Lyft ride receipt is a long styled email with a short receipt inside it. Kept
+exactly as sent: the fare breakdown with its distance and duration label, every
+surcharge and toll row, both tender rows with their Upfront Fare sublabels, the
+pickup and dropoff rows with their times and addresses, and the receipt number.
+Removed: both tip controls, which are the Add tip button at the top and the Tip
+driver button at the foot; the safety marketing block and the ride safety
+summary widget, which are live controls rather than a record; the credit card
+rewards promo; the help link cluster; the authorization hold notice; the static
+route map, whose URL carries the route geometry, and the OpenStreetMap credit
+it leaves behind; the hidden expense microdata block, which repeats the total
+and carries the recipient's address; the regulatory licence block naming the
+dispatching base, the vehicle plate and the driver licence; the copyright and
+CPUC footer; and the Lyft app instruction block. Known gap: Lyft prints no
+Total row at all. The charged total is read out of the hidden microdata block
+before the message is cleaned, and the visible total is the sum of the tender
+rows, which stay.
 
 ## DoorDash
 
-A DoorDash order receipt carries the itemised order, the subtotal, taxes and
-fees, the tip line if one was added, and the order total. All of those stay.
-Removed: the reorder and rate-your-order buttons, the promotional carousel of
-other restaurants, the app-download module, the large header image, the social
-icons, and tracking links on every remaining anchor. The tip line is kept
-visible in the receipt even though policy leaves tips out of the claim, so the
-receipt and the claimed amount can be reconciled by eye.
+A DoorDash final receipt carries the itemised order, the subtotal, the delivery
+and service fees, the tax, the Dasher tip row, any discount, the header total
+and the final total charged. All of those stay, along with the weighted item
+unit prices, both halves of every substitution pair, the payment line with its
+card last four, and the store name. Removed: the open pixel, the marketing hero
+illustration, the hidden preheader spacer, the adjustment policy boilerplate,
+the Get Order Help button, and the footer table with its corporate address,
+privacy link and help centre link. The rules also carry patterns for the track
+order button and the hero image row of the confirmation variant, which this
+sample does not have. The tip line is kept visible even though policy leaves
+tips out of the claim, so the receipt and the claimed amount can be reconciled
+by eye. Known gap: this template prints no date anywhere, so a DoorDash line
+takes its date from the message headers.
 
 ## United
 
-United sends two things worth rendering: the eTicket confirmation and the
-in-flight Wi-Fi receipt. On the eTicket, the flight segments, the fare
-breakdown, the taxes, the ticket number, and the form of payment are kept; the
-form of payment matters because it is what settles who paid. Removed: seat
-upgrade offers, MileagePlus promotional blocks, the app-download banner, the
-partner advertising footer, and the tracking pixels. Wi-Fi receipts are short
-and keep the charge, the date, and the flight reference.
+United sends two things worth rendering, and both are in this folder: the
+eTicket itinerary and receipt, and the inflight Wi-Fi receipt, which use the
+same HTML shell. Kept: the confirmation code, the passenger line, every flight
+leg with its date and times, the fare, tax, security fee and facility charge
+breakdown, the per passenger total and the ticket total, the eTicket number,
+the Wi-Fi reference number and its charge, the method of payment line, and the
+previous ticket value line, which is what settles who paid. Removed from the
+eTicket: the MileagePlus accrual table and its earning notice, the baggage
+allowance table, the wall of legal boilerplate, and the Travel Ready Center
+promo strip. Removed from the Wi-Fi receipt: the survey block, the additional
+information cross-sell, and the refund boilerplate. Removed from both: the Star
+Alliance footer banner, the privacy and legal footer links, and the hidden
+rows. Note that the baggage allowance table prints two zero amounts for the
+free bags, so cleaning the eTicket removes those two figures along with the
+table; no charged amount is touched.
 
 ## Uber
 
-Uber covers both rides and Lime scooter rentals, which arrive in the same
-receipt shell. The trip or rental summary, the fare breakdown, the surcharge
-lines, the time, and the endpoints are kept. Removed: the tip prompt, the
-rating widget, the promotional module offering a discount on the next trip, the
-map hero image, the app-store badges, and the tracking pixel. Scooter rentals
-keep the unlock fee and the per-minute lines as separate rows, because policy
-claims them as one ground transport line and the split has to stay visible.
+An Uber ride receipt keeps the total, every fare line item including
+surcharges and promotions, the trip date and clock times, the pickup and
+dropoff rows, the product tier, and the payment rows with the card last four
+and the charge posting time. Removed: the rate and tip module; the Uber One
+cashback strip, which takes its own credit figure with it; the app download and
+Download PDF buttons; the static map image, whose query string carries the
+pickup and dropoff coordinates; the social link row; the corporate address
+footer and the account and terms link cluster; and the support, lost item and
+help modules. The rules also carry a pattern for the standalone rate your trip
+row that the shorter Lime and cancelled ride templates use, which this sample
+does not have.
 
-## Plaintext
+## Uber Eats
+
+Uber Eats order receipts arrive in the same shell as Uber ride receipts, from
+the same sender, with a different set of modules. Kept: every basket line with
+its quantity and options, the subtotal, the delivery and service fees, the tax,
+every discount and credit row, the order total, the order date and the order
+completed timestamp, both tender rows when a voucher and a card split the bill,
+and the card last four. Removed: the rate and tip block for the courier; the
+Uber One savings strip, which takes its own savings figure with it; the app
+download and Download PDF buttons; the merchant and dish photography, whose
+paths identify the real merchant; the social link row; the corporate address
+footer and the account and terms link cluster; and the support modules. Known
+gap: Uber Eats and Uber ride mail share the sender domain, so a message from
+that domain is detected as Uber, and the subject line is what separates an
+order from a trip.
+
+## Marriott
+
+A Marriott stay confirmation keeps the property name and address, the
+confirmation number, the check-in and check-out dates and times, the room
+description, the rate line, the summary of charges, the taxes and fees line,
+and the cancellation terms with their deadline. Removed: the cardmember bonus
+points offer, the app download banner, the loyalty tier and points balance
+strip, the Epsilon and Adobe tracking pixels, the hidden preheader, the Manage
+Stay and Go Now buttons, the footer link row, the unsubscribe and programme
+terms block, the copyright and proprietary notice, and the confirmation
+authenticity boilerplate. Known gap: this sample is a points redemption stay,
+so its total is a points figure and there is no cash amount and no card last
+four anywhere in it. The amount pattern is written so it also reads the
+currency amount a cash rate confirmation puts in the same cells, and the cash
+the guest actually settles appears on the folio, not here.
+
+## Lufthansa
+
+Lufthansa is the one folder whose sample is not a charge receipt. Kept: the
+baggage tag number and its status, the drop off date, the itinerary block with
+its flight number, departure and arrival codes, cities and dates, and the
+passenger line. Removed: the app download banner, the rate this email feedback
+widget, the assistance and report damaged baggage call to action, the preheader
+lines, the service and contact link row, and the corporate footer with the
+registered office, the executive board and the court registration. Known gap:
+the sample is a baggage receipt, which is receipt shaped but carries no
+monetary amount at all, so the folder has no amount pattern. Treat it as the
+Lufthansa layout reference; a Lufthansa document that does carry a price puts
+it in a right aligned cell after its label, the way every Lufthansa Group
+template does.
+
+## NJ TRANSIT MyTix
+
+An NJ TRANSIT MyTix purchase receipt keeps the purchase date and timestamp, the
+transaction sequence id, the ticket numbers, every ticket row with its product,
+tariff, zone count, quantity and amount, and the payment details table with its
+method, processor transaction id and charged amount. Removed: the refund policy
+notice, the in-app feedback line, the sign-off block, and the centred footer
+table with the copyright row. The inline year script and the Outlook
+conditional wrappers are removed by the shared cleaning pass, which drops every
+script and every comment before the vendor patterns run. This template carries
+no tracking pixel, no promo block, no app banner and no social links. There is
+no grand total row: the ticket row and the payment row carry the same figure,
+and the amount is read from the payment row, because that is what was charged.
+
+## Stripe receipt
+
+Stripe's own hosted receipt template is sent on behalf of a merchant, so one
+entry here covers every vendor that bills through Stripe, which makes it the
+highest-leverage folder in the set. Kept: the hero amount, the paid date, every
+line item with its quantity and service period, the subtotal, the total
+excluding tax, the tax line with its jurisdiction and rate, the total, the
+amount paid, the receipt and invoice numbers, and the payment method with its
+card brand mark and last four. Removed: the download invoice and download
+receipt buttons, the merchant support block with its support site, address and
+phone, the Powered by Stripe badge, and the hidden preheader spacer. The sender
+local part is `invoice+statements`, with the merchant's Stripe account id
+appended for small merchants and dropped when a large merchant self-hosts the
+same template on its own domain.
+
+## Plain text confirmation
 
 Most hotel confirmations, including Hotels.com and citizenM, arrive as
 plaintext. There is no markup to strip. The body is rendered in a monospace
 block under a small header carrying From, Date and Subject, so the reader can
-see who sent it and when. The body text is reproduced verbatim, including the
+see who sent it and when. The body text is reproduced verbatim, including any
 folio breakdown and any line about fees payable at the property. Long lines are
-allowed to wrap rather than being reflowed, so nothing shifts column.
+allowed to wrap rather than being reflowed, so nothing shifts column. Removed
+from the citizenM sample: the bare logo link, which a text part renders as a
+naked URL in parentheses; the app cross-sell block; the marketing consent
+disclaimer; the licensing footer; and the footer link row. A generic
+unsubscribe line is removed too, when a message has one; this sample does not.
+This folder has no sender domain on purpose, so it is reached only when no
+vendor matched by domain and no other subject pattern matched. Known gap: the
+citizenM message carries no amount and no stay date at all. It is a pointer
+saying the folio is ready, so both patterns are null, the date comes from the
+message headers, and the amount comes from the folio PDF that the traveller
+uploads or the Gmail fallback fetches as an attachment.
+
+## Hotel senders
+
+A search folder, not a rendering folder. It has no sample, strips nothing and
+reads no values. It exists for two reasons: so the second search pass asks
+Hotels.com, citizenM, Hilton, Hyatt, IHG, Booking.com, Airbnb and Sonder
+directly, because a hotel confirmation often has a subject line that the
+generic first pass never matches, and so that mail from one of those senders is
+detected as a hotel rather than falling through to the plaintext catch-all. Its
+subject patterns are deliberately narrow, so a stay confirmation that arrives as
+a text body from a domain not listed there still reaches the plaintext rules. A
+chain that needs real cleaning gets its own folder with its own sample, the way
+Marriott does.
+
+## Airline senders
+
+The same idea for the carriers with no folder of their own: Delta, American,
+JetBlue, Alaska, Southwest, British Airways and Air Canada. No sample, no strip
+patterns, no amount or date patterns. It exists so the second search pass asks
+those senders directly, because an itinerary or a receipt from a carrier with
+no folder would otherwise be found only if the generic pass happened to match
+its subject. Its subject patterns name the carriers rather than the generic
+eTicket wording, so a United eTicket still resolves to the United folder, which
+is the one with a sample and real strip patterns.
 
 ## Generic vendor
 

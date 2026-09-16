@@ -17,6 +17,7 @@ the subject line that vendor really sends, resolves back to the folder.
 from __future__ import annotations
 
 import collections
+import json
 import re
 from pathlib import Path
 
@@ -263,3 +264,36 @@ def test_the_plaintext_catch_all_wins_for_a_domainless_hotel_text(rules: dict) -
 
 def test_a_listed_hotel_domain_beats_the_catch_all(rules: dict) -> None:
     assert clean.detect_vendor("noreply@citizenm.com", PLAINTEXT_SUBJECT, rules) == "hotels"
+
+
+# ------------------------------------------------------------- the reference
+
+
+def test_the_reference_page_covers_every_folder() -> None:
+    """references/vendors.md and the notes fields describe the same set."""
+    page = (VENDORS_DIR.parent / "references" / "vendors.md").read_text(encoding="utf-8")
+    headings = {line[3:].strip() for line in page.splitlines() if line.startswith("## ")}
+    for folder in FOLDERS:
+        rule = json.loads((VENDORS_DIR / folder / "rules.json").read_text(encoding="utf-8"))
+        assert rule["display"] in headings, f"references/vendors.md has no section for {folder}"
+
+
+def test_the_reference_page_names_every_known_gap() -> None:
+    """A folder with a null pattern is a gap, and the page has to say so."""
+    page = (VENDORS_DIR.parent / "references" / "vendors.md").read_text(encoding="utf-8")
+    sections = {}
+    current = None
+    for line in page.splitlines():
+        if line.startswith("## "):
+            current = line[3:].strip()
+            sections[current] = []
+        elif current:
+            sections[current].append(line)
+    for folder in FOLDERS:
+        if folder in SEARCH_ONLY:
+            continue
+        rule = json.loads((VENDORS_DIR / folder / "rules.json").read_text(encoding="utf-8"))
+        if rule["amount_regex"] is not None and rule["date_regex"] is not None:
+            continue
+        body = " ".join(sections[rule["display"]])
+        assert "Known gap" in body, f"references/vendors.md hides a gap in {folder}"
