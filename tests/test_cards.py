@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import cards
+import clean
 import pytest
 from cards import find_last4, fingerprint, main, receipt_text, singletons, strip_tags
 from fixtures.make_fixture import CARD_LAST4, RIDS, pdf_bytes
@@ -173,6 +176,88 @@ def test_a_loose_vendor_pattern_still_cannot_take_a_longer_run(text: str):
     assert found == ({"4321"} if text.endswith("- 4321") else set())
 
 
+# ------------------------------------------- a whole directory, with vendors
+
+VENDORS_DIR = Path(__file__).resolve().parents[1] / "vendors"
+STRIPE_RID = "stripeReceipt"
+RIDE_RID = "lyftReceipt"
+
+
+def write_stripe_receipt(receipts: Path, rid: str = STRIPE_RID) -> None:
+    """A receipt in Stripe's shape, with the headers fetch would have saved.
+
+    The brand is an image, so the tag strip leaves a dash and four digits and
+    nothing a built-in shape would recognise as a card at all.
+    """
+    receipts.mkdir(parents=True, exist_ok=True)
+    (receipts / f"{rid}.html").write_text(
+        "<table><tr><td><span>Payment method</span></td>"
+        '<td><span><img alt="Mastercard" src="https://example.invalid/mc.png">'
+        "</span><span>- 7788</span></td></tr></table>",
+        encoding="utf-8",
+    )
+    (receipts / f"{rid}.meta.json").write_text(
+        json.dumps(
+            {
+                "from": "Stripe <invoice+statements@stripe.com>",
+                "subject": "Your receipt from Northgate Labs Inc. #4106-8823",
+                "date": "Thu, 11 Jun 2026 09:02:00 -0500",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_a_stripe_card_is_counted_only_once_the_vendors_are_given(tmp_path: Path):
+    """The whole point of wiring the rules through fingerprint.
+
+    Without them the receipt names no card and the directory reports nothing.
+    With them the same file answers with the digits Stripe printed.
+    """
+    write_stripe_receipt(tmp_path)
+    assert fingerprint(tmp_path) == {}
+    rules = clean.load_vendor_rules(VENDORS_DIR)
+    assert fingerprint(tmp_path, rules) == {"7788": [STRIPE_RID]}
+
+
+def test_a_stripe_card_seen_once_is_named_as_someone_else_s(tmp_path: Path):
+    """A card the defaults never saw can now be the singleton that answers."""
+    write_stripe_receipt(tmp_path)
+    (tmp_path / f"{RIDE_RID}.txt").write_text("Visa *4321\nVisa *4321", encoding="utf-8")
+    (tmp_path / f"{RIDE_RID}.meta.json").write_text(
+        json.dumps({"from": "Lyft <no-reply@lyftmail.com>", "subject": "Your ride with Sam"}),
+        encoding="utf-8",
+    )
+    fp = fingerprint(tmp_path, clean.load_vendor_rules(VENDORS_DIR))
+    assert fp == {"4321": [RIDE_RID], "7788": [STRIPE_RID]}
+    assert singletons(fp) == {"4321", "7788"}
+
+
+def test_a_receipt_with_no_meta_file_falls_back_to_the_default_shapes(tmp_path: Path):
+    """Nothing names the vendor, so the built-in reading is what is left."""
+    (tmp_path / "loose.txt").write_text("Visa *4321", encoding="utf-8")
+    rules = clean.load_vendor_rules(VENDORS_DIR)
+    assert fingerprint(tmp_path, rules) == {"4321": ["loose"]}
+
+
+def test_headers_naming_a_vendor_the_rules_do_not_hold_use_the_defaults(tmp_path: Path):
+    """Not some other folder's card line, which would be worse than none."""
+    (tmp_path / "a.txt").write_text("Visa *4321", encoding="utf-8")
+    (tmp_path / "a.meta.json").write_text(
+        json.dumps({"from": "someone@nowhere.example", "subject": "A receipt"}),
+        encoding="utf-8",
+    )
+    assert cards.rules_for(tmp_path / "a.txt", {}) is None
+    assert fingerprint(tmp_path, {"lyft": {"name": "lyft", "sender_domains": []}}) == {
+        "4321": ["a"]
+    }
+
+
+def test_rules_for_is_none_without_any_vendor_rules(tmp_path: Path):
+    write_stripe_receipt(tmp_path)
+    assert cards.rules_for(tmp_path / f"{STRIPE_RID}.html", None) is None
+
+
 # ------------------------------------------------------- against the fixture
 
 
@@ -197,6 +282,17 @@ def test_the_cli_prints_the_table_and_names_the_singleton(fixture_dir: Path, cap
     assert lines[0] == "last4  count  rids"
     assert any(line.startswith(f"{COMPANY_CARD}  1  ") for line in lines)
     assert lines[-1] == f"{COMPANY_CARD}: seen once, probably someone else's card"
+
+
+def test_the_cli_reads_a_vendor_card_line_only_when_given_the_vendors(tmp_path: Path, capsys):
+    write_stripe_receipt(tmp_path)
+    assert main([str(tmp_path)]) == 0
+    assert "7788" not in capsys.readouterr().out
+
+    assert main([str(tmp_path), "--vendors", str(VENDORS_DIR)]) == 0
+    out = capsys.readouterr().out
+    assert f"7788  1  {STRIPE_RID}" in out
+    assert out.splitlines()[-1].startswith("7788: seen once")
 
 
 def test_the_cli_says_so_when_no_card_stands_alone(tmp_path: Path, capsys):

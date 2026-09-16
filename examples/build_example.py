@@ -599,8 +599,13 @@ def build() -> int:
     for line in clean_receipts(RECEIPTS, CLEAN, IMAGE_CACHE, fetch=False):
         print(f"[example]   {line}")
 
+    # Against the raw receipts, not the cleaned ones, and with the vendor
+    # rules: the headers that name each receipt's folder are in RECEIPTS and a
+    # directory clean leaves them behind, so this is the only side of the
+    # cleaning step where a vendor's own card line can be read. It is also the
+    # order SKILL.md runs them in, cards at step 4 and the clean at step 5.
     print("[example] card fingerprints")
-    print(run("cards", str(CLEAN)).rstrip())
+    print(run("cards", str(RECEIPTS), "--vendors", str(VENDORS)).rstrip())
 
     pages = build_packet(DATA_PATH, CLEAN, PACKET_HTML, PACKET_PDF)
     print(f"[example] packet.pdf is {pages} pages")

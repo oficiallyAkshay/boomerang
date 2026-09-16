@@ -153,7 +153,11 @@ PATTERN_KEYS = ("strip_regex", "subject_patterns", "unwrap_links_matching")
 # nothing else understands, and either way the rules refuse to load, because a
 # category only one folder uses is a category the model cannot act on.
 MESSAGE_KINDS = frozenset({"receipt", "update", "confirmation", "refund", "marketing"})
-TENDER_KINDS = frozenset({"card", "stored_value", "points", "credit", "previous_ticket"})
+# ``wallet`` is a payment method that settles to a card and never names it:
+# Apple Pay, Google Pay and the rest. It is its own kind because the card
+# fingerprint has nothing to match on such a row, and reading it as a card
+# would have the model looking for four digits the receipt never printed.
+TENDER_KINDS = frozenset({"card", "wallet", "stored_value", "points", "credit", "previous_ticket"})
 LINE_CATEGORIES = frozenset(
     {
         "fare",

@@ -129,13 +129,13 @@ Two signals, both mechanical. The card fingerprint: a last-4 that appears on
 exactly one receipt in the whole mailbox belongs to someone else.
 
 ```bash
-uv run python scripts/cards.py receipts
+uv run python scripts/cards.py receipts --vendors vendors
 ```
 
 The eTicket chain: read it oldest first. The phrase "previous ticket value
 applied" means the base fare was paid earlier, by someone else. Step 2's
-knowledge names each vendor's tenders, so a points or previous_ticket row did
-not settle in cash, and a last4_pattern says where `cards.py` alone finds none.
+knowledge names each vendor's tenders, so a points, wallet or previous_ticket
+row did not settle in cash, and `--vendors` reads each vendor's own card line.
 
 ### 5. Apply the policy
 
