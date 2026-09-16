@@ -40,7 +40,12 @@ know what was done to the page in front of them.
    to a loopback, private or link-local address, follows no redirect, and stops
    reading at five megabytes. The substring test for tracking pixels (open,
    track, pixel, beacon) runs on http and https sources only, because a base64
-   data URI can contain those letters by chance and a logo is not a pixel. A
+   data URI can contain those letters by chance and a logo is not a pixel. An
+   image held at zero or one by a width or height rule, ``max-`` forms
+   included, is a pixel too: that is how a hidden preheader spacer is sized,
+   and it carries no attribute and no hint in its URL to give it away. Every
+   source is read the way a browser reads one, double quoted, single quoted or
+   bare, so no quoting style leaves an image pointing at the network. A
    URL that answers with something other than a picture goes into the cache's
    failure record, and an image named there is replaced by its alt text rather
    than left to render as a broken image icon in a packet. An image the cache
@@ -178,9 +183,22 @@ OPEN_ANCHOR_RE = re.compile(rf"<a\b({ATTRS})>", re.I)
 LINK_ATTR_RE = re.compile(
     r"""\s+(?:href|target|ping|rel|on\w+)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.I
 )
-SRC_RE = re.compile(r"""src\s*=\s*(["'])(https?://[^"'\s]+)\1""", re.I)
+# A remote image source, however the vendor quoted it. HTML lets an attribute
+# value be double quoted, single quoted or bare, a browser reads all three the
+# same way, and a fetch or an inline that only knew one of them would leave the
+# other two pointing at the network in a finished packet. One alternative per
+# form, so the quote that opened the value is the quote that closes it and a
+# bare value stops at the first space or bracket.
+SRC_RE = re.compile(
+    r"""src\s*=\s*(?:"(https?://[^"]+)"|'(https?://[^']+)'|(https?://[^\s>"']+))""", re.I
+)
 PIXEL_HINT_RE = re.compile(r"open|track|pixel|beacon", re.I)
-TINY_STYLE_RE = re.compile(r"(?:^|;)\s*(?:width|height)\s*:\s*[01](?:\.\d+)?\s*px", re.I)
+# A spacer or beacon sized in CSS rather than in attributes. ``max-`` is in
+# there because a hidden preheader image is usually held at ``max-height: 0``,
+# and the unit is optional because a zero needs none.
+TINY_STYLE_RE = re.compile(
+    r"(?:^|;)\s*(?:max-)?(?:width|height)\s*:\s*[01](?:\.\d+)?\s*(?:px)?\s*(?:;|$)", re.I
+)
 BARE_PAGE_SELECTOR_RE = re.compile(r"(?<![\w.#\[-])(?:html|body)\b", re.I)
 
 # Elements a receipt never needs and a packet must never carry: anything that
@@ -501,6 +519,11 @@ def _mime_for(url: str) -> str:
     return mimetypes.guess_type(urlsplit(url).path)[0] or "image/png"
 
 
+def _src_url(match: re.Match[str]) -> str:
+    """The URL out of a ``SRC_RE`` match, whichever quoting form matched."""
+    return next(group for group in match.groups() if group is not None)
+
+
 def _is_cached(cache_dir: Path, url: str) -> bool:
     """True when the cache holds bytes for this URL."""
     target = Path(cache_dir) / cache_name(url)
@@ -588,7 +611,7 @@ def inline_images(html: str, cache_dir: Path) -> str:
     html = drop_failed_images(html, cache_dir)
 
     def replace(match: re.Match[str]) -> str:
-        quote, url = match.group(1), match.group(2)
+        url = _src_url(match)
         try:
             blob = (cache_dir / cache_name(url)).read_bytes()
         except OSError:
@@ -596,6 +619,10 @@ def inline_images(html: str, cache_dir: Path) -> str:
         if not blob:
             return match.group(0)
         encoded = base64.b64encode(blob).decode("ascii")
+        # Quoted the way the vendor quoted it, so an inline is the only change
+        # to the tag. A bare source is given double quotes rather than left
+        # bare, because a data URI is long enough to be worth delimiting.
+        quote = "'" if match.group(2) is not None else '"'
         return f"src={quote}data:{_mime_for(url)};base64,{encoded}{quote}"
 
     return SRC_RE.sub(replace, html)
@@ -655,7 +682,7 @@ def fetch_images(html: str, cache_dir: Path) -> int:
     failed: set[str] = set()
     seen: set[str] = set()
     for match in SRC_RE.finditer(html):
-        url = match.group(2)
+        url = _src_url(match)
         if url in seen:
             continue
         seen.add(url)

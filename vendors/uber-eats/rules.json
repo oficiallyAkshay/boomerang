@@ -13,7 +13,7 @@
     "<table[^>]*>(?:(?!<table)[\\s\\S]){0,4000}?Say thanks with a rating or tip for the courier[\\s\\S]*?Rate your order[\\s\\S]*?</a></td></tr></tbody></table>",
     "<img[^>]*(?:one-savings|one-cashback|UO_logo)[^>]*>[\\s\\S]{0,1200}?Uber One savings and other promotions applied[\\s\\S]{0,300}?</table>",
     "<a[^>]*>(?:(?!</a>)[\\s\\S])*?(?:app_store|play_store|download the app|Download PDF)(?:(?!</a>)[\\s\\S])*?</a>",
-    "<img[^>]*src=\"[^\"]*(?:merchant-photo|image-proc/processed_images)[^\"]*\"[^>]*>",
+    "<img[^>]*src=[\"']?[^\"'>\\s]*(?:merchant-photo|image-proc/processed_images)[^>]*>",
     "<a[^>]*>[\\s\\S]{0,300}?(?:facebook|twitter|instagram|x-logo|social)[\\s\\S]{0,300}?</a>",
     "<span[^>]*data-testid=\"company_name_address\"[\\s\\S]*?</span>",
     "<a[^>]*>\\s*My Account\\s*</a>[\\s\\S]{0,4000}?Terms and Conditions\\s*</a>",

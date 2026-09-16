@@ -54,3 +54,9 @@ def test_each_url_is_reported_once_in_the_order_it_appears() -> None:
     other = "https://cdn.lyft.net/logo.png"
     html = f'<img src="{other}"><img src="{REMOTE}"><img src=\'{other}\'>'
     assert build_example.remote_sources(html) == [other, REMOTE]
+
+
+def test_the_committed_packet_reaches_for_nothing() -> None:
+    """What the guard is there to keep true, checked against the commit."""
+    html = build_example.PACKET_HTML.read_text(encoding="utf-8")
+    assert build_example.remote_sources(html) == []
