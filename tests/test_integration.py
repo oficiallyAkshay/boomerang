@@ -5,7 +5,7 @@ the scripts against each other: the fixture receipts are cleaned with the real
 vendor rules, fingerprinted, validated, built, rendered, spliced, and read back
 out of the finished PDF. The first test drives the Python interfaces, the
 second drives the same flow through the documented command lines, so a CLI
-whose flags drift away from docs/interfaces.md fails here rather than in
+whose flags drift away from references/interfaces.md fails here rather than in
 someone's shell.
 """
 
@@ -150,7 +150,7 @@ def run_script(name: str, *args: str) -> subprocess.CompletedProcess[str]:
 def test_the_documented_clis_run_the_same_pipeline(
     fixture_dir: Path, fixture_data: dict, tmp_path: Path
 ):
-    """Every CLI shape in docs/interfaces.md, driven end to end."""
+    """Every CLI shape in references/interfaces.md, driven end to end."""
     rules = clean.load_vendor_rules(VENDORS_DIR)
     source = fixture_dir / "receipts"
     receipts = tmp_path / "receipts"

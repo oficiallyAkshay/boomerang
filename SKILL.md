@@ -2,6 +2,7 @@
 name: boomerang
 description: "Turn a personal inbox into a reimbursement packet: finds trip receipts, splits company-paid from self-paid, applies a written policy, outputs one PDF with a summary and the original receipts."
 license: MIT
+icon: "🪃"
 compatibility: "Needs a host with an email tool or the bundled Gmail fallback, a shell, and Python 3.11+"
 ---
 
@@ -174,7 +175,7 @@ Build from `clean`, the folder step 5 writes, never from `receipts`: a raw
 vendor email still carries its tracking pixels, its live links and whatever
 else was in the markup, and building from it puts all of that in the packet.
 
-The schema is in `docs/interfaces.md`. `build.py` validates before it writes,
+The schema is in `references/interfaces.md`. `build.py` validates before it writes,
 and every problem it finds is a real problem. Fix the data, not the validator.
 
 Render the PDF from the HTML. The HTML is the master; the PDF is re-rendered on

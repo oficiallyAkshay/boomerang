@@ -3,9 +3,10 @@
 The frontmatter is parsed by reading lines, not with a YAML dependency: the
 block is three keys of plain text and a parser would be the only runtime
 dependency the tests add. Everything else here guards the promises the body
-makes. A script named in a command the model is told to run has to exist, the
-two policy files both have to be pointed at, and the one standing question has
-to still be in there word for word.
+makes. A script named in a command the model is told to run has to exist, every
+other repo path it prints in backticks has to exist too, the two policy files
+both have to be pointed at, and the one standing question has to still be in
+there word for word.
 """
 
 from __future__ import annotations
@@ -21,6 +22,34 @@ MAX_DESCRIPTION = 200
 
 SCRIPT_RE = re.compile(r"scripts/([A-Za-z0-9_]+)\.py")
 STANDING_QUESTION = "Anything you paid for outside this inbox"
+
+FENCE_RE = re.compile(r"```.*?```", re.S)
+INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
+# A path has no spaces, no angle-bracket placeholder, and does not start with a
+# dash, so command flags and `<rid>.html` shapes fall out here.
+PATH_SHAPE_RE = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_.-]+)*/?$")
+
+# Paths SKILL.md names on purpose that are not in the repo. `policy.local.md`
+# is the user's own layer: gitignored, written on their machine, absent here.
+NOT_IN_REPO = {"policy.local.md"}
+
+
+def repo_paths_in_backticks(body: str) -> list[str]:
+    """Relative paths the prose prints in inline code, fenced blocks aside.
+
+    A span may be a whole command, so only its first word is considered. A word
+    counts as a path when it has a directory part or a markdown extension,
+    which keeps bare values like `amt` and `expense_data.json` out of it.
+    """
+    found: set[str] = set()
+    for span in INLINE_CODE_RE.findall(FENCE_RE.sub("", body)):
+        word = span.split()[0]
+        if not PATH_SHAPE_RE.fullmatch(word):
+            continue
+        if "/" not in word.rstrip("/") and not word.endswith(".md"):
+            continue
+        found.add(word)
+    return sorted(found)
 
 
 def split_frontmatter(text: str) -> tuple[list[str], str]:
@@ -70,6 +99,11 @@ def test_a_license_is_declared(skill: dict):
     assert skill["fields"].get("license", "").strip()
 
 
+def test_the_icon_is_declared(skill: dict):
+    """Cursor shows it; every other host ignores the field."""
+    assert skill["fields"].get("icon", "").strip()
+
+
 def test_every_script_the_body_names_exists(skill: dict):
     named = sorted(set(SCRIPT_RE.findall(skill["body"])))
     assert named, "the body should name at least one script"
@@ -85,3 +119,15 @@ def test_both_policy_files_are_pointed_at(skill: dict):
 
 def test_the_one_standing_question_is_still_there(skill: dict):
     assert STANDING_QUESTION in skill["body"]
+
+
+def test_every_repo_path_the_body_names_exists(skill: dict):
+    """A move that leaves SKILL.md pointing at the old place fails here."""
+    named = repo_paths_in_backticks(skill["body"])
+    assert named, "the body should name at least one repo path"
+    missing = [
+        path
+        for path in named
+        if path not in NOT_IN_REPO and not (REPO_ROOT / path.rstrip("/")).exists()
+    ]
+    assert missing == [], f"SKILL.md names paths that do not exist: {missing}"
