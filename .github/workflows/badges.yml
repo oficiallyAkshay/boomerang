@@ -1,0 +1,95 @@
+name: badges
+
+# A push to the default branch and nothing else. There is deliberately no
+# schedule here: the badge is refreshed when the repository moves, not on a
+# timer nobody asked for, and a cron on a quiet repository is a job that runs
+# forever to write the same two numbers.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# Two pushes landing together would race for the same branch tip. The later
+# one wins, which is the answer we want anyway.
+concurrency:
+  group: badges-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clones:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # The badge JSON is pushed to an orphan branch in this repository.
+      contents: write
+    steps:
+      # The traffic endpoints sit under the Administration permission at read
+      # access, and a workflow GITHUB_TOKEN cannot be granted that, so this
+      # job runs on a repository secret the owner creates. A fork, or this
+      # repository before the secret exists, has nothing to read: say so and
+      # finish green rather than failing every push to main.
+      #
+      # The check is a step and not a job-level `if` because the secrets
+      # context is not available to `if` conditions.
+      - name: check for the traffic token
+        id: secret
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: |
+          if [ -z "${TRAFFIC_TOKEN}" ]; then
+            echo "::notice::TRAFFIC_TOKEN is not set, so the clones badge was not refreshed"
+            echo "present=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "present=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        if: steps.secret.outputs.present == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        if: steps.secret.outputs.present == 'true'
+        with:
+          python-version: "3.12"
+
+      # The script is standard library only, so `--no-project` skips the
+      # project sync entirely: a browser and a PDF library are no part of
+      # reading two integers.
+      - name: read the last 14 days of clones
+        if: steps.secret.outputs.present == 'true'
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: |
+          uv run --no-project python scripts/ci/clones_badge.py \
+            --out "${RUNNER_TEMP}/badge"
+
+      # The badge branch carries the JSON and nothing else, so it is built
+      # fresh each time in a throwaway repository under RUNNER_TEMP and force
+      # pushed. A fresh repository is an orphan by construction: the branch is
+      # created on the first run and never accumulates a history of numbers
+      # that are already stale. The checkout above keeps no credentials, so
+      # the push carries the same token the read used.
+      - name: publish the badge on the badges branch
+        if: steps.secret.outputs.present == 'true'
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/badges-branch"
+          rm -rf "${work}"
+          mkdir -p "${work}"
+          cp "${RUNNER_TEMP}/badge/clones-14d.json" "${work}/clones-14d.json"
+          git -C "${work}" init --quiet --initial-branch=badges
+          git -C "${work}" config user.name 'oficiallyAkshay'
+          git -C "${work}" config user.email \
+            '186180952+oficiallyAkshay@users.noreply.github.com'
+          git -C "${work}" remote add origin \
+            "https://x-access-token:${TRAFFIC_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git -C "${work}" add clones-14d.json
+          git -C "${work}" commit --quiet \
+            -m "clones badge as of ${GITHUB_SHA}"
+          git -C "${work}" push --force --quiet origin HEAD:badges
+          echo "::notice::clones badge pushed to the badges branch"

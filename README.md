@@ -9,6 +9,7 @@
 <p align="center">
   <a href=".github/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/oficiallyAkshay/boomerang/ci.yml?branch=main&logo=githubactions&logoColor=white&label=CI"></a>
   <a href="https://codecov.io/gh/oficiallyAkshay/boomerang"><img alt="coverage" src="https://img.shields.io/codecov/c/github/oficiallyAkshay/boomerang?logo=codecov&logoColor=white"></a>
+  <a href="#how-usage-is-counted"><img alt="clones in the last 14 days" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones-14d.json&logo=github&logoColor=white"></a>
   <img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
   <a href="references/vendors.md"><img alt="vendors covered" src="https://img.shields.io/badge/vendors-10-6f42c1?logo=databricks&logoColor=white"></a>
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/license-MIT-2f6f4e?logo=opensourceinitiative&logoColor=white"></a>
@@ -99,6 +100,18 @@ command that fixes each thing.
 | This repo leaking data | Every sample and example is synthetic | A hashed denylist gate runs on each commit and in CI |
 
 Receipts, the packet and the PDF are files on your disk; you send the claim yourself.
+
+### How usage is counted
+
+The clone badge is GitHub's own rolling 14 day traffic window for this
+repository, read once on every push to `main` and written to the `badges` branch
+as a small JSON file. Nothing is collected from anyone's machine: GitHub counts
+a clone at its own end, the figures are repository totals with no identity
+attached, and boomerang still sends nothing anywhere.
+
+Until the owner adds the `TRAFFIC_TOKEN` secret and the repository is public the
+badge reads "resource not found", because shields cannot fetch a raw file from a
+private repository.
 
 ## Common workflows
 
