@@ -15,9 +15,11 @@ asserts with the exact markup that it does not survive ``clean_html``.
 
 from __future__ import annotations
 
+import io
 import json
 import re
 import shutil
+import threading
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
@@ -1339,3 +1341,293 @@ def test_cli_writes_next_to_the_working_directory(
     Path("in.html").write_text("<p>Fare</p>", encoding="utf-8")
     assert clean.main(["in.html", "--out", "out.html"]) == 0
     assert Path("out.html").read_text(encoding="utf-8") == "<p>Fare</p>\n"
+
+
+# ------------------------------------------------------- the whole directory
+
+BARRIER_TIMEOUT = 10.0
+
+
+def write_rules(vendors_dir: Path, name: str, domain: str, strip: list[str]) -> None:
+    """One vendors/<name>/rules.json, complete enough for load_vendor_rules."""
+    folder = vendors_dir / name
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "rules.json").write_text(
+        json.dumps(
+            {
+                "name": name,
+                "display": name.title(),
+                "sender_domains": [domain],
+                "subject_patterns": [],
+                "strip_regex": strip,
+                "unwrap_links_matching": [],
+                "amount_regex": None,
+                "date_regex": None,
+                "notes": "",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+class CleanCounter:
+    """Counts how many cleans overlapped, and holds each one at a barrier.
+
+    The counter is the record; the barrier is what makes the record mean
+    something. A ``clean_dir`` that worked through its files one at a time
+    would leave every worker waiting until the barrier timed out.
+    """
+
+    def __init__(self, inner, width: int):
+        self.inner = inner
+        self.barrier = threading.Barrier(width, timeout=BARRIER_TIMEOUT) if width > 1 else None
+        self._lock = threading.Lock()
+        self.live = 0
+        self.peak = 0
+
+    def __call__(self, raw, rules=None, image_cache=None):
+        with self._lock:
+            self.live += 1
+            self.peak = max(self.peak, self.live)
+        try:
+            if self.barrier is not None:
+                self.barrier.wait()
+            return self.inner(raw, rules, image_cache)
+        finally:
+            with self._lock:
+                self.live -= 1
+
+
+def receipts_dir(root: Path, count: int) -> Path:
+    """A directory of plain receipts named so sorted order is obvious."""
+    source = root / "receipts"
+    source.mkdir()
+    for index in range(count):
+        (source / f"r{index:02d}.html").write_text(
+            "<html><body><p>Fare $12.50</p></body></html>", encoding="utf-8"
+        )
+    return source
+
+
+def test_a_directory_is_cleaned_four_receipts_at_a_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = receipts_dir(tmp_path, clean.DIR_WORKERS)
+    counter = CleanCounter(clean.clean_html, clean.DIR_WORKERS)
+    monkeypatch.setattr(clean, "clean_html", counter)
+
+    listed = clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR)
+
+    assert counter.peak == clean.DIR_WORKERS
+    assert listed == [(f"r{index:02d}.html", "generic") for index in range(clean.DIR_WORKERS)]
+
+
+def test_the_pool_never_grows_past_the_worker_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Twelve receipts, four workers, four cleans in flight and no more."""
+    source = receipts_dir(tmp_path, 3 * clean.DIR_WORKERS)
+    counter = CleanCounter(clean.clean_html, clean.DIR_WORKERS)
+    monkeypatch.setattr(clean, "clean_html", counter)
+
+    listed = clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR)
+
+    assert counter.peak == clean.DIR_WORKERS
+    assert len(listed) == 3 * clean.DIR_WORKERS
+
+
+def test_one_worker_cleans_one_receipt_at_a_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = receipts_dir(tmp_path, 4)
+    counter = CleanCounter(clean.clean_html, 1)
+    monkeypatch.setattr(clean, "clean_html", counter)
+
+    clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR, workers=1)
+
+    assert counter.peak == 1
+
+
+def test_the_listing_is_in_filename_order_with_the_vendor_of_each_file(
+    tmp_path: Path, no_network: None
+) -> None:
+    source = tmp_path / "receipts"
+    source.mkdir()
+    for name, sender in (
+        ("b.html", "Lyft <no-reply@lyftmail.com>"),
+        ("a.html", "Uber <receipts@uber.com>"),
+        ("c.html", "Nobody <billing@an-unlisted-vendor.example>"),
+    ):
+        (source / name).write_text("<p>Fare $12.50</p>", encoding="utf-8")
+        write_meta(source / name, **{"from": sender, "subject": "Your receipt"})
+
+    listed = clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR)
+
+    assert listed == [("a.html", "uber"), ("b.html", "lyft"), ("c.html", "generic")]
+    assert (tmp_path / "clean" / "a.html").read_text(encoding="utf-8") == "<p>Fare $12.50</p>\n"
+
+
+def test_text_pdf_and_image_receipts_are_carried_across_untouched(tmp_path: Path) -> None:
+    source = tmp_path / "receipts"
+    (source / "nested").mkdir(parents=True)
+    (source / "r.html").write_text("<p>Fare</p>", encoding="utf-8")
+    (source / "r.txt").write_text("Fare 12.50", encoding="utf-8")
+    (source / "r.pdf").write_bytes(b"%PDF-1.4 folio")
+    (source / "r.png").write_bytes(b"\x89PNG here")
+    (source / "r.jpg").write_bytes(b"\xff\xd8 photo")
+    write_meta(source / "r.html", **{"from": "x@y.example", "subject": "s"})
+
+    out = tmp_path / "clean"
+    assert clean.clean_dir(source, out, VENDORS_DIR) == [("r.html", "generic")]
+
+    assert (out / "r.txt").read_text(encoding="utf-8") == "Fare 12.50"
+    assert (out / "r.pdf").read_bytes() == b"%PDF-1.4 folio"
+    assert (out / "r.png").read_bytes() == b"\x89PNG here"
+    assert (out / "r.jpg").read_bytes() == b"\xff\xd8 photo"
+    # The meta files stay behind. A packet is built from what is in here, and
+    # the saved headers are working notes, not part of the packet.
+    assert sorted(path.name for path in out.iterdir()) == [
+        "r.html",
+        "r.jpg",
+        "r.pdf",
+        "r.png",
+        "r.txt",
+    ]
+
+
+def test_a_directory_with_nothing_to_clean_lists_nothing(tmp_path: Path) -> None:
+    source = tmp_path / "receipts"
+    source.mkdir()
+    (source / "r.txt").write_text("Fare", encoding="utf-8")
+
+    assert clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR) == []
+    assert (tmp_path / "clean" / "r.txt").is_file()
+
+
+def test_the_amount_guard_warnings_come_out_in_filename_order(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Three receipts warn at once, and the lines still read one per file.
+
+    The vendor names run backwards against the file names on purpose. If the
+    warnings came out in any order but the file order, this is what says so.
+    """
+    vendors = tmp_path / "vendors"
+    source = tmp_path / "receipts"
+    source.mkdir()
+    for name, vendor in (("a.html", "zulu"), ("b.html", "yankee"), ("c.html", "xray")):
+        write_rules(vendors, vendor, f"{vendor}.example", ["<p>.*?</p>"])
+        (source / name).write_text("<p>Total $28.93</p>", encoding="utf-8")
+        write_meta(source / name, **{"from": f"billing@{vendor}.example", "subject": "Receipt"})
+
+    listed = clean.clean_dir(source, tmp_path / "clean", vendors)
+
+    assert listed == [("a.html", "zulu"), ("b.html", "yankee"), ("c.html", "xray")]
+    reported = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
+    assert reported == [
+        f"clean: {vendor} strip pattern 0 skipped, " "it would have taken an amount with it"
+        for vendor in ("zulu", "yankee", "xray")
+    ]
+    # The guard held: every total is still on the page it belongs to.
+    for name in ("a.html", "b.html", "c.html"):
+        assert "$28.93" in (tmp_path / "clean" / name).read_text(encoding="utf-8")
+
+
+def test_the_warning_router_passes_other_threads_straight_through() -> None:
+    """Anything written without a worker's own list reaches the real stream."""
+    target = io.StringIO()
+    router = clean._WarningRouter(target)
+
+    assert router.write("straight through") == len("straight through")
+    router.flush()
+    # getvalue is not defined on the router, so this is the delegation working.
+    assert router.getvalue() == "straight through"
+
+
+def test_a_directory_clean_downloads_then_inlines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = receipts_dir(tmp_path, 2)
+    cache = tmp_path / ".image-cache"
+    asked: list[Path] = []
+    monkeypatch.setattr(clean, "fetch_images", lambda html, where: asked.append(where) or 0)
+    monkeypatch.setattr(clean, "inline_images", lambda html, where: html + "<!--inlined-->")
+
+    clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR, cache, fetch_images=True)
+
+    assert asked == [cache, cache]
+    assert "<!--inlined-->" in (tmp_path / "clean" / "r00.html").read_text(encoding="utf-8")
+
+
+def test_a_directory_clean_refuses_to_fetch_without_a_cache(tmp_path: Path) -> None:
+    source = receipts_dir(tmp_path, 1)
+    with pytest.raises(ValueError, match="needs an image_cache"):
+        clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR, fetch_images=True)
+
+
+# ---------------------------------------------------------------- the dir cli
+
+
+def test_the_dir_cli_cleans_every_receipt_and_names_each_vendor(
+    tmp_path: Path, capsys: pytest.CaptureFixture, no_network: None
+) -> None:
+    source = tmp_path / "receipts"
+    source.mkdir()
+    shutil.copyfile(sample_path("lyft"), source / "a.html")
+    write_meta(source / "a.html", **{"from": "Lyft <no-reply@lyftmail.com>", "subject": "ride"})
+    (source / "b.html").write_text("<p>Fare $9.00</p>", encoding="utf-8")
+    (source / "b.txt").write_text("Fare 9.00", encoding="utf-8")
+
+    out = tmp_path / "clean"
+    code = clean.main(
+        [
+            "--dir",
+            str(source),
+            "--out",
+            str(out),
+            "--vendors",
+            str(VENDORS_DIR),
+            "--workers",
+            "2",
+        ]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    named = [line for line in captured.err.splitlines() if " vendor " in line]
+    assert named == ["clean: a.html vendor lyft", "clean: b.html vendor generic"]
+    assert f"clean: wrote 2 receipts into {out.as_posix()}" in captured.out
+    assert "$31.20" in (out / "a.html").read_text(encoding="utf-8")
+    assert (out / "b.txt").is_file()
+
+
+def test_the_cli_refuses_a_receipt_and_a_directory_together(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    code = clean.main([str(tmp_path / "in.html"), "--dir", str(tmp_path), "--out", str(tmp_path)])
+    assert code == 2
+    assert "not both" in capsys.readouterr().err
+
+
+def test_the_cli_refuses_neither_a_receipt_nor_a_directory(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    code = clean.main(["--out", str(tmp_path / "out.html")])
+    assert code == 2
+    assert "give a receipt to clean, or --dir DIR" in capsys.readouterr().err
+
+
+def test_the_cli_refuses_a_vendor_name_for_a_whole_directory(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    code = clean.main(["--dir", str(tmp_path), "--out", str(tmp_path), "--vendor", "lyft"])
+    assert code == 2
+    assert "--vendor is for one receipt" in capsys.readouterr().err
+
+
+def test_the_dir_cli_refuses_to_fetch_without_a_cache(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    code = clean.main(["--dir", str(tmp_path), "--out", str(tmp_path), "--fetch-images"])
+    assert code == 2
+    assert "needs --images" in capsys.readouterr().err

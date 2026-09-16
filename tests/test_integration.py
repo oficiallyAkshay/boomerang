@@ -7,6 +7,12 @@ out of the finished PDF. The first test drives the Python interfaces, the
 second drives the same flow through the documented command lines, so a CLI
 whose flags drift away from references/interfaces.md fails here rather than in
 someone's shell.
+
+Both of them clean the whole directory in one call, which is the stage the
+workflow describes: ``clean_dir`` in the first, ``clean.py --dir`` in the
+second. The receipts are staged with the ``.meta.json`` sidecars fetch.py
+writes, because reading the vendor off those is how a directory clean decides
+which rules a receipt gets.
 """
 
 from __future__ import annotations
@@ -61,35 +67,53 @@ def fixture_data(fixture_dir: Path) -> dict:
     return json.loads((fixture_dir / "expense_data.json").read_text(encoding="utf-8"))
 
 
-def copy_non_html(source_dir: Path, target_dir: Path) -> None:
-    """Carry the text, PDF and image receipts across untouched."""
+def stage_mailbox(source_dir: Path, target_dir: Path, rules: dict[str, dict], data: dict) -> None:
+    """The receipts as fetch.py would leave them, sidecar headers included.
+
+    The fixture ships the bodies but not the headers, so the From line each
+    receipt's own vendor would have sent is written out beside it. That is
+    what the cleaner reads when it is pointed at a directory.
+    """
+    target_dir.mkdir(parents=True, exist_ok=True)
     for path in sorted(source_dir.iterdir()):
-        if path.is_file() and path.suffix.lower() != ".html":
+        if path.is_file():
             shutil.copy2(path, target_dir / path.name)
+
+    vendor_by_rid = {r["rid"]: r["vendor"] for r in data["receipts"]}
+    for path in sorted(source_dir.glob("*.html")):
+        want = expected_vendor(vendor_by_rid[path.stem], rules)
+        (target_dir / f"{path.stem}.meta.json").write_text(
+            json.dumps({"from": sender_for(want or "", rules), "subject": ""}),
+            encoding="utf-8",
+        )
+
+
+def expected_listing(source_dir: Path, rules: dict[str, dict], data: dict) -> list[tuple[str, str]]:
+    """What clean_dir should report: every HTML receipt, in filename order."""
+    vendor_by_rid = {r["rid"]: r["vendor"] for r in data["receipts"]}
+    return [
+        (path.name, expected_vendor(vendor_by_rid[path.stem], rules) or "generic")
+        for path in sorted(source_dir.glob("*.html"))
+    ]
 
 
 def test_the_pipeline_runs_end_to_end(fixture_dir: Path, fixture_data: dict, tmp_path: Path):
     """Clean, fingerprint, validate, build, render, splice, read back."""
     rules = clean.load_vendor_rules(VENDORS_DIR)
     source = fixture_dir / "receipts"
-    receipts = tmp_path / "receipts"
-    receipts.mkdir()
-    copy_non_html(source, receipts)
+    mailbox = tmp_path / "mailbox"
+    stage_mailbox(source, mailbox, rules, fixture_data)
 
-    # Clean every HTML receipt with the rules its own sender resolves to.
-    vendor_by_rid = {r["rid"]: r["vendor"] for r in fixture_data["receipts"]}
-    cleaned = 0
-    for path in sorted(source.glob("*.html")):
-        want = expected_vendor(vendor_by_rid[path.stem], rules)
-        found = clean.detect_vendor(sender_for(want or "", rules), "", rules)
-        assert found == want, f"{path.name} resolved to {found}, expected {want}"
-        vendor_rules = rules[found] if found else None
-        fragment = clean.clean_html(path.read_text(encoding="utf-8"), vendor_rules)
+    # Stage 5, one call: every HTML receipt cleaned at once with the rules its
+    # own saved sender resolves to, everything else carried across untouched.
+    receipts = tmp_path / "clean"
+    listed = clean.clean_dir(mailbox, receipts, VENDORS_DIR)
+    assert listed == expected_listing(source, rules, fixture_data)
+    assert len(listed) == 8
+    for name, _ in listed:
+        fragment = (receipts / name).read_text(encoding="utf-8")
         assert "<script" not in fragment.lower()
         assert "href=" not in fragment.lower()
-        (receipts / path.name).write_text(fragment, encoding="utf-8")
-        cleaned += 1
-    assert cleaned == 8
     assert len(list(receipts.iterdir())) == len(list(source.iterdir()))
 
     # Who paid, read off the cleaned receipts rather than the raw mail.
@@ -153,24 +177,20 @@ def test_the_documented_clis_run_the_same_pipeline(
     """Every CLI shape in references/interfaces.md, driven end to end."""
     rules = clean.load_vendor_rules(VENDORS_DIR)
     source = fixture_dir / "receipts"
-    receipts = tmp_path / "receipts"
-    receipts.mkdir()
-    copy_non_html(source, receipts)
+    mailbox = tmp_path / "mailbox"
+    stage_mailbox(source, mailbox, rules, fixture_data)
 
-    vendor_by_rid = {r["rid"]: r["vendor"] for r in fixture_data["receipts"]}
-    for path in sorted(source.glob("*.html")):
-        vendor = expected_vendor(vendor_by_rid[path.stem], rules)
-        assert vendor is not None
-        run_script(
-            "clean",
-            str(path),
-            "--out",
-            str(receipts / path.name),
-            "--vendor",
-            vendor,
-            "--vendors",
-            str(VENDORS_DIR),
-        )
+    receipts = tmp_path / "clean"
+    cleaned = run_script(
+        "clean",
+        "--dir",
+        str(mailbox),
+        "--out",
+        str(receipts),
+        "--vendors",
+        str(VENDORS_DIR),
+    ).stdout
+    assert f"clean: wrote 8 receipts into {receipts.as_posix()}" in cleaned
 
     listing = run_script("cards", str(receipts)).stdout
     assert f"{COMPANY_CARD}  1  " in listing

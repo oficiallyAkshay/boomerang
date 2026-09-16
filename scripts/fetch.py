@@ -8,9 +8,13 @@ Both passes pad the window a day on each side, because ride receipts land
 six to twenty hours after the ride and the airport legs go missing without
 the padding.
 
-Messages are fetched one at a time and written straight to disk. Nothing
-holds more than a single body in memory, and a message whose meta file is
-already on disk is never fetched twice.
+The two passes are independent queries, so they run together on a small
+thread pool and their results are merged by query index rather than by
+whichever answered first. Bodies are fetched on a second small pool, and each
+one is written straight to disk in the worker that fetched it. The rule about
+one receipt at a time is a rule about the model's context, not about the
+script: nothing here holds a body once it is written, no body is ever read
+back, and a message whose meta file is already on disk is never fetched twice.
 
 Gmail is the only source, so the CLI has no flag for choosing one. A source is
 anything with ``search(query_str) -> list[str]`` and ``get(rid) -> dict``,
@@ -36,6 +40,7 @@ import argparse
 import json
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -57,6 +62,11 @@ GENERIC_TERMS = [
 ]
 
 RID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+# How many searches run at once, and how many bodies. Both pools are small on
+# purpose: a mailbox is a shared service and these numbers are polite ones.
+SEARCH_WORKERS = 4
+BODY_WORKERS = 3
 
 # Attachment suffix on the way in, mapped to the suffix we store it under.
 # jpeg becomes jpg because jpg is the one the rest of the pipeline looks for.
@@ -194,8 +204,50 @@ def write_message(out_dir: Path, rid: str, message: dict) -> dict | None:
     return meta
 
 
+def _pool_size(limit: int, work: int) -> int:
+    """Workers for a pool: never more than there is work, never fewer than one."""
+    return max(1, min(limit, work))
+
+
+def search_all(source, queries: list[Query]) -> list[str]:
+    """Every query at once, merged into one first seen order that never varies.
+
+    The passes ask different questions of the same mailbox, so nothing makes
+    one wait for another. What must not vary is the order that comes out:
+    results are filed under the index of the query that asked for them and
+    merged in that order afterwards, so the list is the list the same queries
+    would have produced run one after another, whichever search answered first.
+    """
+    if not queries:
+        return []
+    per_query: list[list[str]] = [[] for _ in queries]
+    with ThreadPoolExecutor(max_workers=_pool_size(SEARCH_WORKERS, len(queries))) as pool:
+        running = [pool.submit(source.search, to_gmail(q)) for q in queries]
+    for index, job in enumerate(running):
+        per_query[index] = list(job.result())
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for found in per_query:
+        for rid in found:
+            if rid not in seen:
+                seen.add(rid)
+                ordered.append(rid)
+    return ordered
+
+
+def _fetch_one(source, out_dir: Path, rid: str) -> bool:
+    """Fetch one body and write it out. True when something was written.
+
+    This is the whole of what a worker does. The body is written inside the
+    worker that fetched it, so nothing accumulates while the rest of the pool
+    is still waiting on the network.
+    """
+    return write_message(out_dir, rid, source.get(rid)) is not None
+
+
 def fetch_all(
-    source, queries: list[Query], out_dir: Path
+    source, queries: list[Query], out_dir: Path, workers: int = BODY_WORKERS
 ) -> tuple[list[str], list[str], list[str], list[str]]:
     """Run every query, then fetch each new message once, in first seen order.
 
@@ -204,33 +256,33 @@ def fetch_all(
     already on disk, and the rids that came back with no body and no
     attachment worth keeping. A failed rid leaves nothing on disk, so the next
     run asks for it again.
+
+    The searches run together and the bodies are fetched by a pool of
+    ``workers``. Every one of the four lists is still in first seen order: the
+    pool decides what happens when, and the merge afterwards decides what the
+    caller reads.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    ordered: list[str] = []
-    seen: set[str] = set()
-    for q in queries:
-        for rid in source.search(to_gmail(q)):
-            if rid not in seen:
-                seen.add(rid)
-                ordered.append(rid)
-
-    written: list[str] = []
     rejected: list[str] = []
     skipped: list[str] = []
-    failed: list[str] = []
-    for rid in ordered:
+    wanted: list[str] = []
+    for rid in search_all(source, queries):
         if not RID_RE.match(rid):
             rejected.append(rid)
-            continue
-        if (out_dir / f"{rid}.meta.json").exists():
+        elif (out_dir / f"{rid}.meta.json").exists():
             skipped.append(rid)
-            continue
-        if write_message(out_dir, rid, source.get(rid)) is None:
-            failed.append(rid)
-            continue
-        written.append(rid)
+        else:
+            wanted.append(rid)
+
+    written: list[str] = []
+    failed: list[str] = []
+    if wanted:
+        with ThreadPoolExecutor(max_workers=_pool_size(workers, len(wanted))) as pool:
+            running = [pool.submit(_fetch_one, source, out_dir, rid) for rid in wanted]
+        for rid, job in zip(wanted, running, strict=True):
+            (written if job.result() else failed).append(rid)
     return written, rejected, skipped, failed
 
 
@@ -245,6 +297,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True, help="receipts directory")
     parser.add_argument("--vendors", type=Path, help="vendors directory for pass two")
     parser.add_argument("--dry-run", action="store_true", help="print the queries and stop")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=BODY_WORKERS,
+        help=f"how many bodies to fetch at once (default {BODY_WORKERS})",
+    )
     args = parser.parse_args(argv)
 
     rules = load_vendor_rules(args.vendors) if args.vendors else {}
@@ -257,7 +315,9 @@ def main(argv: list[str] | None = None) -> int:
 
     from gmail_cli import GmailSource
 
-    written, rejected, skipped, failed = fetch_all(GmailSource(), queries, args.out)
+    written, rejected, skipped, failed = fetch_all(
+        GmailSource(), queries, args.out, workers=args.workers
+    )
     for rid in failed:
         print(f"fetch: {rid} came back empty, nothing written, it will be asked for again")
     print(
