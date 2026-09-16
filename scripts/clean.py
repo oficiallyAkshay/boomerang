@@ -46,10 +46,12 @@ know what was done to the page in front of them.
    that split across two pages would break the packet's one page per receipt
    arithmetic, so they go.
 4. Amounts. A vendor ``strip_regex`` is applied on its own and kept only when
-   the fragment still holds as many money strings as before. A pattern that
+   the fragment still prints as many money strings as before. A pattern that
    would take an amount with it is skipped and named on stderr, because a
    promo row that shares a table row with the total is a bad reason to lose
-   the total.
+   the total. The count reads the text a reader would see and not the markup
+   around it, because a style attribute is full of decimals
+   (``line-height:1.25rem``) and none of them is an amount.
 
 Stdlib only. Regex over the markup, deliberately: these are email tables, the
 input is one saved message at a time, and a parser dependency buys nothing here.
@@ -186,6 +188,9 @@ CSS_BREAK_DECL_RE = re.compile(r"[^;{}]*(?<![-\w])(?:page-)?break-[-\w]+\s*:[^;{
 # A money string as a receipt prints one. Counted before and after each
 # vendor strip pattern, never parsed.
 MONEY_RE = re.compile(r"\d+\.\d{2}")
+# Everything between angle brackets, taken out before the counting so that the
+# decimals CSS is made of are never mistaken for money.
+MARKUP_RE = re.compile(r"<[^>]*>")
 
 
 # ------------------------------------------------------------------ attributes
@@ -586,24 +591,44 @@ def _sender_domain(from_addr: str) -> str:
     return address.rsplit("@", 1)[1].strip().lower()
 
 
+def _domain_fits(rule: dict, domain: str) -> bool:
+    """True when a vendor claims this sender domain, or a parent of it."""
+    for raw in rule.get("sender_domains") or []:
+        candidate = raw.strip().lower().lstrip("@")
+        if candidate and (domain == candidate or domain.endswith("." + candidate)):
+            return True
+    return False
+
+
+def _subject_fits(rule: dict, subject: str) -> bool:
+    """True when any of a vendor's subject patterns matches this subject."""
+    return any(
+        re.search(pattern, subject or "", re.I) for pattern in rule.get("subject_patterns") or []
+    )
+
+
 def detect_vendor(from_addr: str, subject: str, rules: dict) -> str | None:
     """Name the vendor from the sender domain, else from the subject, else None.
 
     Vendors with sender domains are tried first and catch alls last, then by
     name, so a subject that two vendors both claim goes to the specific one.
+
+    Among the vendors that claim the sender domain, one whose subject patterns
+    also fit wins over one that matches by domain alone. Uber rides and Uber
+    Eats both send from uber.com and the subject line is the only thing that
+    tells an order from a trip, so the domain cannot be the last word.
     """
     domain = _sender_domain(from_addr)
     order = sorted(rules, key=lambda name: (not (rules[name].get("sender_domains") or []), name))
-    if domain:
-        for name in order:
-            for raw in rules[name].get("sender_domains") or []:
-                candidate = raw.strip().lower().lstrip("@")
-                if candidate and (domain == candidate or domain.endswith("." + candidate)):
-                    return name
+    claimed = [name for name in order if domain and _domain_fits(rules[name], domain)]
+    for name in claimed:
+        if _subject_fits(rules[name], subject):
+            return name
+    if claimed:
+        return claimed[0]
     for name in order:
-        for pattern in rules[name].get("subject_patterns") or []:
-            if re.search(pattern, subject or "", re.I):
-                return name
+        if _subject_fits(rules[name], subject):
+            return name
     return None
 
 
@@ -641,6 +666,18 @@ def detect_from_meta(source: Path, vendors_dir: Path) -> tuple[str, dict | None]
 # ---------------------------------------------------------------------- clean
 
 
+def _printed_amounts(fragment: str) -> int:
+    """How many money strings a fragment prints, reading its text only.
+
+    The tags come out before the counting. A receipt's markup carries decimals
+    that are not money and never were: ``line-height:1.25rem``,
+    ``letter-spacing:0.15px``, ``width:33.33%``. Counting those would make the
+    guard refuse to strip a promo module over a font size, so the count reads
+    what a reader would see printed on the page and nothing else.
+    """
+    return len(MONEY_RE.findall(MARKUP_RE.sub(" ", fragment)))
+
+
 def _apply_strip_patterns(body: str, rules: dict) -> str:
     """Apply a vendor's strip patterns, one at a time, keeping every amount.
 
@@ -651,10 +688,10 @@ def _apply_strip_patterns(body: str, rules: dict) -> str:
     """
     patterns = rules.get("strip_regex") or []
     vendor = str(rules.get("name") or "generic")
-    kept = len(MONEY_RE.findall(body))
+    kept = _printed_amounts(body)
     for index, pattern in enumerate(patterns):
         candidate = re.sub(pattern, "", body, flags=re.S | re.I)
-        found = len(MONEY_RE.findall(candidate))
+        found = _printed_amounts(candidate)
         if found < kept:
             print(
                 f"clean: {vendor} strip pattern {index} skipped, "

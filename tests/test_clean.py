@@ -604,21 +604,25 @@ def test_every_strip_pattern_compiles(vendor: str, rules: dict) -> None:
 
 
 def test_strip_patterns_run_case_insensitively(rules: dict) -> None:
-    """Vendors shout their markup sometimes, and the pattern is written lower case."""
-    raw = "<TABLE><TR><TD>Ride more with a RIDE PASS</TD></TR><TR><TD>Fare</TD></TR></TABLE>"
+    """Vendors shout their markup sometimes, and the pattern is written lower case.
+
+    The Lyft rules name the footer help buttons in the case Lyft normally
+    sends them. This is the same row in capitals, which has to go the same way.
+    """
+    raw = "<TABLE><TR><TD><A>TIP DRIVER</A></TD></TR><TR><TD>Fare</TD></TR></TABLE>"
     out = clean.clean_html(raw, rules["lyft"])
-    assert "RIDE PASS" not in out
+    assert "TIP DRIVER" not in out
     assert "Fare" in out
 
 
 def test_a_strip_pattern_that_would_take_an_amount_is_skipped(
     rules: dict, capsys: pytest.CaptureFixture
 ) -> None:
-    """One row holding the total and the tip promo keeps the total."""
-    raw = "<table><tr><td>Total $28.93</td><td>Add a tip</td></tr></table>"
+    """One table holding the total and the Add tip button keeps both."""
+    raw = '<table><tr><td>Total $28.93</td><td><a href="#">Add tip</a></td></tr></table>'
     out = clean.clean_html(raw, rules["lyft"])
     assert "$28.93" in out
-    assert "Add a tip" in out
+    assert "Add tip" in out
     assert "lyft strip pattern 0 skipped" in capsys.readouterr().err
 
 
@@ -633,9 +637,23 @@ def test_the_amount_guard_names_a_vendor_that_has_no_name(
 def test_a_strip_pattern_that_takes_no_amount_still_runs(
     rules: dict, capsys: pytest.CaptureFixture
 ) -> None:
-    raw = "<table><tr><td>Add a tip</td></tr><tr><td>Total $28.93</td></tr></table>"
+    raw = '<table><tr><td><a href="#">Add tip</a></td></tr></table><p>Total $28.93</p>'
     out = clean.clean_html(raw, rules["lyft"])
-    assert "Add a tip" not in out
+    assert "Add tip" not in out
+    assert "$28.93" in out
+    assert capsys.readouterr().err == ""
+
+
+def test_the_decimals_in_a_style_attribute_are_not_amounts(
+    rules: dict, capsys: pytest.CaptureFixture
+) -> None:
+    """A font size is not money, and a pattern is not skipped over one."""
+    raw = (
+        '<table style="line-height:1.25rem"><tr><td style="letter-spacing:0.15px">'
+        '<a href="#">Add tip</a></td></tr></table><p>Total $28.93</p>'
+    )
+    out = clean.clean_html(raw, rules["lyft"])
+    assert "Add tip" not in out
     assert "$28.93" in out
     assert capsys.readouterr().err == ""
 
@@ -1050,8 +1068,8 @@ def test_cli_reads_the_vendor_from_the_saved_headers(
     assert clean.main([str(source), "--out", str(out), "--vendors", str(VENDORS_DIR)]) == 0
     assert "clean: vendor lyft" in capsys.readouterr().err
     written = out.read_text(encoding="utf-8")
-    assert "$28.93" in written
-    assert "ride pass" not in written
+    assert "$31.20" in written
+    assert "Rides = rewards" not in written
 
 
 def test_cli_falls_back_to_the_subject_then_to_generic(
@@ -1072,7 +1090,7 @@ def test_cli_falls_back_to_the_subject_then_to_generic(
         == 0
     )
     assert "clean: vendor generic" in capsys.readouterr().err
-    assert "ride pass" in (tmp_path / "b.html").read_text(encoding="utf-8")
+    assert "Rides = rewards" in (tmp_path / "b.html").read_text(encoding="utf-8")
 
 
 def test_cli_ignores_a_meta_file_it_cannot_read(
@@ -1103,7 +1121,7 @@ def test_cli_vendor_generic_forces_the_generic_clean(
     )
     assert code == 0
     assert "clean: vendor generic" in capsys.readouterr().err
-    assert "ride pass" in out.read_text(encoding="utf-8")
+    assert "Rides = rewards" in out.read_text(encoding="utf-8")
 
 
 def test_cli_rejects_an_unknown_vendor(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
