@@ -57,17 +57,11 @@ Full ruleset in [`policy.md`](policy.md).
 
 ## How it works
 
-```mermaid
-flowchart TD
-  A["Inbox and calendar"] --> B["Two-pass search"]
-  B --> C["Receipts to disk"]
-  C --> D["Clean: vendor markup, tracking out"]
-  D --> E["Who paid: card fingerprint, eTicket chain"]
-  E --> F["policy.md and policy.local.md"]
-  F --> G["Candidate list, one question"]
-  G --> H["packet.html"]
-  H --> I["packet.pdf"]
-```
+<p align="center">
+  <img alt="How boomerang works: two search passes feed a fetch step; cleaning, card fingerprinting and folio text run in parallel; the model applies the policy and shows a candidate list; then build, render and splice produce the packet" src="assets/diagram/architecture.svg" width="900">
+</p>
+
+Code does the mechanical work (search, fetch, clean, who paid, totals, render); the model supplies judgment (the trip, the policy, the candidate list, the one question). Cleaning, card fingerprinting and folio text run at the same time over the receipts on disk. The diagram is rendered once from [`assets/diagram/architecture.archify.json`](assets/diagram/architecture.archify.json) with Archify and committed; nothing here depends on it.
 
 ## Quick start
 
