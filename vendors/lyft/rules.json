@@ -23,7 +23,7 @@
     "<img[^>]*src=\\\"https://api\\.lyft\\.com/[^\\\"]*\\\"[^>]*>",
     "(?:©|&copy;)\\s*OpenStreetMap",
     "<div class=\\\"h-expense-transaction\\\"[\\s\\S]*?</div>",
-    "Dispatching Base:[\\s\\S]*?please call 311\\.",
+    "Dispatching Base:[\\s\\S]*?Texas state rideshare regulator\\.",
     "(?:©|&copy;|&#169;)\\s*\\d{4} Lyft, Inc\\.[\\s\\S]*?CPUC ID No\\.[^<]*</a>",
     "Select 'You' on the home screen in the Lyft app[\\s\\S]*?additional help\\."
   ],
