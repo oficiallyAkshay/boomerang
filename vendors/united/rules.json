@@ -23,17 +23,10 @@
     "<b>Refund Information</b>[\\s\\S]*?(?=</td>)",
     "<img[^>]*src=\"https://media\\.united\\.com/assets/m/[^\"]*ua_\\d+x\\d+\\.jpe?g\"[^>]*>",
     "<a[^>]*>(?:View our Privacy Policy|View our Legal Notices)</a>",
-    "<tr class=\"no-display\">[\\s\\S]*?</tr>",
-    "<tr[^>]*>(?:(?!</tr>).)*?(?:MileagePlus (?:credit card|offer)|Earn (?:up to )?[\\d,]+ (?:bonus )?miles|Book your next|Save on your next|Explore destinations)(?:(?!</tr>).)*?</tr>"
+    "<tr class=\"no-display\">[\\s\\S]*?</tr>"
   ],
   "unwrap_links_matching": [
-    "click\\.",
-    "/track",
-    "utm_",
-    "email\\.",
     "qualtrics\\."
   ],
-  "amount_regex": "Total:\\s*</td>[\\s\\S]{0,400}?>\\s*([0-9][0-9,]*\\.[0-9]{2})\\s+[A-Z]{3}\\s*</td>",
-  "date_regex": "Date of purchase:[\\s\\S]{0,400}?<b>((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\\s+[A-Z][a-z]{2}\\s+\\d{2},\\s+\\d{4})</b>",
-  "notes": "United sends both samples in this folder from Receipts@united.com and wraps both in the same HTML shell: sample.html is an eTicket itinerary and receipt, sample-wifi.html is an inflight Wi-Fi purchase. Removed from the eTicket: the MileagePlus accrual table and its earning notice, the wall of legal boilerplate, and the Travel Ready Center promo strip. Removed from the Wi-Fi receipt: the Share your Experience survey block, the Additional Information cross-sell, and the refund boilerplate. Removed from both: the Star Alliance footer banner, the privacy and legal footer links, and the hidden no-display rows. The last pattern covers the mileage offer and book your next trip rows of the marketing variant; no row of that shape is present in this sample, and it is kept because the same shell is used for offer mail. The baggage allowance table has a pattern here and the amount guard keeps the table: it prints 0.00 USD twice for the two free bags, and those are amounts, so the pattern is skipped and the table stays. Kept verbatim: the confirmation code, the passenger line, every flight leg with its date and times, the fare, tax, security fee and facility charge breakdown, the per passenger total and the ticket total, the eTicket number, the Wi-Fi reference number and charge, the method of payment line, and the previous ticket value line that settles who paid."
+  "notes": "United sends both samples in this folder from Receipts@united.com and wraps both in the same HTML shell: sample.html is an eTicket itinerary and receipt, sample-wifi.html is an inflight Wi-Fi purchase. Removed from the eTicket: the MileagePlus accrual table and its earning notice, the wall of legal boilerplate, and the Travel Ready Center promo strip. Removed from the Wi-Fi receipt: the Share your Experience survey block, the Additional Information cross-sell, and the refund boilerplate. Removed from both: the Star Alliance footer banner, the privacy and legal footer links, and the hidden no-display rows. The baggage allowance table has a pattern here and the amount guard keeps the table: it prints 0.00 USD twice for the two free bags, and those are amounts, so the pattern is skipped and the table stays. Kept verbatim: the confirmation code, the passenger line, every flight leg with its date and times, the fare, tax, security fee and facility charge breakdown, the per passenger total and the ticket total, the eTicket number, the Wi-Fi reference number and charge, the method of payment line, and the previous ticket value line that settles who paid."
 }
