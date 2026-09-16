@@ -20,6 +20,8 @@ from pathlib import Path
 
 REQUIREMENTS = Path(__file__).resolve().parent.parent / "requirements.txt"
 CHANNELS = ("chrome", "msedge", "chromium")
+# The same name render_pdf reads, so a pin holds whether or not it imports.
+BROWSER_ENV = "BOOMERANG_BROWSER"
 
 FIX_PYTHON = "install Python 3.11 or newer, then run this check again"
 FIX_PACKAGES = "pip install -r requirements.txt (or: uv sync)"
@@ -58,17 +60,34 @@ def playwright_cache() -> Path:
     return Path.home().joinpath(*tails.get(platform.system(), (".cache",)), "ms-playwright")
 
 
-def find_browser() -> str | None:
-    """The first channel this machine has, found by file rather than by launch."""
-    # The renderer's own order when it imports, so a run pinned with
-    # BOOMERANG_BROWSER is checked against the browser it will actually use.
+def channels_to_check() -> tuple[str, ...]:
+    """The channels to look for, in order, honouring ``BOOMERANG_BROWSER``.
+
+    Where ``render_pdf`` imports, its own order is asked for, so a pinned run
+    is checked against the browser it will really use and an unknown pin is
+    refused there.
+
+    Where it does not import, which is every machine that has not installed
+    playwright yet and so the machine most likely to be running this, the pin
+    is read here instead. The variable names a browser whether or not the
+    renderer is present to be asked about it, and reporting chrome as the
+    browser to a run pinned to msedge would be a wrong answer, not a missing
+    one. A value that names no channel is not a pin and falls back to the
+    shipped order, which is what ``render_pdf`` refusing it comes to as well.
+    """
     try:
         from render_pdf import wanted_channels
 
-        channels = tuple(wanted_channels())
+        return tuple(wanted_channels())
     except Exception:
-        channels = CHANNELS
-    for channel in channels:
+        pass
+    forced = os.environ.get(BROWSER_ENV, "").strip().lower()
+    return (forced,) if forced in CHANNELS else CHANNELS
+
+
+def find_browser() -> str | None:
+    """The first channel this machine has, found by file rather than by launch."""
+    for channel in channels_to_check():
         if channel == "chromium":
             cache = playwright_cache()
             found = cache.is_dir() and any(cache.glob("chromium*"))
