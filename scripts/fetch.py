@@ -31,20 +31,23 @@ kind takes ``<rid>.<n>.<ext>``, and ``meta.json`` lists every name written.
 A message with no body and no attachment worth keeping writes nothing at all,
 meta file included. Writing an empty meta file would mark the message done and
 skip it on every later run, so instead it is reported as failed and tried
-again next time.
+again next time. A message the source refuses outright is treated the same
+way: the run says which one it was and carries on, because one mailbox error
+is a reason to fetch that message again, not a reason to abandon the other
+twenty nine.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from build import RID_RE
 from clean import load_vendor_rules
 
 GENERIC_TERMS = [
@@ -61,8 +64,6 @@ GENERIC_TERMS = [
     "invoice",
 ]
 
-RID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-
 # How many searches run at once, and how many bodies. Both pools are small on
 # purpose: a mailbox is a shared service and these numbers are polite ones.
 SEARCH_WORKERS = 4
@@ -77,10 +78,10 @@ ATTACHMENT_EXTS = {"pdf": "pdf", "png": "png", "jpg": "jpg", "jpeg": "jpg"}
 class Query:
     """One Gmail search. after and before are the padded window ends."""
 
-    terms: list[str] = field(default_factory=list)
-    from_domains: list[str] = field(default_factory=list)
-    after: date = date(1970, 1, 1)
-    before: date = date(1970, 1, 1)
+    terms: list[str]
+    from_domains: list[str]
+    after: date
+    before: date
 
 
 def build_queries(window_start: date, window_end: date, vendor_rules: dict) -> list[Query]:
@@ -214,26 +215,16 @@ def search_all(source, queries: list[Query]) -> list[str]:
 
     The passes ask different questions of the same mailbox, so nothing makes
     one wait for another. What must not vary is the order that comes out:
-    results are filed under the index of the query that asked for them and
-    merged in that order afterwards, so the list is the list the same queries
-    would have produced run one after another, whichever search answered first.
+    the jobs are read back in the order the queries were submitted, so the list
+    is the list the same queries would have produced run one after another,
+    whichever search answered first. ``dict.fromkeys`` does the deduplication
+    and keeps that first seen order while it is at it.
     """
     if not queries:
         return []
-    per_query: list[list[str]] = [[] for _ in queries]
     with ThreadPoolExecutor(max_workers=_pool_size(SEARCH_WORKERS, len(queries))) as pool:
         running = [pool.submit(source.search, to_gmail(q)) for q in queries]
-    for index, job in enumerate(running):
-        per_query[index] = list(job.result())
-
-    ordered: list[str] = []
-    seen: set[str] = set()
-    for found in per_query:
-        for rid in found:
-            if rid not in seen:
-                seen.add(rid)
-                ordered.append(rid)
-    return ordered
+    return list(dict.fromkeys(rid for job in running for rid in job.result()))
 
 
 def _fetch_one(source, out_dir: Path, rid: str) -> bool:
@@ -253,9 +244,14 @@ def fetch_all(
 
     Returns ``(written, rejected, skipped, failed)``: the rids fetched this
     run, the rids refused by the id pattern, the rids whose meta file was
-    already on disk, and the rids that came back with no body and no
-    attachment worth keeping. A failed rid leaves nothing on disk, so the next
-    run asks for it again.
+    already on disk, and the rids that produced nothing. A failed rid leaves
+    nothing on disk, so the next run asks for it again.
+
+    A message is failed either because it came back with no body and no
+    attachment worth keeping, or because asking for it raised: a timeout, a
+    refusal, a disk that would not take the write. The exception is caught per
+    message and the rid is named, so one bad message costs that message and the
+    four lists still account for every rid the search returned.
 
     The searches run together and the bodies are fetched by a pool of
     ``workers``. Every one of the four lists is still in first seen order: the
@@ -282,7 +278,13 @@ def fetch_all(
         with ThreadPoolExecutor(max_workers=_pool_size(workers, len(wanted))) as pool:
             running = [pool.submit(_fetch_one, source, out_dir, rid) for rid in wanted]
         for rid, job in zip(wanted, running, strict=True):
-            (written if job.result() else failed).append(rid)
+            try:
+                wrote = job.result()
+            except Exception as error:
+                print(f"fetch: {rid} could not be fetched ({type(error).__name__})")
+                failed.append(rid)
+                continue
+            (written if wrote else failed).append(rid)
     return written, rejected, skipped, failed
 
 

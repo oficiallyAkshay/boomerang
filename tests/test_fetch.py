@@ -430,7 +430,10 @@ BARRIER_TIMEOUT = 10.0
 
 def numbered_queries(count: int) -> list[Query]:
     """Distinct queries, so a fake source can tell one from another."""
-    return [Query(terms=[f"q{index}"], after=START, before=END) for index in range(count)]
+    return [
+        Query(terms=[f"q{index}"], from_domains=[], after=START, before=END)
+        for index in range(count)
+    ]
 
 
 def _barrier(width: int) -> threading.Barrier | None:
@@ -589,6 +592,62 @@ def test_written_and_failed_keep_first_seen_order_under_the_pool(tmp_path: Path)
     assert written == ["body0", "body2"]
     assert failed == ["body1"]
     assert (rejected, skipped) == ([], [])
+
+
+class RefusingSource:
+    """A source that answers four rids and raises on the fifth."""
+
+    def __init__(self, rids: list[str], bad: str):
+        self.rids = rids
+        self.bad = bad
+
+    def search(self, query: str) -> list[str]:
+        return list(self.rids)
+
+    def get(self, rid: str) -> dict:
+        if rid == self.bad:
+            raise TimeoutError("the mailbox did not answer")
+        return message()
+
+
+def test_one_message_the_source_refuses_does_not_end_the_run(tmp_path: Path, capsys):
+    """Thirty receipts and one timeout is twenty nine receipts, not none.
+
+    The rid that raised lands in failed, so nothing on disk marks it done and
+    the next run asks for it again. The four lists still account for every rid
+    the search returned, which is the only thing a caller can check against.
+    """
+    rids = [f"body{index}" for index in range(5)]
+    queries = numbered_queries(1)
+    source = RefusingSource(rids, "body2")
+
+    written, rejected, skipped, failed = fetch_all(source, queries, tmp_path)
+
+    assert written == ["body0", "body1", "body3", "body4"]
+    assert failed == ["body2"]
+    assert (rejected, skipped) == ([], [])
+    assert sorted(written + rejected + skipped + failed) == sorted(rids)
+    assert "fetch: body2 could not be fetched (TimeoutError)" in capsys.readouterr().out
+    assert not (tmp_path / "body2.meta.json").exists()
+
+
+def test_a_write_that_raises_is_reported_the_same_way(tmp_path: Path, capsys):
+    """The failure need not be the mailbox's; a refused write reads the same."""
+    queries = numbered_queries(1)
+    source = ConcurrentSource({to_gmail(queries[0]): ["body0"]}, {"body0": message()})
+    blocked = tmp_path / "out"
+    blocked.mkdir()
+    (blocked / "body0.html").mkdir()
+
+    written, _, _, failed = fetch_all(source, queries, blocked)
+
+    assert (written, failed) == ([], ["body0"])
+    assert "fetch: body0 could not be fetched (IsADirectoryError)" in capsys.readouterr().out
+
+
+def test_fetch_re_exports_the_one_rid_pattern() -> None:
+    """build defines it; fetch and gmail_cli read the same object."""
+    assert fetch.RID_RE is build.RID_RE
 
 
 def test_the_cli_passes_its_worker_count_through(tmp_path: Path, monkeypatch, capsys):
