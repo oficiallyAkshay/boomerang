@@ -3,17 +3,29 @@
   "display": "Plain text confirmation",
   "sender_domains": [],
   "subject_patterns": [
+    "invoice",
+    "stay is confirmed",
     "confirmation",
     "reservation",
     "booking",
-    "itinerary",
-    "stay is confirmed"
+    "itinerary"
   ],
   "strip_regex": [
+    "\\A\\( \\S+ \\)\\n+",
+    "the world, at your fingertips[\\s\\S]*?open the app \\( \\S+ \\)",
+    "This is an essential service email related to your hotel booking[\\s\\S]*?preferences\\.",
+    "This email is sent by another star, which uses citizenM trademarks[\\s\\S]*?Inc\\.",
+    "contact Marriott \\( \\S+ \\)\\s*privacy policy \\( \\S+ \\)",
     "(?m)^\\s*(?:To unsubscribe|Unsubscribe|This message was sent to|This email was sent to)\\b.*$"
   ],
-  "unwrap_links_matching": ["click\\.", "/track", "utm_", "email\\."],
-  "amount_regex": "(?m)^\\s*(?:Total(?: charged)?|Amount(?: charged)?|Facility fee|Resort fee)\\s*:?\\s*(\\$[\\d,]+\\.\\d{2})",
-  "date_regex": "((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,\\s*\\d{1,2}\\s+[A-Z][a-z]+\\s+\\d{4}|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,\\s*[A-Z][a-z]+\\s+\\d{1,2},\\s+\\d{4})",
-  "notes": "The catch all for hotel and other confirmations that arrive as a text body. It has no sender domains, so it is only reached when no vendor matched by domain and no other subject pattern matched. Removed: an unsubscribe footer line, if the message has one. Kept verbatim: everything else, including the From, Date and Subject headers, which the packet renders as a monospace block. The amount pattern reads the mandatory fee that the guest settles at the desk, not the room rate, because a room booked by the company is not the claim."
+  "unwrap_links_matching": [
+    "click\\.",
+    "/track",
+    "utm_",
+    "email\\.",
+    "sendgrid\\.net"
+  ],
+  "amount_regex": null,
+  "date_regex": null,
+  "notes": "The catch all for hotel and other confirmations that arrive as a text body. It has no sender domains, so it is reached only when no vendor matched by domain and no other subject pattern matched, which is what keeps it from stealing mail from a vendor that has its own folder. The sample is a citizenM invoice notice, and the packet renders it as a monospace block under its From, Date and Subject headers. Removed: the bare logo link at the top, which a text part renders as a naked URL in parentheses; the app cross sell block; the marketing consent disclaimer; the licensing footer; the footer link row; and an unsubscribe line when the message has one. Kept verbatim: the property name and address, the phone number, the confirmation number, the invoice pointer, the line structure and the blank line spacing. Known gap: this message carries no amount and no stay date at all. It is a pointer that says the folio is ready, so amount_regex and date_regex are both null, the date has to come from the message headers, and the amount has to come from the folio PDF, which the traveller uploads or the Gmail fallback fetches as an attachment. The last strip pattern is the generic unsubscribe footer of other plain text confirmations; no line of that shape is present in this sample."
 }

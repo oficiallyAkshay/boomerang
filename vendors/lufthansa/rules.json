@@ -1,0 +1,32 @@
+{
+  "name": "lufthansa",
+  "display": "Lufthansa",
+  "sender_domains": [
+    "information.lufthansa.com",
+    "lufthansa.com",
+    "information.lufthansa-city.com"
+  ],
+  "subject_patterns": [
+    "^Your baggage receipt \\d{10} for ",
+    "^Your (?:booking|ticket) confirmation",
+    "Lufthansa"
+  ],
+  "strip_regex": [
+    "<h2[^>]*>\\s*Your entire journey in one app[\\s\\S]*?To the app\\s*</span>\\s*</strong>\\s*</a>\\s*</span>",
+    "<t[dr][^>]*>[\\s\\S]{0,2000}?How would you rate the helpfulness of this email\\?[\\s\\S]*?</t[dr]>",
+    "<t[dr][^>]*>[\\s\\S]{0,2000}?Assistance should you need it[\\s\\S]*?Report damaged baggage[\\s\\S]{0,400}?</t[dr]>",
+    ">\\s*(?:Lufthansa Group Notification|Thank you for flying with us|Please do not reply to this email\\.)\\s*<",
+    "<a[^>]*>(?:(?!</a>)[\\s\\S])*?(?:Lufthansa\\.com|Help and contact|Privacy statement|Imprint)(?:(?!</a>)[\\s\\S])*?</a>",
+    "<tr[^>]*>(?:(?!<tr\\b)[\\s\\S])*?Corporate Headquarters:[\\s\\S]*?MID:\\s*\\d+[\\s\\S]{0,400}?</tr>"
+  ],
+  "unwrap_links_matching": [
+    "click\\.",
+    "/track",
+    "utm_",
+    "email\\.",
+    "my\\.information\\.lufthansa\\.com"
+  ],
+  "amount_regex": null,
+  "date_regex": ">\\s*(\\d{1,2}\\s+[A-Z][a-z]+\\s+\\d{4})\\s*</[a-z]+>\\s*(?:<[^>]+>\\s*)*Drop off date",
+  "notes": "Removed from a Lufthansa service mail: the app download banner, the rate this email feedback widget, the assistance and report damaged baggage call to action, the preheader lines, the service and contact link row, and the corporate footer carrying the registered office, the executive board and the court registration. Kept verbatim: the baggage tag number and its status, the drop off date, the itinerary block with flight number, departure and arrival codes, cities and dates, and the passenger line. Known gap: the sample is a baggage receipt, which is receipt shaped but carries no monetary amount at all, so amount_regex is null. Treat this folder as the Lufthansa layout reference. A Lufthansa document that does carry a price puts it in a right aligned cell after its label, in the same shape the Lufthansa Group templates use everywhere."
+}

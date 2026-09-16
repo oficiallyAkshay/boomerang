@@ -1,19 +1,40 @@
 {
   "name": "lyft",
   "display": "Lyft",
-  "sender_domains": ["lyftmail.com", "lyft.com"],
+  "sender_domains": [
+    "lyftmail.com",
+    "lyft.com"
+  ],
   "subject_patterns": [
     "^Your ride with ",
-    "^Your Lyft ride receipt",
-    "^Here'?s your ride receipt"
+    "^Receipt for your cancelled ride$",
+    "^Your Lyft ride receipt"
   ],
   "strip_regex": [
-    "<tr[^>]*>(?:(?!</tr>).)*?(?:ride pass|Add a tip|Lyft Cash back|100% of tips go to drivers|Promos-Large)(?:(?!</tr>).)*?</tr>",
-    "<tr[^>]*>(?:(?!</tr>).)*?Ride History(?:(?!</tr>).)*?</tr>",
-    "<tr[^>]*>(?:(?!</tr>).)*?CPUC ID No(?:(?!</tr>).)*?</tr>"
+    "<table[^>]*>(?:(?!<table)[\\s\\S])*?<a[^>]*>\\s*Add tip\\s*</a>[\\s\\S]{0,600}?</tr>\\s*</table>",
+    "100% of tips go to drivers\\.",
+    "<tr[^>]*>\\s*<td[^>]*>\\s*<h1[^>]*>\\s*How Lyft prioritizes your safety\\s*</h1>\\s*</td>\\s*</tr>",
+    "<table[^>]*>(?:(?!<table)[\\s\\S])*?Every Lyft ride has built-in safety[\\s\\S]*?</table>",
+    "<tr[^>]*>(?:(?!<tr\\b)[\\s\\S])*?Ride safety summary[\\s\\S]*?with your ride experience\\s*</td>\\s*</tr>",
+    "<tr[^>]*>(?:(?!<tr\\b)[\\s\\S])*?Rides = rewards[\\s\\S]*?Terms apply[\\s\\S]*?</div>\\s*</td>\\s*</tr>",
+    "<table[^>]*>(?:(?!<table)[\\s\\S])*?Get help and more[\\s\\S]{0,300}?</table>",
+    "<a[^>]*>\\s*(?:Tip driver|Find lost item|Report incident|Dispute ride charges|Help center)\\s*</a>",
+    "To protect against unauthorized behavior[\\s\\S]*?will not be charged\\.",
+    "<img[^>]*src=\\\"https://api\\.lyft\\.com/[^\\\"]*\\\"[^>]*>",
+    "(?:©|&copy;)\\s*OpenStreetMap",
+    "<div class=\\\"h-expense-transaction\\\"[\\s\\S]*?</div>",
+    "Dispatching Base:[\\s\\S]*?please call 311\\.",
+    "(?:©|&copy;|&#169;)\\s*\\d{4} Lyft, Inc\\.[\\s\\S]*?CPUC ID No\\.[^<]*</a>",
+    "Select 'You' on the home screen in the Lyft app[\\s\\S]*?additional help\\."
   ],
-  "unwrap_links_matching": ["click\\.", "/track", "utm_", "email\\."],
-  "amount_regex": "Total</td>\\s*<td[^>]*>\\s*(-?\\$[\\d,]+\\.\\d{2})",
-  "date_regex": "((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,\\s*[A-Z][a-z]+\\s+\\d{1,2},\\s+\\d{4})",
-  "notes": "Removed from a Lyft ride receipt: the ride pass and Lyft Cash promo rows, the add a tip module, and the two footer blocks that carry the in app help pointer and the California regulator registration. Kept verbatim: the fare table with every line and the total, the payment line, the pickup and dropoff rows, the driver thanks line and the ride date."
+  "unwrap_links_matching": [
+    "click\\.",
+    "/track",
+    "utm_",
+    "email\\.",
+    "lyftmail\\.com"
+  ],
+  "amount_regex": "<span class=\"p-amount\">([\\d,]+\\.\\d{2})</span>",
+  "date_regex": "YOUR RIDE TO .{0,160}? ON ([A-Z]+ \\d{1,2}, \\d{4})",
+  "notes": "Removed from a Lyft ride receipt: both tip controls, which are the header Add tip button and the footer Tip driver button; the safety marketing block and the ride safety summary widget, both live controls rather than a record; the credit card rewards promo; the get help link cluster; the authorization hold notice; the static route map, whose URL carries the route geometry, and the OpenStreetMap credit it leaves behind; the hidden expense microdata block, which repeats the total and carries the recipient address; the regulatory licence block naming the dispatching base, the vehicle plate and the driver licence; the copyright and CPUC footer; and the Lyft app instruction block. Kept verbatim: the fare breakdown with its distance and duration label, every surcharge and toll row, both tender rows and their Upfront Fare sublabels, the pickup and dropoff rows with their times and addresses, and the receipt number. Lyft prints no Total row, so amount_regex reads the charged total from the hidden microdata block, which is parsed from the saved message before the message is cleaned for rendering; the date comes from the visible headline banner, which is kept."
 }

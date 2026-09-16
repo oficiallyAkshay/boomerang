@@ -1,0 +1,63 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 2 /Kids [5 0 R 7 0 R] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length 184 >>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+16 TL
+(Harborview Hotel folio page 1 of 2) Tj T*
+(Guest Jordan Rivera) Tj T*
+(Night 1, Monday June 8, 2026) Tj T*
+(Room $231.11) Tj T*
+(Room tax $19.36) Tj T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 256 >>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+16 TL
+(Harborview Hotel folio page 2 of 2) Tj T*
+(Guest Jordan Rivera) Tj T*
+(Night 2, Tuesday June 9, 2026) Tj T*
+(Room $231.11) Tj T*
+(Room tax $19.36) Tj T*
+(Room and tax total $500.95) Tj T*
+(Charged to Visa ending 4321) Tj T*
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000426 00000 n 
+0000000552 00000 n 
+0000000859 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+985
+%%EOF
