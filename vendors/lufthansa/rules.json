@@ -12,11 +12,11 @@
     "Lufthansa"
   ],
   "strip_regex": [
-    "<h2[^>]*>\\s*Your entire journey in one app[\\s\\S]*?To the app\\s*</span>\\s*</strong>\\s*</a>\\s*</span>",
-    "<t[dr][^>]*>[\\s\\S]{0,2000}?How would you rate the helpfulness of this email\\?[\\s\\S]*?</t[dr]>",
-    "<t[dr][^>]*>[\\s\\S]{0,2000}?Assistance should you need it[\\s\\S]*?Report damaged baggage[\\s\\S]{0,400}?</t[dr]>",
+    "<h2[^>]*>\\s*Your entire journey in one app\\s*</h2>\\s*<table[^>]*component-name=\"teaser-a-content\"[^>]*>(?:[\\s\\S]*?</table>){8}",
+    "<table[^>]*component-name=\"get-feedback\"[^>]*>(?=[\\s\\S]{0,800}How would you rate the helpfulness of this email\\?)(?:[\\s\\S]*?</table>){2}",
+    "<table[^>]*component-name=\"quick-services\"[^>]*>(?=[\\s\\S]{0,800}Assistance should you need it)(?:[\\s\\S]*?</table>){2}",
     ">\\s*(?:Lufthansa Group Notification|Thank you for flying with us|Please do not reply to this email\\.)\\s*<",
-    "<a[^>]*>(?:(?!</a>)[\\s\\S])*?(?:Lufthansa\\.com|Help and contact|Privacy statement|Imprint)(?:(?!</a>)[\\s\\S])*?</a>",
+    "<a[^>]*>(?:(?!</?a\\b)[\\s\\S])*?>\\s*(?:Lufthansa\\.com|Help and contact|Privacy statement|Imprint)\\s*<(?:(?!</?a\\b)[\\s\\S])*?</a>",
     "<tr[^>]*>(?:(?!<tr\\b)[\\s\\S])*?Corporate Headquarters:[\\s\\S]*?MID:\\s*\\d+[\\s\\S]{0,400}?</tr>"
   ],
   "unwrap_links_matching": [

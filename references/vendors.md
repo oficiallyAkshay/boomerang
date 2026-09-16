@@ -107,8 +107,10 @@ dropoff rows, the product tier, and the payment rows with the card last four
 and the charge posting time. Removed: the app download and Download PDF
 buttons; the static map image, whose query string carries the pickup and
 dropoff coordinates; the social link row; the corporate address footer and the
-account and terms link cluster; and the support, lost item and help modules.
-Two patterns are written and then skipped, so both of their blocks stay. The
+account and terms link cluster; and the support panels, which are matched at
+the wrapper that holds them, so the need help and forgot something headings and
+their messages go with the buttons instead of being left behind them. Two
+patterns are written and then skipped, so both of their blocks stay. The
 Uber One cashback strip prints the $1.18 it credited, which is a figure on a
 real receipt. The rate and tip module prints the driver's 4.92 rating, which
 is not money but has the shape of money, and the amount guard does not gamble
@@ -127,8 +129,9 @@ completed timestamp, both tender rows when a voucher and a card split the bill,
 and the card last four. Removed: the rate and tip block for the courier; the
 app download and Download PDF buttons; the merchant and dish photography, whose
 paths identify the real merchant; the social link row; the corporate address
-footer and the account and terms link cluster; and the support modules. The
-Uber One savings strip stays, because it prints the $14.55 it saved and the
+footer and the account and terms link cluster; and the support panel, taken at
+the wrapper that holds it so its heading and its message go with the button.
+The Uber One savings strip stays, because it prints the $14.55 it saved and the
 amount guard will not take an amount out of a receipt. Uber Eats and Uber ride
 mail share the sender domain uber.com, so the domain alone cannot name the
 folder: detection prefers the vendor whose subject patterns fit as well as its
@@ -140,9 +143,11 @@ A Marriott stay confirmation keeps the property name and address, the
 confirmation number, the check-in and check-out dates and times, the room
 description, the rate line, the summary of charges, the taxes and fees line,
 and the cancellation terms with their deadline. Removed: the cardmember bonus
-points offer, the app download banner, the loyalty tier and points balance
-strip, the Epsilon and Adobe tracking pixels, the hidden preheader, the Manage
-Stay and Go Now buttons, the footer link row, the unsubscribe and programme
+points offer and the app download banner, each taken as the whole banner table,
+so the check-in on the go, unlock your room and message the front desk lines go
+with the banner rather than being left behind it; the loyalty tier and points
+balance strip, the Epsilon and Adobe tracking pixels, the hidden preheader, the
+Manage Stay and Go Now buttons, the footer link row, the unsubscribe and programme
 terms block, the copyright and proprietary notice, and the confirmation
 authenticity boilerplate. Known gap: this sample is a points redemption stay,
 so its total is a points figure and there is no cash amount and no card last

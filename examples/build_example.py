@@ -17,6 +17,12 @@ The claim is built the way the skill says to build it.
   prints a tip, the tip comes off and the line says so, because policy leaves
   tips out. Where something other than the traveller's card paid part of a
   bill, the claim is the card tender and the line says so.
+- Every day label is the date the receipts filed under it print. The samples
+  were scrubbed one vendor at a time, so their dates do not fall into a tidy
+  three day trip, and the window here is the one the receipts describe rather
+  than a neater one invented over the top of them. Two claimed receipts print
+  no date anywhere, the DoorDash final receipt and the photographed day pass,
+  and each sits under the day its message header carries, which its line says.
 - Four receipts are in the packet with no line beside them, because they show a
   charge nobody can claim: the United eTicket was paid with the value of a
   previous ticket, the Lufthansa receipt is a baggage drop-off with no amount
@@ -84,7 +90,7 @@ MAX_CACHE_BYTES = 1_500 * 1024
 
 COMPANY = "Northwind Labs, Inc."
 TRAVELER = "Jordan Rivera"
-TRIP = "AUS to SEA onsite, June 8 to 10, 2026"
+TRIP = "AUS to SEA onsite, June 8 to 16, 2026"
 
 # Receipt ids, one per receipt. Generated once with secrets.token_hex(8) and
 # frozen here, so a rebuild writes the same file names and the same packet.
@@ -120,22 +126,22 @@ SOURCES = [
         "uber_ride",
         VENDORS / "uber" / "sample.html",
         "Uber Receipts <noreply@uber.com>",
-        "Your Monday evening trip with Uber",
-        "Mon, 8 Jun 2026 21:12:00 -0500",
+        "Your Thursday evening trip with Uber",
+        "Thu, 11 Jun 2026 21:12:00 -0500",
     ),
     (
         "united_wifi",
         VENDORS / "united" / "sample-wifi.html",
         "United Airlines <Receipts@united.com>",
         "Thanks for your purchase with United",
-        "Mon, 8 Jun 2026 23:41:00 -0500",
+        "Tue, 16 Jun 2026 23:41:00 -0500",
     ),
     (
         "doordash",
         VENDORS / "doordash" / "sample.html",
         "DoorDash <no-reply@doordash.com>",
         "Final receipt for Jordan from Northgate Market",
-        "Mon, 8 Jun 2026 20:02:00 -0700",
+        "Thu, 11 Jun 2026 20:02:00 -0700",
     ),
     (
         "marriott",
@@ -149,7 +155,7 @@ SOURCES = [
         VENDORS / "plaintext" / "sample.txt",
         "citizenM <noreply@an-unlisted-inn.example>",
         "Open me to get your citizenM invoice",
-        "Wed, 10 Jun 2026 11:05:00 -0500",
+        "Tue, 16 Jun 2026 11:05:00 -0500",
     ),
     (
         "folio",
@@ -162,43 +168,43 @@ SOURCES = [
         "uber_eats",
         VENDORS / "uber-eats" / "sample.html",
         "Uber Eats <noreply@uber.com>",
-        "Your Tuesday morning order with Uber Eats",
-        "Tue, 9 Jun 2026 13:35:00 -0500",
+        "Your Friday afternoon order with Uber Eats",
+        "Fri, 12 Jun 2026 13:35:00 -0500",
     ),
     (
         "njtransit",
         VENDORS / "njtransit" / "sample.html",
         "NJ TRANSIT <noreply@mytix.njtransit.com>",
         "NJ TRANSIT - Receipt",
-        "Tue, 9 Jun 2026 08:44:00 -0500",
+        "Mon, 15 Jun 2026 08:44:00 -0500",
     ),
     (
         "transit",
         None,
         "Jordan Rivera <traveller@an-unlisted-inbox.example>",
         "Photo of the day pass",
-        "Tue, 9 Jun 2026 09:02:00 -0500",
+        "Fri, 12 Jun 2026 09:02:00 -0500",
     ),
     (
         "stripe",
         VENDORS / "stripe" / "sample.html",
         "Northgate Labs <invoice+statements@stripe.com>",
         "Your receipt from Northgate Labs Inc. #4106-8823",
-        "Tue, 9 Jun 2026 14:20:00 -0500",
+        "Thu, 11 Jun 2026 14:20:00 -0500",
     ),
     (
         "lufthansa",
         VENDORS / "lufthansa" / "sample.html",
         "Lufthansa <flight.service@information.lufthansa.com>",
-        "Your baggage receipt 4783120956 for Austin - Seattle on 8. June 2026",
-        "Mon, 8 Jun 2026 18:05:00 -0500",
+        "Your baggage receipt 4783120956 for Austin - Seattle on 15. June 2026",
+        "Mon, 15 Jun 2026 17:05:00 -0500",
     ),
     (
         "lyft",
         VENDORS / "lyft" / "sample.html",
         "Lyft <no-reply@lyftmail.com>",
-        "Your ride with Nadia on June 10",
-        "Wed, 10 Jun 2026 19:22:00 -0500",
+        "Your ride with Nadia on June 15",
+        "Mon, 15 Jun 2026 18:45:00 -0500",
     ),
 ]
 
@@ -212,12 +218,12 @@ TITLES = {
     "marriott": "Stay confirmation, points redemption",
     "citizenm": "Invoice notice from the property",
     "folio": "Folio, 2 nights",
-    "uber_eats": "Team breakfast order",
+    "uber_eats": "Team lunch order",
     "njtransit": "Bus fare, one way",
     "transit": "Day pass, photo receipt",
     "stripe": "Software licence for the onsite",
     "lufthansa": "Baggage receipt, checked bag",
-    "lyft": "Ride, hotel to airport",
+    "lyft": "Ride, office to hotel",
 }
 
 VENDOR_LABELS = {
@@ -236,44 +242,67 @@ VENDOR_LABELS = {
     "lyft": "Lyft",
 }
 
-# Every claimed amount below is printed on the receipt it points at.
-#   uber_ride    34.86  the charged total
-#   united_wifi  10.99  the charged total
+# Every claimed amount below is printed on the receipt it points at, and every
+# day here is the date that receipt prints. The right hand column is where the
+# date was read: a vendor's own date_regex, the body of a receipt that has no
+# pattern, or the message header for the two that print no date at all.
+#   uber_ride    34.86  the charged total          Jun 11, date_regex
+#   stripe       54.11  the amount paid            Jun 11, date_regex
 #   doordash     50.91  54.91 charged, less the 4.00 Dasher tip, tips out
+#                                                  Jun 11, message header
 #   uber_eats    73.60  88.60 ordered, less the 15.00 voucher, card tender
-#   njtransit     4.75  the charged total
+#                                                  Jun 12, date_regex
 #   transit       6.71  the figure on the photographed pass
-#   stripe       54.11  the amount paid
-#   folio       500.95  room and tax for two nights, from the folio total
+#                                                  Jun 12, message header
+#   njtransit     4.75  the charged total          Jun 15, date_regex
 #   lyft         22.27  40.67 charged, less 18.40 of Lyft Cash, card tender
+#                                                  Jun 15, date_regex
+#   united_wifi  10.99  the charged total          Jun 16, date_regex
+#   folio       500.95  room and tax for two nights, from the folio total
+#                                                  Jun 8, printed on page 1
 DAYS = [
     {
-        "label": "Monday, June 8, travel out",
+        "label": "Monday, June 8, hotel nights billed",
         "items": [
-            ("Ride, home to airport", 34.86, "uber_ride"),
-            ("Inflight Wi-Fi", 10.99, "united_wifi"),
-            ("Groceries to the hotel, tip out", 50.91, "doordash"),
-        ],
-    },
-    {
-        "label": "Tuesday, June 9, working day",
-        "items": [
-            ("Team breakfast, voucher netted out", 73.60, "uber_eats"),
-            ("Bus fare, hotel to office", 4.75, "njtransit"),
-            ("Transit day pass", 6.71, "transit"),
-            ("Software licence for the onsite", 54.11, "stripe"),
             ("Room and tax, 2 nights", 500.95, "folio"),
         ],
     },
     {
-        "label": "Wednesday, June 10, personal day, airport leg kept",
+        "label": "Thursday, June 11, travel out",
         "items": [
-            ("Ride, hotel to airport, Lyft Cash netted out", 22.27, "lyft"),
+            ("Ride, home to airport", 34.86, "uber_ride"),
+            ("Software licence for the onsite", 54.11, "stripe"),
+            ("Groceries to the hotel, tip out, dated by the message header", 50.91, "doordash"),
+        ],
+    },
+    {
+        "label": "Friday, June 12, working day",
+        "items": [
+            ("Team lunch, voucher netted out", 73.60, "uber_eats"),
+            ("Transit day pass, dated by the message header", 6.71, "transit"),
+        ],
+    },
+    {
+        "label": "Monday, June 15, working day",
+        "items": [
+            ("Bus fare, hotel to office", 4.75, "njtransit"),
+            ("Ride, office to hotel, Lyft Cash netted out", 22.27, "lyft"),
+        ],
+    },
+    {
+        "label": "Tuesday, June 16, personal day, flight home kept",
+        "items": [
+            ("Inflight Wi-Fi", 10.99, "united_wifi"),
         ],
     },
 ]
 
-STIPEND = {"desc": "Meal stipend, 1 day worked", "amt": 75.00}
+STIPEND = {"desc": "Meal stipend, 2 days worked", "amt": 75.00}
+
+# The summary table runs to two pages. Five days of claim lines, the stipend
+# and the total no longer fit on one Letter page, and the receipts that follow
+# are still one per page, which is the count render_pdf is asked to hold to.
+SUMMARY_PAGES = 2
 
 TEXT_SUFFIXES = {".html", ".txt"}
 
@@ -446,7 +475,7 @@ def clean_receipts(receipts: Path, cleaned: Path, cache: Path, fetch: bool) -> l
 def build_packet(data_path: Path, cleaned: Path, out_html: Path, out_pdf: Path) -> int:
     """build, render_pdf, attach_pdf. Returns the final page count."""
     run("build", str(data_path), "--receipts", str(cleaned), "--out", str(out_html))
-    expected = 1 + len(SOURCES)
+    expected = SUMMARY_PAGES + len(SOURCES)
     with tempfile.TemporaryDirectory() as raw:
         rendered = Path(raw) / "rendered.pdf"
         run("render_pdf", str(out_html), str(rendered), "--expect", str(expected))

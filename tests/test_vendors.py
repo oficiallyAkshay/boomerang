@@ -6,8 +6,9 @@ replaced before the file reached this repository. They are static files, not
 generated, so these tests are what keeps a rules.json honest about the markup
 it claims to describe.
 
-Four things are proved here for each folder. Every strip pattern matches the
+Five things are proved here for each folder. Every strip pattern matches the
 sample, unless the folder's notes say the module is absent from it. Every
+strip pattern takes a whole element with it and never half of one. Every
 amount and date pattern that is not null captures on the sample. Cleaning the
 sample leaves the money alone, drops every script and leaves no inline event
 handler. And a From header built from the folder's first sender domain, with
@@ -35,6 +36,11 @@ FOLDERS = sorted(path.name for path in VENDORS_DIR.iterdir() if (path / "rules.j
 # A bare 12.34 is not counted, because stylesheets are full of them.
 MONEY_RE = re.compile(r"(?:[$£€₹]\s?\d[\d,]*\.\d{2})|(?:\b\d[\d,]*\.\d{2}\s?(?:USD|EUR|GBP|CHF))")
 HANDLER_RE = re.compile(r"\son\w+\s*=", re.I)
+
+# Every tag in a fragment, open or close, with the element name in group two.
+TAG_RE = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9]*)\b[^>]*?(/?)>", re.S)
+# Elements that carry no closing tag, so counting them would never balance.
+VOID_ELEMENTS = frozenset("img br hr meta link input source track wbr col".split())
 
 # A From header and a subject line per folder, in the shape that vendor sends.
 # Every one of them resolves to its own folder, including the two that share a
@@ -157,6 +163,52 @@ def test_every_strip_pattern_is_proven_on_the_sample(folder: str, rules: dict) -
             f"{folder} carries {len(unmatched)} strip patterns that match no sample "
             "and says nothing about it in notes"
         )
+
+
+def tag_balance(fragment: str) -> dict[str, int]:
+    """Opens minus closes per element name, for every name that does not balance.
+
+    Void elements are skipped, and so is a tag that closes itself, because
+    neither of them is ever waiting for a closing tag.
+    """
+    counts: collections.Counter[str] = collections.Counter()
+    for closing, name, self_closing in TAG_RE.findall(fragment):
+        element = name.lower()
+        if element in VOID_ELEMENTS or self_closing:
+            continue
+        counts[element] += -1 if closing else 1
+    return {element: count for element, count in counts.items() if count}
+
+
+@pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
+def test_every_strip_pattern_removes_a_whole_element(folder: str, rules: dict) -> None:
+    """Whatever a strip pattern takes out, it takes out entire.
+
+    A pattern written as an opening tag and a lazy run to the first closing
+    tag stops at the first nested close, not at its own, and what it leaves
+    behind is an opening tag with nothing to close it. The receipt after that
+    is markup a browser has to guess at, and a packet built from a guess puts
+    a vendor's table around the next vendor's receipt.
+
+    So every match is counted: opens minus closes, per element name. A match
+    that balances took a whole element, or a run of whole elements. A match
+    that does not is a half element and the pattern has to be rewritten.
+
+    The counting runs on the sample with its comments taken out, which is the
+    text ``clean.clean_html`` hands the patterns. Conditional comments are the
+    reason: a Lufthansa or DoorDash template opens a table inside
+    ``<!--[if mso]>`` and closes it inside a second comment further down, and
+    tags that only Outlook ever sees are not tags this has any business
+    counting.
+    """
+    for name, raw in samples_for(folder).items():
+        text = clean.COMMENT_RE.sub("", raw)
+        for index, pattern in enumerate(rules[folder]["strip_regex"]):
+            for match in re.finditer(pattern, text, re.S | re.I):
+                assert not tag_balance(match.group(0)), (
+                    f"{folder}/{name} strip pattern {index} matched a half element, "
+                    f"leaving {tag_balance(match.group(0))} unclosed"
+                )
 
 
 @pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
