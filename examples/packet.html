@@ -615,12 +615,12 @@ src: none format('woff2'), none format('woff'), none format('truetype'), none fo
 .rc.r5 img{
  margin: 0 !important;
 }
-.rc.r5 /* Forces Outlook to honor line-height */
-div, .rc.r5 p, .rc.r5 a, .rc.r5 li, .rc.r5 td, .rc.r5 span{
+/* Forces Outlook to honor line-height */
+.rc.r5 div, .rc.r5 p, .rc.r5 a, .rc.r5 li, .rc.r5 td, .rc.r5 span{
  -webkit-text-size-adjust: none;
 }
-.rc.r5 /* button styles*/
-*[class=cta_button], .rc.r5 td.cta_button{
+/* button styles*/
+.rc.r5 *[class=cta_button], .rc.r5 td.cta_button{
 height: 51px;
 border-radius: 52px;
 padding: 0px 22px 0px 22px;
@@ -631,12 +631,12 @@ border-radius: 32px;
 padding:10px 16px 10px 16px;
 }
 
-.rc.r5 /* Hides preheader on Outlook */
-.set_outlook_hidden{
+/* Hides preheader on Outlook */
+.rc.r5 .set_outlook_hidden{
  display: none !important;
 }
-.rc.r5 /* Overrides blue links */
-a[x-apple-data-detectors]{
+/* Overrides blue links */
+.rc.r5 a[x-apple-data-detectors]{
  color: inherit !important;
  text-decoration: none !important;
  font-size: inherit !important;
@@ -644,8 +644,8 @@ a[x-apple-data-detectors]{
  font-weight: inherit !important;
  line-height: inherit !important;
 }
-.rc.r5 /* Default superscript code */
-.sup{
+/* Default superscript code */
+.rc.r5 .sup{
  -webkit-text-size-adjust: none;
  vertical-align: text-top .6em;
  line-height: .6em;
@@ -657,18 +657,18 @@ color: inherit !important;
 .rc.r5 .yshortcuts a{
  border-bottom: none !important;
 }
-.rc.r5 /* Renders TH on yahoo */
-.undoreset th{
+/* Renders TH on yahoo */
+.rc.r5 .undoreset th{
  padding: 1px !important;
 }
 
-.rc.r5 /* STYLES FOR ROUNDED BORDER BUTTONS */
-@media screen and (max-device-width: 600px), .rc.r5 screen and (max-width: 600px){
-.wrapto100pc {
+/* STYLES FOR ROUNDED BORDER BUTTONS */
+@media screen and (max-device-width: 600px), screen and (max-width: 600px) {
+.rc.r5 .wrapto100pc{
  width: 100% !important;
  height: auto !important;
 }
-.nomob_rounded {
+.rc.r5 .nomob_rounded{
  display: none !important;
  width: 0px !important;
  height: 0px !important;
@@ -694,37 +694,37 @@ color: inherit !important;
  display: none !important;
 }
 
-.rc.r5 /* STYLES FOR MOBILE */
-@media only screen and (max-width: 480px){
+/* STYLES FOR MOBILE */
+@media only screen and (max-width: 480px) {
 /* Targets Gmail */
-u ~ div .full-wrap {
+.rc.r5 u ~ div .full-wrap{
  min-width: 100vw;
 }
-*[class�ntertext], .centertext {
+.rc.r5 *[class�ntertext], .rc.r5 .centertext{
 text-align: center !important;
 }
 
-*[class=ctacntr], .ctacntr {
+.rc.r5 *[class=ctacntr], .rc.r5 .ctacntr{
 margin: 0 auto !important;
 }
 
-*[class=drop], .drop {
+.rc.r5 *[class=drop], .rc.r5 .drop{
 float: inherit!important;
 width: 100% !important;
 display: block !important;
 text-align: inherit !important;
 }
-.wid150 {
+.rc.r5 .wid150{
 width: 142px !important;
 }
 
 
 /* Targets Gmail on Android */
-div > u ~ div .full-wrap {
+.rc.r5 div > u ~ div .full-wrap{
  min-width: 100%;
 }
 /* SHOW ON MOBILE */
-.mobile_show {
+.rc.r5 .mobile_show{
  display: block !important;
  width: auto !important;
  overflow: visible !important;
@@ -734,357 +734,357 @@ div > u ~ div .full-wrap {
  height: auto !important;
 }
 /* HIDE ON MOBILE */
-.nomob, .hide {
+.rc.r5 .nomob, .rc.r5 .hide{
  display: none !important; height: 0px !important; font-size: 0px !important; line-height: 0px !important;
 }
-.show {
+.rc.r5 .show{
  display: block !important;
 }
-.bgAdjust {
+.rc.r5 .bgAdjust{
  background-position: top center;
 }
 /* ALIGNS OBJECTS ON MOBILE */
-.center {
+.rc.r5 .center{
  text-align: center !important;
 }
-.left {
+.rc.r5 .left{
  text-align: left !important;
 }
-.right {
+.rc.r5 .right{
  text-align: right !important;
 }
-.mx-auto {
+.rc.r5 .mx-auto{
  margin: 0 auto !important;
 }
 /* WRAP & RESIZE ON MOBILE */
-.wrap {
+.rc.r5 .wrap{
  width: 100% !important;
  height: auto !important;
  min-width: 100% !important;
 }
-.resize280 {
+.rc.r5 .resize280{
  width: 280px !important;
  height: auto !important;
 }
 /* SPLIT COLUMNS ON MOBILE */
-.colsplit {
+.rc.r5 .colsplit{
  width: 100% !important;
  float: inherit !important;
  display: block !important;
  background-position: top center !important;
 }
 /* STACK IMAGE TOP OR BOTTOM ON MOBILE */
-th.topstack {
+.rc.r5 th.topstack{
  display: table-header-group!important;
 }
-th.botstack {
+.rc.r5 th.botstack{
  display: table-footer-group!important;
 }
-.border-radius-15b {
+.rc.r5 .border-radius-15b{
 	border-radius: 0px 0px 15px 15px !important;
 }
 /* MOBILE PADDING STYLES - 0 or 20 */
-.pad0 {
+.rc.r5 .pad0{
  padding: 0px !important;
 }
-.pad0t {
+.rc.r5 .pad0t{
  padding-top: 0px !important;
 }
-.pad0r {
+.rc.r5 .pad0r{
  padding-right: 0px !important;
 }
-.padr25 {
+.rc.r5 .padr25{
  padding-right: 68px !important;
 }
-.pad0b {
+.rc.r5 .pad0b{
  padding-bottom: 0px !important;
 }
-.pad0l {
+.rc.r5 .pad0l{
  padding-left: 0px !important;
 }
-.padl25 {
+.rc.r5 .padl25{
  padding-left: 25px !important;
 }
-.pad0rl {
+.rc.r5 .pad0rl{
  padding-right: 0px !important;
  padding-left: 0px !important;
 }
-.pad0tb {
+.rc.r5 .pad0tb{
  padding-top: 0px !important;
  padding-bottom: 0px !important;
 }
-.pad20 {
+.rc.r5 .pad20{
  padding: 20px !important;
 }
-.pad5t {
+.rc.r5 .pad5t{
  padding-top: 5px !important;
 }
-.pad10t {
+.rc.r5 .pad10t{
  padding-top: 10px !important;
 }
-.pad15tb {
+.rc.r5 .pad15tb{
  padding-top: 15px !important;
  padding-bottom: 15px !important;
 }
-.pad15ta {
+.rc.r5 .pad15ta{
  padding-top: 13px !important;
  padding-bottom: 18px !important;
 }
-.pad32tb {
+.rc.r5 .pad32tb{
  padding-top: 32px !important;
  padding-bottom: 32px !important;
 }
-.pad13t {
+.rc.r5 .pad13t{
  padding-top: 13px !important;
 }
-.pad15t {
+.rc.r5 .pad15t{
  padding-top: 15px !important;
 }
-.pad20t {
+.rc.r5 .pad20t{
  padding-top: 20px !important;
 }
-.pad22t {
+.rc.r5 .pad22t{
  padding-top: 22px !important;
 }
-.pad25t {
+.rc.r5 .pad25t{
  padding-top: 25px !important;
 }
-.pad30t {
+.rc.r5 .pad30t{
  padding-top: 30px !important;
 }
-.pad32t {
+.rc.r5 .pad32t{
  padding-top: 32px !important;
 }
-.pad35t {
+.rc.r5 .pad35t{
  padding-top: 35px !important;
 }
-.pad47t {
+.rc.r5 .pad47t{
  padding-top: 47px !important;
 }
-.pad57t {
+.rc.r5 .pad57t{
  padding-top: 60px !important;
 }
-.pad75t {
+.rc.r5 .pad75t{
  padding-top: 85px !important;
 }
-.pad80t {
+.rc.r5 .pad80t{
  padding-top: 80px !important;
 }
-.pad20r {
+.rc.r5 .pad20r{
  padding-right: 20px !important;
 }
-.pad60r {
+.rc.r5 .pad60r{
  padding-right: 60px !important;
 }
-.pad15b {
+.rc.r5 .pad15b{
  padding-bottom: 15px !important;
 }
-.pad20b {
+.rc.r5 .pad20b{
  padding-bottom: 20px !important;
 }
-.pad25b {
+.rc.r5 .pad25b{
  padding-bottom: 25px !important;
 }
-.pad28b {
+.rc.r5 .pad28b{
  padding-bottom: 28px !important;
 }
-.pad32b {
+.rc.r5 .pad32b{
  padding-bottom: 32px !important;
 }
-.pad38b {
+.rc.r5 .pad38b{
  padding-bottom: 35px !important;
 }
-.pad20l {
+.rc.r5 .pad20l{
  padding-left: 20px !important;
 }
-.pad45l {
+.rc.r5 .pad45l{
  padding-left: 20px !important;
 }
-.pad16rl {
+.rc.r5 .pad16rl{
  padding-right: 16px !important;
  padding-left: 16px !important;
 }
-.pad20rl {
+.rc.r5 .pad20rl{
  padding-right: 20px !important;
  padding-left: 20px !important;
 }
-.pad25rl {
+.rc.r5 .pad25rl{
  padding-right: 25px !important;
  padding-left: 25px !important;
 }
-.pad30rl {
+.rc.r5 .pad30rl{
  padding-right: 30px !important;
  padding-left: 30px !important;
 }
-.pad40rl {
+.rc.r5 .pad40rl{
  padding-right: 40px !important;
  padding-left: 40px !important;
 }
-.pad40rl {
+.rc.r5 .pad40rl{
  padding-right: 40px !important;
  padding-left: 40px !important;
 }
-.pad50rl {
+.rc.r5 .pad50rl{
  padding-right: 60px !important;
  padding-left: 60px !important;
 }
-.pad70rl {
+.rc.r5 .pad70rl{
  padding-right: 70px !important;
  padding-left: 70px !important;
 }
-.padl40r50 {
+.rc.r5 .padl40r50{
  padding-right: 100px !important;
  padding-left: 60px !important;
 }
-.pad20tb {
+.rc.r5 .pad20tb{
  padding-top: 20px !important;
  padding-bottom: 20px !important;
 }
-.fz15 {
+.rc.r5 .fz15{
  font-size: 15px !important;
  line-height: 19px !important;
 }
-.fz35 {
+.rc.r5 .fz35{
  font-size: 35px !important;
  line-height: 39px !important;
 }
-.fz30 {
+.rc.r5 .fz30{
  font-size: 30px !important;
  line-height: 38px !important;
 }
 /* MOBILE FONT STYLES */
-.wid285 {
+.rc.r5 .wid285{
  width: 285px !important;
  min-width: 285px !important;
 }
 /* ADD CUSTOM CSS STYLES */
-.height308 {
+.rc.r5 .height308{
  height: 308px !important;
 }
-.wid270 {
+.rc.r5 .wid270{
  width: 270px !important;
  min-width: 270px !important;
 }
-.wid170 {
+.rc.r5 .wid170{
  width: 170px !important;
  min-width: 170px !important;
 }
-.pad20rla {
+.rc.r5 .pad20rla{
  padding-right: 11px !important;
  padding-left: 11px !important;
 }
-.borderright {
+.rc.r5 .borderright{
  border-right: 1px solid #EEEEEE !important;
 }
-.borderleft1d {
+.rc.r5 .borderleft1d{
  border-left: 1px solid #D3D3D3 !important;
 }
-.borderright1d {
+.rc.r5 .borderright1d{
  border-right: 1px solid #D3D3D3 !important;
 }
-.borderbottom {
+.rc.r5 .borderbottom{
  border-bottom: 1px solid #EEEEEE !important;
 }
-.bordertop0 {
+.rc.r5 .bordertop0{
  border-top: 0px solid !important;
 }
-.borderbot0 {
+.rc.r5 .borderbot0{
  border-bottom: 0px solid !important;
 }
-.wid1 {
+.rc.r5 .wid1{
  width: 1px !important;
 }
-.wid128 {
+.rc.r5 .wid128{
  width: 128px !important;
 }
-.wid352 {
+.rc.r5 .wid352{
  width: 352px !important;
 }
-.wid328 {
+.rc.r5 .wid328{
  width: 328px !important;
 }
-.wid200 {
+.rc.r5 .wid200{
  width: 247px !important;
 }
-.wid100 {
+.rc.r5 .wid100{
  width: 111px !important;
 }
 }
 
-.rc.r5 /* REMOVES RIGHT GUTTER IN GMAIL IOS APP */
-@media only screen and (min-device-width: 320px) and (max-device-width: 374px){
+/* REMOVES RIGHT GUTTER IN GMAIL IOS APP */
+@media only screen and (min-device-width: 320px) and (max-device-width: 374px) {
 /* iPhone 5 and 5S */
-.email-container {
+.rc.r5 .email-container{
  min-width: 320px !important;
 }
-.pad40rl {
+.rc.r5 .pad40rl{
  padding-right: 20px !important;
  padding-left: 20px !important;
 }
-.pad40rla {
+.rc.r5 .pad40rla{
  padding-right: 20px !important;
  padding-left: 20px !important;
 }
-.fz32 {
+.rc.r5 .fz32{
  font-size: 28px !important;
  line-height: 32px !important;
 }
-.pad30rl {
+.rc.r5 .pad30rl{
  padding-right: 15px !important;
  padding-left: 15px !important;
 }
-.padl25 {
+.rc.r5 .padl25{
  padding-left: 10px !important;
 }
-.padr25 {
+.rc.r5 .padr25{
  padding-right: 15px !important;
 }
-.fz25 {
+.rc.r5 .fz25{
  font-size: 22px !important;
  line-height: 26px !important;
 }
-.fz20 {
+.rc.r5 .fz20{
  font-size: 20px !important;
  line-height: 24px !important;
 }
-.padl40r50 {
+.rc.r5 .padl40r50{
  padding-right: 40px !important;
  padding-left: 40px !important;
 }
-.pad70rl {
+.rc.r5 .pad70rl{
  padding-right: 20px !important;
  padding-left: 20px !important;
 }
-.image280 {
+.rc.r5 .image280{
  width: 280px !important;
 }
-.wid352 {
+.rc.r5 .wid352{
  width: 280px !important;
 }
-.pad45l {
+.rc.r5 .pad45l{
  padding-left: 20px !important;
 }
-.wid328 {
+.rc.r5 .wid328{
  width: 100% !important;
 }
-.pad5rl {
+.rc.r5 .pad5rl{
  padding-right: 15px !important;
  padding-left: 15px !important;
 }
-.pad0la {
+.rc.r5 .pad0la{
  padding-left: 0px !important;
 }
-.wid200 {
+.rc.r5 .wid200{
  width: 200px !important;
 }
-.wid100 {
+.rc.r5 .wid100{
  width: 111px !important;
 }
 }
 
 @media only screen and (min-device-width: 375px) and (max-device-width: 413px) {
-.rc.r5 /* iPhone 6 and 6+ */
-.email-container{
+/* iPhone 6 and 6+ */
+.rc.r5 .email-container{
  min-width: 320px !important;
 }
 .rc.r5 .pad40rl{
@@ -2037,8 +2037,8 @@ contact Marriott ( https://u22889673.ct.sendgrid.net/?x=1 ) privacy policy ( htt
             color: #ffffff;
         }
 
-        .rc.r9 /* Prevent ANY line breaks in table cells */
-        .no-wrap{
+        /* Prevent ANY line breaks in table cells */
+        .rc.r9 .no-wrap{
             white-space: nowrap !important;
         }
 
@@ -2185,10 +2185,10 @@ contact Marriott ( https://u22889673.ct.sendgrid.net/?x=1 ) privacy policy ( htt
   -moz-osx-font-smoothing: grayscale !important;
 }
 
-.rc.r11 /**
+/**
  * main content
  **/
-.st-Wrapper{
+.rc.r11 .st-Wrapper{
   margin: 0 auto;
   min-width: 480px;
   width: 480px;
@@ -5151,9 +5151,9 @@ contact Marriott ( https://u22889673.ct.sendgrid.net/?x=1 ) privacy policy ( htt
           -webkit-font-smoothing: antialiased;
           font-family: Arial, sans-serif;
       }
-      .rc.r12 /*** A work-around for email clients automatically linking certain text strings ****/
+      /*** A work-around for email clients automatically linking certain text strings ****/
       /*Apple iOS Hack*/
-      a[x-apple-data-detectors]{
+      .rc.r12 a[x-apple-data-detectors]{
           color: inherit !important;
           text-decoration: none !important;
           font-size: inherit !important;
@@ -5161,16 +5161,16 @@ contact Marriott ( https://u22889673.ct.sendgrid.net/?x=1 ) privacy policy ( htt
           font-weight: inherit !important;
           line-height: inherit !important;
       }
-      .rc.r12 /*Gmail Hack*/
-      u + #body a{
+      /*Gmail Hack*/
+      .rc.r12 u + #body a{
           color: inherit !important;
           font-size: inherit !important;
           font-family: inherit !important;
           font-weight: inherit !important;
           line-height: inherit !important;
       }
-      .rc.r12 /* Samsung Mail Hack */
-      #MessageViewBody a{
+      /* Samsung Mail Hack */
+      .rc.r12 #MessageViewBody a{
           color: inherit !important;
           font-size: inherit !important;
           font-family: inherit !important;
@@ -6403,9 +6403,9 @@ Your Lufthansa Team
         </tbody>
     </table>
 </div></section>
-<section class="rsec" data-receipt="13"><div class="rhead">Receipt 13: Ride, office to hotel</div><div class="rc r13"><style>.rc.r13 /*******************FONT STYLING LYFT (Rebel Sans - 2026 EDS)*********************/
+<section class="rsec" data-receipt="13"><div class="rhead">Receipt 13: Ride, office to hotel</div><div class="rc r13"><style>/*******************FONT STYLING LYFT (Rebel Sans - 2026 EDS)*********************/
     /* Fonts: screen-only to avoid Outlook embedding issues */
-    @media screen{
+    @media screen {
         @font-face {
             font-family: 'RebelSansText-Regular';
             src: none format('woff2');
@@ -6442,9 +6442,9 @@ Your Lufthansa Team
         }
     }
 
-    .rc.r13 /************************* END FONT STYLING ************************************/
+    /************************* END FONT STYLING ************************************/
     /* standard resets */
-    div, .rc.r13 p, .rc.r13 a, .rc.r13 li, .rc.r13 td{
+    .rc.r13 div, .rc.r13 p, .rc.r13 a, .rc.r13 li, .rc.r13 td{
         -webkit-text-size-adjust: none;
         -ms-text-size-adjust: none;
     }
@@ -6485,8 +6485,8 @@ Your Lufthansa Team
         box-sizing: border-box;
     }
 
-    .rc.r13 /* Two Column Layout */
-    .two-column{
+    /* Two Column Layout */
+    .rc.r13 .two-column{
         width: 100%;
         max-width: 600px;
         margin: 0 auto;
@@ -6507,42 +6507,42 @@ Your Lufthansa Team
         float: right;
     }
 
-    .rc.r13 /* Clear float */
-    .clearfix::after{
+    /* Clear float */
+    .rc.r13 .clearfix::after{
         content: "";
         clear: both;
         display: table;
     }
 
-    .rc.r13 /* Mobile Styles */
-    @media screen and (max-width: 600px){
-        .column {
+    /* Mobile Styles */
+    @media screen and (max-width: 600px) {
+        .rc.r13 .column{
             width: 100%;
             margin: 0;
             float: none;
         }
 
         /* Make right column appear first on mobile */
-        .two-column {
+        .rc.r13 .two-column{
             display: flex;
             flex-direction: column;
         }
 
-        .column-right {
+        .rc.r13 .column-right{
             order: -1;
             margin-bottom: 20px;
         }
 
-        .stack-column-center {
+        .rc.r13 .stack-column-center{
             display: block !important;
             width: 100% !important;
             max-width: 100% !important;
             direction: ltr !important;
         }
-        .stack-column-center table {
+        .rc.r13 .stack-column-center table{
             width: 100% !important;
         }
-        .wrapto600px {
+        .rc.r13 .wrapto600px{
             width: 100% !important;
         }
     }
@@ -6569,18 +6569,17 @@ Your Lufthansa Team
         margin: 0 auto;
     }
 
-    .rc.r13 /* control text changed to links by phones */
-    @media only screen{
+    /* control text changed to links by phones */
+    @media only screen {
 
-        a[href^="tel"],
-        a[href^="sms"] {
+        .rc.r13 a[href^="tel"], .rc.r13 a[href^="sms"]{
             color: inherit;
             text-decoration: none;
         }
     }
 
-    .rc.r13 /* Stops automatic email inks in iOS */
-    a[x-apple-data-detectors]{
+    /* Stops automatic email inks in iOS */
+    .rc.r13 a[x-apple-data-detectors]{
         color: inherit !important;
         text-decoration: none !important;
         font-size: inherit !important;
@@ -6594,8 +6593,8 @@ Your Lufthansa Team
         text-decoration: inherit;
     }
 
-    .rc.r13 /************************* Fixing Auto Styling for Gmail*********************/
-    u+#body a{
+    /************************* Fixing Auto Styling for Gmail*********************/
+    .rc.r13 u+#body a{
         color: inherit;
         text-decoration: none;
         font-size: inherit;
@@ -6604,8 +6603,8 @@ Your Lufthansa Team
         line-height: inherit;
     }
 
-    .rc.r13 /* Carry over styles from old receipt */
-    .charge-failed h3{
+    /* Carry over styles from old receipt */
+    .rc.r13 .charge-failed h3{
         margin-top: 0;
         font-size: 16px;
         color: #E60000;
@@ -6651,8 +6650,8 @@ Your Lufthansa Team
         display: block;
     }
 
-    .rc.r13 /* recipient.ride.pickup and recipient.ride.dropoff */
-    table{
+    /* recipient.ride.pickup and recipient.ride.dropoff */
+    .rc.r13 table{
         /* stylelint-disable-next-line property-no-unknown */
         mso-table-lspace: 0pt;
         mso-table-rspace: 0pt;
@@ -6701,8 +6700,8 @@ Your Lufthansa Team
         height: 10px;
     }
 
-    .rc.r13 /* recipient.ride.receipt.email_token_urls */
-    .header{
+    /* recipient.ride.receipt.email_token_urls */
+    .rc.r13 .header{
         font-size: 16px;
         font-weight: bold;
         margin-bottom: 15px;
@@ -6736,25 +6735,26 @@ Your Lufthansa Team
         color: #ffffff;
     }
 
-    .rc.r13 /* Yahoo and apple mail reset on desktop */
-    @media screen and (min-width: 600px){
-        .wrapto600px {
+    /* Yahoo and apple mail reset on desktop */
+    @media screen and (min-width: 600px) {
+        .rc.r13 .wrapto600px{
             width: 600px !important;
         }
 
-        .block {
+        .rc.r13 .block{
             width: 300px !important;
         }
     }
 
-    .rc.r13 /* responsive rules */
-    @media screen and (max-device-width: 600px), .rc.r13 screen and (max-width: 600px){
-        .wrapto600px {
+    /* responsive rules */
+    @media screen and (max-device-width: 600px),
+    screen and (max-width: 600px) {
+        .rc.r13 .wrapto600px{
             width: 100% !important;
             height: auto !important;
         }
 
-        .block {
+        .rc.r13 .block{
             width: 100% !important;
             height: auto !important;
         }
@@ -6853,8 +6853,8 @@ Your Lufthansa Team
         }
     }
 
-    .rc.r13 /* Ride details styling */
-    .ride-details{
+    /* Ride details styling */
+    .rc.r13 .ride-details{
         padding: 0 32px;
     }
 
