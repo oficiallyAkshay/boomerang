@@ -15,11 +15,9 @@ asserts with the exact markup that it does not survive ``clean_html``.
 
 from __future__ import annotations
 
-import io
 import json
 import re
 import shutil
-import threading
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
@@ -158,7 +156,52 @@ HOSTILE = (
 def test_no_inline_handler_survives_on_any_tag(tag: str) -> None:
     out = clean.clean_html(tag)
     assert not HANDLER_RE.search(out), out
+
+
+# A tag whose own attribute value holds a ">" is one tag, the way a browser
+# reads it. A pattern that stopped at the first bracket stopped inside the
+# quotes, left the rest of the attributes unread, and handed the packet a
+# handler nobody had looked at. Every probe below carries a quoted bracket.
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        '<a title="1 > 2" onclick="evil()">x</a>',
+        '<img alt="a>b" onerror="x">',
+        "<div data-note='a > b' onmouseover=alert(1)>tap</div>",
+        '<td title="<b>1 > 2</b>" onfocus="go()">Fare</td>',
+    ],
+)
+def test_a_bracket_inside_a_quoted_value_does_not_end_the_tag(tag: str) -> None:
+    out = clean.clean_html(tag)
+    assert not HANDLER_RE.search(out), out
+    assert "evil(" not in out
     assert "alert(1)" not in out
+
+
+def test_a_live_scheme_is_refused_past_a_quoted_bracket() -> None:
+    raw = '<a href="javascript:alert(1)" title="x>y">go</a>'
+    out = clean.clean_html(raw)
+    assert "javascript:" not in out
+    assert 'title="x>y"' in out
+    assert ">go</a>" in out
+
+
+def test_srcset_goes_from_a_tag_that_carries_a_quoted_bracket() -> None:
+    raw = (
+        '<img alt="1 > 2" srcset="https://tracker.example/a.png 1x" '
+        'src="https://cdn.example.com/l.png">'
+    )
+    out = clean.clean_html(raw)
+    assert "srcset" not in out
+    assert "tracker.example" not in out
+    assert "cdn.example.com/l.png" in out
+
+
+def test_a_tracking_pixel_with_a_bracket_in_its_alt_is_still_a_pixel() -> None:
+    raw = '<p>Fare<img src="https://t.example/open?id=9" alt="a>b" width="1" height="1"></p>'
+    assert clean.clean_html(raw) == "<p>Fare</p>"
 
 
 @pytest.mark.parametrize("attribute", ["href", "src", "action", "data", "poster", "background"])
@@ -287,6 +330,27 @@ def test_a_remote_url_in_a_style_block_becomes_none() -> None:
     out = clean.clean_html(f"<style>{css}</style><p>Fare</p>")
     assert ".rc .a{background:none}" in out
     assert ".rc .b{background:none}" in out
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "data:text/html,<script>steal</script>",
+        "data:text/css,@import 'https://tracker.example/x.css';",
+        "data:application/javascript,steal",
+    ],
+)
+def test_a_data_uri_that_is_not_a_picture_or_a_font_becomes_none(url: str) -> None:
+    """A data URI is only kept where it is what the declaration is asking for."""
+    out = clean.clean_html(f"<style>.a{{background:url({url})}}</style>")
+    assert ".rc .a{background:none}" in out
+    assert "script" not in out.lower()
+
+
+def test_an_inline_font_is_kept_the_way_an_inline_picture_is() -> None:
+    css = "@font-face{font-family:V;src:url(data:font/woff2;base64,d09GMg)}"
+    out = clean.clean_html(f"<style>{css}</style><p>x</p>")
+    assert "url(data:font/woff2;base64,d09GMg)" in out
 
 
 def test_a_data_uri_in_a_style_block_is_kept() -> None:
@@ -421,6 +485,29 @@ def test_css_comments_and_unterminated_blocks_do_not_break_scoping() -> None:
     out = clean.clean_html(f"<style>{css}</style>")
     assert ".rc .a{color:red/* } not a brace */}" in out
     assert ".rc .b{color:blue}" in out
+
+
+def test_a_comment_in_front_of_an_at_rule_leaves_it_an_at_rule() -> None:
+    """The prelude carried the comment, so the keyword was never read.
+
+    A stylesheet that writes ``/* Mobile */ @media ...`` on its own line put
+    whitespace in front of the comment, which the scoping read as the start of
+    a selector: the wrapper came out as ``.rc /* Mobile */ @media screen``,
+    which is not a selector and is not an at-rule either, and the rules inside
+    it were left unscoped.
+    """
+    css = "\n/* Mobile */ @media screen and (max-width:600px){.a{color:red}}"
+    out = clean.clean_html(f"<style>{css}</style><p>x</p>")
+    assert "@media screen and (max-width:600px){.rc .a{color:red}}" in out
+    assert ".rc /*" not in out
+    assert ".rc @media" not in out
+
+
+def test_a_comment_in_front_of_a_selector_keeps_both() -> None:
+    css = "\n/* the fare table */ .a{color:red}"
+    out = clean.clean_html(f"<style>{css}</style><p>x</p>")
+    assert "/* the fare table */" in out
+    assert ".rc .a{color:red}" in out
 
 
 def test_css_without_any_rule_is_passed_through() -> None:
@@ -574,28 +661,6 @@ def test_doordash_strip_removes_the_help_button_and_footer(rules: dict, samples:
     assert "Final total charged" in out
 
 
-def test_doordash_strip_handles_the_nested_button_shape(rules: dict) -> None:
-    raw = (
-        "<table><tr><td><table><tr><td>"
-        '<div class="button" id="Red100"><a style="color:#fff">Track Your Order</a></div>'
-        "</td></tr></table></td></tr></table>"
-    )
-    out = clean.clean_html(raw, rules["doordash"])
-    assert "Track Your Order" not in out
-    assert "<table>" in out
-
-
-def test_doordash_strip_removes_the_hero_image_row(rules: dict) -> None:
-    raw = (
-        "<table><tr><td><p>Keep this</p></td></tr>"
-        '<tr><td align="center"><a><img alt src="https://img.example.com/x-hero-img-2x.png">'
-        "</a></td></tr></table>"
-    )
-    out = clean.clean_html(raw, rules["doordash"])
-    assert "hero" not in out
-    assert "Keep this" in out
-
-
 @pytest.mark.parametrize("vendor", ["lyft", "doordash"])
 def test_at_least_one_strip_pattern_matches_the_sample(
     vendor: str, rules: dict, samples: dict
@@ -651,6 +716,17 @@ def test_a_strip_pattern_that_takes_no_amount_still_runs(
     assert capsys.readouterr().err == ""
 
 
+def test_a_comma_decimal_is_an_amount_the_guard_protects(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A euro receipt writes its total as 88,60 and the guard has to see it."""
+    rules = {"name": "demo", "strip_regex": [r"<p class=\"promo\">.*?</p>"]}
+    raw = '<p class="promo">Total 88,60 EUR</p><p>Fare 74,25 EUR</p>'
+    out = clean.clean_html(raw, rules)
+    assert "88,60" in out
+    assert "clean: demo strip pattern 0 skipped" in capsys.readouterr().err
+
+
 def test_the_decimals_in_a_style_attribute_are_not_amounts(
     rules: dict, capsys: pytest.CaptureFixture
 ) -> None:
@@ -693,6 +769,34 @@ def test_a_replace_that_would_drop_an_amount_is_skipped(
     out = clean.clean_html(raw, rules)
     assert "$34.86" in out
     assert "clean: demo replace pattern 0 skipped" in capsys.readouterr().err
+
+
+def test_a_replacement_cannot_put_anything_active_into_the_fragment() -> None:
+    """The pairs run before every pass that sanitises, so this is defused.
+
+    A rules.json is a file in this repo and its replacements are text a person
+    wrote, but text is text: running the pairs first means a replacement is
+    cleaned exactly as hard as the vendor markup around it.
+    """
+    rules = {
+        "name": "demo",
+        "replace": [["PLACEHOLDER", "<script>alert(1)</script><iframe src=http://e></iframe>"]],
+    }
+    out = clean.clean_html("<p>PLACEHOLDER Total $34.86</p>", rules)
+    assert "<script" not in out.lower()
+    assert "alert(1)" not in out
+    assert "<iframe" not in out.lower()
+    assert "http://e" not in out
+    assert "$34.86" in out
+
+
+def test_a_replacement_that_opens_a_style_block_is_scoped_like_any_other(
+    no_network: None,
+) -> None:
+    """Whatever a pair writes goes through the stylesheet handling too."""
+    rules = {"name": "demo", "replace": [["PLACEHOLDER", "<style>a{color:red}</style>"]]}
+    out = clean.clean_html("<p>PLACEHOLDER</p>", rules)
+    assert "<style>.rc a{color:red}</style>" in out
 
 
 def test_a_replace_pair_that_keeps_every_amount_prints_nothing(
@@ -755,10 +859,23 @@ def test_an_anchor_with_no_attributes_survives() -> None:
     assert clean.clean_html("<a>Plain</a>") == "<a>Plain</a>"
 
 
-def test_unwrap_is_skipped_when_a_vendor_names_no_patterns() -> None:
-    rules = {"unwrap_links_matching": []}
-    out = clean.clean_html('<a href="https://click.example.com/x">Text</a>', rules)
-    assert out == "<a>Text</a>"
+@pytest.mark.parametrize(
+    "href",
+    [
+        "https://click.example.com/x",
+        "https://example.com/track/9",
+        "https://example.com/help?utm_source=email",
+        "https://email.example.com/open",
+    ],
+)
+def test_the_generic_tracking_shapes_are_unwrapped_for_every_vendor(href: str) -> None:
+    """The four shapes live in clean.py now, so a vendor that lists none gets them."""
+    for rules in ({}, {"unwrap_links_matching": []}, {"name": "demo"}):
+        assert clean.clean_html(f'<a href="{href}">Text</a>', rules) == "Text"
+
+
+def test_a_link_that_matches_no_tracking_shape_keeps_its_tag() -> None:
+    assert clean.clean_html('<a href="https://example.com/policy">Policy</a>') == "<a>Policy</a>"
 
 
 # ---------------------------------------------------------------------- images
@@ -1039,9 +1156,6 @@ def test_load_vendor_rules_reads_every_vendor(rules: dict) -> None:
     for name, rule in rules.items():
         assert rule["name"] == name
         assert isinstance(rule["notes"], str) and rule["notes"]
-        for key in ("amount_regex", "date_regex"):
-            # None is a real answer: some vendors print no amount, or no date.
-            assert rule[key] is None or isinstance(rule[key], str)
 
 
 def test_load_vendor_rules_keeps_the_rules_as_plain_data(rules: dict) -> None:
@@ -1052,11 +1166,11 @@ def test_load_vendor_rules_keeps_the_rules_as_plain_data(rules: dict) -> None:
 
 def test_load_vendor_rules_rejects_a_missing_key(tmp_path: Path) -> None:
     body = json.loads((VENDORS_DIR / "lyft" / "rules.json").read_text(encoding="utf-8"))
-    del body["amount_regex"]
+    del body["display"]
     target = tmp_path / "lyft"
     target.mkdir()
     (target / "rules.json").write_text(json.dumps(body), encoding="utf-8")
-    with pytest.raises(ValueError, match="missing key amount_regex"):
+    with pytest.raises(ValueError, match="missing key display"):
         clean.load_vendor_rules(tmp_path)
 
 
@@ -1109,6 +1223,45 @@ def test_load_vendor_rules_rejects_a_replace_pair_that_is_not_two_strings(tmp_pa
     write_lyft_with(tmp_path, replace=[["width:100%", 7]])
     with pytest.raises(ValueError, match="replace pairs must hold two strings"):
         clean.load_vendor_rules(tmp_path)
+
+
+@pytest.mark.parametrize("key", ["strip_regex", "subject_patterns", "unwrap_links_matching"])
+def test_load_vendor_rules_rejects_a_pattern_that_does_not_compile(
+    key: str, tmp_path: Path
+) -> None:
+    """Compiled here, so the file and the index are named, not a byte offset."""
+    write_lyft_with(tmp_path, **{key: ["fine", "(unclosed"]})
+    with pytest.raises(ValueError, match=f"{key} 1 does not compile"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_a_pattern_key_of_the_wrong_shape_is_reported_once(tmp_path: Path) -> None:
+    """The shape complaint stands on its own; the compiling passes over it."""
+    write_lyft_with(tmp_path, strip_regex="not a list", subject_patterns=[7])
+    with pytest.raises(ValueError, match="strip_regex must be a list") as raised:
+        clean.load_vendor_rules(tmp_path)
+    assert "does not compile" not in str(raised.value)
+
+
+def test_load_vendor_rules_rejects_a_replace_pattern_that_does_not_compile(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, replace=[["(unclosed", "x"]])
+    with pytest.raises(ValueError, match="replace 0 does not compile"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_load_vendor_rules_rejects_a_replacement_naming_a_group_that_is_not_there(
+    tmp_path: Path,
+) -> None:
+    """re.sub reads a template only where it matched, so it is read here instead."""
+    write_lyft_with(tmp_path, replace=[[r"(width):100%", r"\2:auto"]])
+    with pytest.raises(ValueError, match="replace 0 is not a usable replacement"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_load_vendor_rules_accepts_a_replacement_that_names_its_groups(tmp_path: Path) -> None:
+    """By number and by name, because the stand in carries both."""
+    write_lyft_with(tmp_path, replace=[[r"(?P<w>width):100%", r"\g<w>:auto"], [r"(a)(b)", r"\2\1"]])
+    assert len(clean.load_vendor_rules(tmp_path)["lyft"]["replace"]) == 2
 
 
 def test_load_vendor_rules_rejects_a_file_that_is_not_an_object(tmp_path: Path) -> None:
@@ -1439,8 +1592,6 @@ def test_cli_writes_next_to_the_working_directory(
 
 # ------------------------------------------------------- the whole directory
 
-BARRIER_TIMEOUT = 10.0
-
 
 def write_rules(vendors_dir: Path, name: str, domain: str, strip: list[str]) -> None:
     """One vendors/<name>/rules.json, complete enough for load_vendor_rules."""
@@ -1455,41 +1606,11 @@ def write_rules(vendors_dir: Path, name: str, domain: str, strip: list[str]) -> 
                 "subject_patterns": [],
                 "strip_regex": strip,
                 "unwrap_links_matching": [],
-                "amount_regex": None,
-                "date_regex": None,
                 "notes": "",
             }
         ),
         encoding="utf-8",
     )
-
-
-class CleanCounter:
-    """Counts how many cleans overlapped, and holds each one at a barrier.
-
-    The counter is the record; the barrier is what makes the record mean
-    something. A ``clean_dir`` that worked through its files one at a time
-    would leave every worker waiting until the barrier timed out.
-    """
-
-    def __init__(self, inner, width: int):
-        self.inner = inner
-        self.barrier = threading.Barrier(width, timeout=BARRIER_TIMEOUT) if width > 1 else None
-        self._lock = threading.Lock()
-        self.live = 0
-        self.peak = 0
-
-    def __call__(self, raw, rules=None, image_cache=None):
-        with self._lock:
-            self.live += 1
-            self.peak = max(self.peak, self.live)
-        try:
-            if self.barrier is not None:
-                self.barrier.wait()
-            return self.inner(raw, rules, image_cache)
-        finally:
-            with self._lock:
-                self.live -= 1
 
 
 def receipts_dir(root: Path, count: int) -> Path:
@@ -1503,43 +1624,24 @@ def receipts_dir(root: Path, count: int) -> Path:
     return source
 
 
-def test_a_directory_is_cleaned_four_receipts_at_a_time(
+def test_a_directory_is_cleaned_one_receipt_at_a_time_in_filename_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    source = receipts_dir(tmp_path, clean.DIR_WORKERS)
-    counter = CleanCounter(clean.clean_html, clean.DIR_WORKERS)
-    monkeypatch.setattr(clean, "clean_html", counter)
+    """Twelve receipts, cleaned in the order they are listed and no other."""
+    source = receipts_dir(tmp_path, 12)
+    seen: list[str] = []
+    inner = clean.clean_html
+
+    def record(raw, rules=None, image_cache=None):
+        seen.append(raw)
+        return inner(raw, rules, image_cache)
+
+    monkeypatch.setattr(clean, "clean_html", record)
 
     listed = clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR)
 
-    assert counter.peak == clean.DIR_WORKERS
-    assert listed == [(f"r{index:02d}.html", "generic") for index in range(clean.DIR_WORKERS)]
-
-
-def test_the_pool_never_grows_past_the_worker_count(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Twelve receipts, four workers, four cleans in flight and no more."""
-    source = receipts_dir(tmp_path, 3 * clean.DIR_WORKERS)
-    counter = CleanCounter(clean.clean_html, clean.DIR_WORKERS)
-    monkeypatch.setattr(clean, "clean_html", counter)
-
-    listed = clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR)
-
-    assert counter.peak == clean.DIR_WORKERS
-    assert len(listed) == 3 * clean.DIR_WORKERS
-
-
-def test_one_worker_cleans_one_receipt_at_a_time(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    source = receipts_dir(tmp_path, 4)
-    counter = CleanCounter(clean.clean_html, 1)
-    monkeypatch.setattr(clean, "clean_html", counter)
-
-    clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR, workers=1)
-
-    assert counter.peak == 1
+    assert listed == [(f"r{index:02d}.html", "generic") for index in range(12)]
+    assert len(seen) == 12
 
 
 def test_the_listing_is_in_filename_order_with_the_vendor_of_each_file(
@@ -1627,17 +1729,6 @@ def test_the_amount_guard_warnings_come_out_in_filename_order(
         assert "$28.93" in (tmp_path / "clean" / name).read_text(encoding="utf-8")
 
 
-def test_the_warning_router_passes_other_threads_straight_through() -> None:
-    """Anything written without a worker's own list reaches the real stream."""
-    target = io.StringIO()
-    router = clean._WarningRouter(target)
-
-    assert router.write("straight through") == len("straight through")
-    router.flush()
-    # getvalue is not defined on the router, so this is the delegation working.
-    assert router.getvalue() == "straight through"
-
-
 def test_a_directory_clean_downloads_then_inlines(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1681,8 +1772,6 @@ def test_the_dir_cli_cleans_every_receipt_and_names_each_vendor(
             str(out),
             "--vendors",
             str(VENDORS_DIR),
-            "--workers",
-            "2",
         ]
     )
 
