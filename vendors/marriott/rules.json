@@ -12,8 +12,8 @@
     "Marriott"
   ],
   "strip_regex": [
-    "<table[^>]*>(?:(?!<table)[\\s\\S]){0,4000}?Cardmember Offer[\\s\\S]*?Activate Now[\\s\\S]*?</table>",
-    "<table[^>]*>(?:(?!<table)[\\s\\S]){0,4000}?(?:trip’s waiting in the App|Unlock your stay with the Marriott Bonvoy)[\\s\\S]*?</table>",
+    "<table[^>]*class=\"wrap\"[^>]*>(?=[\\s\\S]{0,2000}Cardmember Offer)(?:[\\s\\S]*?</table>){7}",
+    "<table[^>]*class=\"wrap\"[^>]*>(?=[\\s\\S]{0,2000}(?:trip’s waiting in the App|Unlock your stay with the Marriott Bonvoy))(?:[\\s\\S]*?</table>){10}",
     "<p[^>]*>[\\s\\S]{0,800}?(?:Platinum|Gold|Titanium|Silver|Ambassador)\\s*Elite(?:&nbsp;|\\s)*(?:→|&rarr;)[\\s\\S]{0,900}?[\\d,]+\\s+Points[\\s\\S]{0,200}?</p>",
     "<img[^>]*src=\"https://(?:images\\.harmony\\.epsilon\\.com|marriottinternationa\\.demdex\\.net)[^\"]*\"[^>]*>",
     "ReplyCode:\\s*[A-Z]{2}\\|[A-Z]{3}\\|[a-z]{2}_[A-Z]{2}",
@@ -34,5 +34,5 @@
   ],
   "amount_regex": ">Total(?: Points Redeemed| for Stay| Price)?</td>\\s*<td[^>]*>\\s*((?:[£$€₹][\\d,]+\\.\\d{2}(?:\\s+[A-Z]{3})?)|(?:[\\d,]+\\s+Points))\\s*</td>",
   "date_regex": ">\\s*Check-In\\s*</p>[\\s\\S]{0,600}?<p[^>]*>\\s*((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\\s+[A-Z][a-z]{2}\\s+\\d{2},\\s+\\d{4})\\s*</p>",
-  "notes": "Removed from a Marriott stay confirmation: the cardmember bonus points offer, the app download banner, the loyalty tier and points balance strip, the Epsilon and Adobe tracking pixels, the hidden ReplyCode preheader, the Manage Stay and Go Now action buttons, the footer link row, the unsubscribe and programme terms block, the copyright and proprietary notice, and the confirmation authenticity boilerplate. Kept verbatim: the property name and address, the confirmation number, the check-in and check-out dates and times, the room description, the rate line, the summary of charges, the taxes and fees line, and the cancellation terms with their deadline. Known gap: this sample is a points redemption stay, so the total is a points figure and there is no cash amount and no card last four in it. amount_regex is written in a currency tolerant form, because a cash rate confirmation from the same template fills the same cells with a currency amount; the cash a traveller actually settles at the desk appears on the folio, not here."
+  "notes": "Removed from a Marriott stay confirmation: the cardmember bonus points offer and the app download banner, each matched as the whole banner table so that none of its lines is left standing on the page without the banner around it, the loyalty tier and points balance strip, the Epsilon and Adobe tracking pixels, the hidden ReplyCode preheader, the Manage Stay and Go Now action buttons, the footer link row, the unsubscribe and programme terms block, the copyright and proprietary notice, and the confirmation authenticity boilerplate. Kept verbatim: the property name and address, the confirmation number, the check-in and check-out dates and times, the room description, the rate line, the summary of charges, the taxes and fees line, and the cancellation terms with their deadline. Known gap: this sample is a points redemption stay, so the total is a points figure and there is no cash amount and no card last four in it. amount_regex is written in a currency tolerant form, because a cash rate confirmation from the same template fills the same cells with a currency amount; the cash a traveller actually settles at the desk appears on the folio, not here."
 }

@@ -16,6 +16,13 @@ The output carries a ``/BoomerangSpliced`` mark, and a packet that already
 carries it is refused. Splicing a spliced packet would count the attachment
 pages as receipt card pages and post every later folio to the wrong place, so
 the second run stops instead of quietly shuffling the packet.
+
+The output is a new document, so it starts with no metadata at all. The one
+entry carried across from the packet is ``/Title``, which ``render_pdf`` put
+there from the packet's own ``<title>`` and which is what a reader sees in a
+viewer's window and in a file listing. Nothing else is copied, and no author
+is ever written: the traveller's name belongs on the page, where they put it,
+and not in a document property that follows the file around.
 """
 
 from __future__ import annotations
@@ -100,7 +107,11 @@ def splice(packet_pdf: Path, data: dict, receipts_dir: Path, out_pdf: Path) -> i
             writer.insert_page(page, card_index + step)
         offset += len(attachment.pages)
 
-    writer.add_metadata({SPLICED_KEY: "1"})
+    metadata = {SPLICED_KEY: "1"}
+    title = (reader.metadata or {}).get("/Title")
+    if title:
+        metadata["/Title"] = str(title)
+    writer.add_metadata(metadata)
     out_pdf = Path(out_pdf)
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
     with open(out_pdf, "wb") as handle:
