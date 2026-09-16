@@ -51,14 +51,26 @@ A Lyft ride receipt is a long styled email with a short receipt inside it. Kept
 exactly as sent: the fare breakdown with its distance and duration label, every
 surcharge and toll row, both tender rows with their Upfront Fare sublabels, the
 pickup and dropoff rows with their times and addresses, and the receipt number.
-Removed: both tip controls, which are the Add tip button at the top and the Tip
-driver button at the foot; the safety marketing block and the ride safety
-summary widget, which are live controls rather than a record; the credit card
-rewards promo; the help link cluster; the authorization hold notice; the static
-route map, whose URL carries the route geometry, and the OpenStreetMap credit
-it leaves behind; the regulatory licence block naming the
-dispatching base, the vehicle plate and the driver licence; the copyright and
-CPUC footer; and the Lyft app instruction block. The hidden expense microdata
+Removed: the Add tip button at the top; the safety marketing module, heading,
+shield panel and all; the ride safety summary widget, illustration and all; the
+credit card rewards promo; the get help and more module, which is where the Tip
+driver button lives; the authorization hold notice; the static route map, whose
+URL carries the route geometry, and the OpenStreetMap credit it leaves behind;
+the regulatory licence block naming the dispatching base, the vehicle plate and
+the driver licence; the copyright and CPUC footer; and the Lyft app instruction
+block.
+
+Each of those three modules is matched at the table that wraps the whole thing,
+never at the line of copy inside it, because every one of them is a picture
+over a label: a pattern that took the label alone left a shield on a panel with
+nothing written beside it, and left the help cluster as five rows of an icon
+and a chevron with the words gone from between them.
+
+The Lyft logo is the other thing a reader will notice, and it is not a rules
+question. The logo URL answers 403 to anything that is not a mail client, so
+the fetch records it as unfetchable and the cleaner prints the alt text the
+vendor wrote, which is the word lyft. A packet never carries a broken image
+icon. The hidden expense microdata
 block has a pattern of its own and keeps its place anyway: it repeats the
 charged total, and the amount guard skips a pattern that would take an amount
 out of the receipt. Lyft's own styling renders the block as nothing, so it

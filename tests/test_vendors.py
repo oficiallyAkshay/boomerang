@@ -194,6 +194,13 @@ def test_every_strip_pattern_removes_a_whole_element(folder: str, rules: dict) -
     that balances took a whole element, or a run of whole elements. A match
     that does not is a half element and the pattern has to be rewritten.
 
+    The one allowance is for a tag the sample itself never closed. Lyft's
+    safety callout opens a second table row without closing the first, so the
+    module around it cannot be taken out except with that orphan opening tag
+    inside the match, and what is left behind is better balanced than what was
+    there before. A match may therefore carry an unclosed tag only where the
+    whole sample carries the same one, and never more of them than it has.
+
     The counting runs on the sample with its comments taken out, which is the
     text ``clean.clean_html`` hands the patterns. Conditional comments are the
     reason: a Lufthansa or DoorDash template opens a table inside
@@ -203,12 +210,70 @@ def test_every_strip_pattern_removes_a_whole_element(folder: str, rules: dict) -
     """
     for name, raw in samples_for(folder).items():
         text = clean.COMMENT_RE.sub("", raw)
+        orphans = tag_balance(text)
         for index, pattern in enumerate(rules[folder]["strip_regex"]):
             for match in re.finditer(pattern, text, re.S | re.I):
-                assert not tag_balance(match.group(0)), (
+                halves = {
+                    element: count
+                    for element, count in tag_balance(match.group(0)).items()
+                    if count * orphans.get(element, 0) <= 0 or abs(count) > abs(orphans[element])
+                }
+                assert not halves, (
                     f"{folder}/{name} strip pattern {index} matched a half element, "
-                    f"leaving {tag_balance(match.group(0))} unclosed"
+                    f"leaving {halves} unclosed"
                 )
+
+
+# Everything the three Lyft promo modules are made of: the safety panel with
+# its shield, the ride safety summary with its illustration and its thumbs,
+# and the help cluster, whose rows are an icon, a label and a chevron.
+LYFT_MODULE_PARTS = (
+    "How Lyft prioritizes your safety",
+    "Every Lyft ride has built-in safety",
+    "ShieldCross_Circle.png",
+    'bill-callout-box"',
+    "Ride safety summary",
+    "safe-ride-summary-module",
+    "safe-rides-summary-header.png",
+    "thumb-up_XS.png",
+    "Get help and more",
+    "Help_Circle.png",
+    "MoneyBag_Circle.png",
+    "Help center",
+    "Dispute ride charges",
+    "button-aarow.png",
+)
+
+# What a ride receipt is for, all of it still in the fragment afterwards.
+LYFT_RECEIPT_PARTS = (
+    "YOUR RIDE TO 815 CYPRESS ROW BLVD ON JUNE 15, 2026",
+    "Thanks for riding with",
+    "Lyft Cash",
+    "Visa *4321",
+    "$18.40",
+    "$22.27",
+    "Lyft fare",
+    "Toll: AT : Airport Toll Plaza",
+    "Your trip",
+    "1150 Congress Ave, Austin, TX",
+    "815 Cypress Row Blvd, Austin, TX",
+    "Receipt #2264013875290446311",
+)
+
+
+def test_the_lyft_promo_modules_go_whole_and_the_receipt_stays(rules: dict) -> None:
+    """The three modules Lyft hangs off a receipt go, picture and label together.
+
+    Each of them is an icon or an illustration over a line of marketing copy,
+    so a pattern anchored on the copy leaves the picture sitting on the page
+    with nothing to explain it. The help cluster was the loudest case: five
+    rows of an icon, a label and a chevron, with only the labels stripped.
+    """
+    fragment = clean.clean_html(samples_for("lyft")["sample.html"], rules["lyft"])
+    for part in LYFT_MODULE_PARTS:
+        assert part not in fragment, f"lyft kept {part!r} from a promo module"
+    for part in LYFT_RECEIPT_PARTS:
+        assert part in fragment, f"lyft lost {part!r} from the receipt itself"
 
 
 @pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])

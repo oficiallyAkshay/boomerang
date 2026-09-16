@@ -38,7 +38,11 @@ know what was done to the page in front of them.
    to a loopback, private or link-local address, follows no redirect, and stops
    reading at five megabytes. The substring test for tracking pixels (open,
    track, pixel, beacon) runs on http and https sources only, because a base64
-   data URI can contain those letters by chance and a logo is not a pixel.
+   data URI can contain those letters by chance and a logo is not a pixel. A
+   URL that answers with something other than a picture goes into the cache's
+   failure record, and an image named there is replaced by its alt text rather
+   than left to render as a broken image icon in a packet. An image the cache
+   simply does not hold is left as the vendor wrote it.
 3. CSS. Style blocks are kept, not dropped, so the receipt still looks like the
    receipt. Every rule is sanitised, then scoped to the ``.rc`` receipt
    container, so one vendor's stylesheet cannot reach another vendor's receipt
@@ -71,7 +75,7 @@ import socket
 import sys
 from email.utils import parseaddr
 from pathlib import Path
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
@@ -80,6 +84,18 @@ SCOPE = ".rc"
 GENERIC = "generic"
 FETCH_TIMEOUT = 10
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+# What a fetch leaves in the cache beside the pictures: the URLs it asked for
+# and got something other than a picture from. The name is not sixteen hex
+# characters, so it can never collide with a cache entry.
+FAILED_RECORD = "failed-images.json"
+# The first bytes of the four raster formats a receipt ever uses. WEBP is the
+# only one that needs two windows, because its marker sits after the RIFF size.
+IMAGE_SIGNATURES = (
+    b"\x89PNG\r\n\x1a\n",
+    b"\xff\xd8\xff",
+    b"GIF87a",
+    b"GIF89a",
+)
 
 REQUIRED_KEYS = (
     "name",
@@ -433,9 +449,88 @@ def _mime_for(url: str) -> str:
     return mimetypes.guess_type(urlsplit(url).path)[0] or "image/png"
 
 
-def inline_images(html: str, cache_dir: Path) -> str:
-    """Swap cached remote images for data URIs. Never opens the network."""
+def _is_cached(cache_dir: Path, url: str) -> bool:
+    """True when the cache holds bytes for this URL."""
+    target = Path(cache_dir) / cache_name(url)
+    return target.is_file() and target.stat().st_size > 0
+
+
+def _looks_like_an_image(blob: bytes) -> bool:
+    """True when these first bytes open a PNG, JPEG, GIF or WEBP file."""
+    if blob.startswith(IMAGE_SIGNATURES):
+        return True
+    return blob.startswith(b"RIFF") and blob[8:12] == b"WEBP"
+
+
+def failed_images(cache_dir: Path) -> set[str]:
+    """The URLs a fetch into this cache asked for and got no picture from.
+
+    A missing, unreadable or misshapen record reads as no failures at all, so
+    a cache written by hand behaves exactly like one no fetch has touched.
+    """
+    try:
+        loaded = json.loads((Path(cache_dir) / FAILED_RECORD).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(loaded, list):
+        return set()
+    return {url for url in loaded if isinstance(url, str)}
+
+
+def _record_failures(cache_dir: Path, failed: set[str]) -> None:
+    """Merge this run's failures into the record, minus anything now cached.
+
+    Merged rather than overwritten because a fetch is run one receipt at a
+    time against one shared cache, and each run sees only its own URLs. A URL
+    that answers with a picture on a later run is dropped from the record, so
+    the record never outlives the failure it describes.
+    """
     cache_dir = Path(cache_dir)
+    listed = sorted(
+        url for url in failed_images(cache_dir) | failed if not _is_cached(cache_dir, url)
+    )
+    record = cache_dir / FAILED_RECORD
+    if not listed:
+        record.unlink(missing_ok=True)
+        return
+    record.write_text(json.dumps(listed, indent=2) + "\n", encoding="utf-8")
+
+
+def drop_failed_images(html: str, cache_dir: Path) -> str:
+    """Replace every image the cache records as unfetchable with its alt text.
+
+    A URL that answered 403, 404 or with something that is not a picture will
+    answer the same way inside a packet, where it renders as a browser's
+    broken image icon on a page that is meant to read as a receipt. The tag
+    becomes a ``span`` carrying the alt text the vendor wrote, which is empty
+    when the vendor wrote none.
+
+    An image the cache simply does not hold is left exactly as it is: an
+    offline clean attempts no fetch, learns nothing about that URL, and has no
+    business deciding the picture is gone.
+    """
+    failed = failed_images(cache_dir)
+    if not failed:
+        return html
+
+    def replace(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        if (_attr(tag, "src") or "") not in failed:
+            return tag
+        alt = html_module.unescape(_attr(tag, "alt") or "").strip()
+        return f'<span class="img-alt">{html_module.escape(alt, quote=False)}</span>'
+
+    return IMG_RE.sub(replace, html)
+
+
+def inline_images(html: str, cache_dir: Path) -> str:
+    """Apply a cache directory to a fragment. Never opens the network.
+
+    A cached image becomes a data URI. An image the cache records as
+    unfetchable becomes its alt text. Everything else is left alone.
+    """
+    cache_dir = Path(cache_dir)
+    html = drop_failed_images(html, cache_dir)
 
     def replace(match: re.Match[str]) -> str:
         quote, url = match.group(1), match.group(2)
@@ -491,18 +586,25 @@ def fetch_images(html: str, cache_dir: Path) -> int:
     address is refused, so a receipt cannot aim the fetch at this machine or
     the network around it. Redirects are refused, so no URL can leave the host
     that was checked. Each read stops at ``MAX_IMAGE_BYTES``.
+
+    A URL that answers, and answers with something other than a picture, is
+    written to the cache's failure record: an HTTP status that is not 200, or
+    a body that opens with none of the four image signatures. A fetch that
+    never got an answer at all, because the host refused or the network is
+    down, records nothing, because the only thing learned there is that this
+    machine was offline.
     """
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     fetched = 0
+    failed: set[str] = set()
     seen: set[str] = set()
     for match in SRC_RE.finditer(html):
         url = match.group(2)
         if url in seen:
             continue
         seen.add(url)
-        target = cache_dir / cache_name(url)
-        if target.is_file() and target.stat().st_size > 0:
+        if _is_cached(cache_dir, url):
             continue
         if not _host_is_public(urlsplit(url).hostname or ""):
             print("clean: image not fetched (host refused)", file=sys.stderr)
@@ -510,15 +612,23 @@ def fetch_images(html: str, cache_dir: Path) -> int:
         try:
             with urlopen(url, timeout=FETCH_TIMEOUT) as response:  # noqa: S310
                 blob = response.read(MAX_IMAGE_BYTES + 1)
+        except HTTPError as error:
+            print(f"clean: image not fetched (HTTP {error.code})", file=sys.stderr)
+            failed.add(url)
+            continue
         except Exception as error:
             print(f"clean: image not fetched ({type(error).__name__})", file=sys.stderr)
             continue
         if len(blob) > MAX_IMAGE_BYTES:
             print("clean: image not fetched (over the size cap)", file=sys.stderr)
             continue
-        if blob:
-            target.write_bytes(blob)
-            fetched += 1
+        if not _looks_like_an_image(blob):
+            print("clean: image not fetched (the answer was not an image)", file=sys.stderr)
+            failed.add(url)
+            continue
+        (cache_dir / cache_name(url)).write_bytes(blob)
+        fetched += 1
+    _record_failures(cache_dir, failed)
     return fetched
 
 
