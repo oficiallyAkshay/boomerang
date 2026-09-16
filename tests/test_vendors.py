@@ -543,6 +543,96 @@ def test_a_message_row_only_supersedes_a_subject_its_own_folder_claims(
             assert row["supersedes"] in claimed, f"{folder} messages {index} supersedes an outsider"
 
 
+# A subject line the folder can show someone, written down in one of the four
+# places a subject is ever recorded in this repo.
+NOTES_SUBJECT_RE = re.compile(r'"([^"\n]{4,120})"')
+TXT_SUBJECT_RE = re.compile(r"^Subject:\s*(.+)$", re.M)
+EXAMPLE_RECEIPTS = VENDORS_DIR.parent / "examples" / "receipts"
+
+
+def proven_subjects(folder: str, rules: dict) -> list[str]:
+    """Every subject line this folder can point at, from the folder and the example.
+
+    Four sources, and each one is a message somebody really received. A
+    ``.meta.json`` beside a sample carries the headers that sample arrived
+    with. A ``.txt`` sample may print its own Subject header inside the body.
+    A folder may quote a subject in its ``notes`` for a template it has seen
+    and cannot ship. And the example packet's receipts carry their headers in
+    ``examples/receipts/*.meta.json``, so a subject that resolves to this
+    folder proves a template this repo renders on every build.
+    """
+    found: list[str] = []
+    path = VENDORS_DIR / folder
+    for meta in sorted(path.glob("sample*.meta.json")):
+        subject = json.loads(meta.read_text(encoding="utf-8")).get("subject")
+        if subject:
+            found.append(str(subject))
+    for name, raw in samples_for(folder).items():
+        if name.endswith(".txt"):
+            found.extend(TXT_SUBJECT_RE.findall(raw))
+    found.extend(NOTES_SUBJECT_RE.findall(rules[folder]["notes"]))
+    for meta in sorted(EXAMPLE_RECEIPTS.glob("*.meta.json")):
+        headers = json.loads(meta.read_text(encoding="utf-8"))
+        subject = str(headers.get("subject") or "")
+        sender = str(headers.get("from") or "")
+        if subject and clean.detect_vendor(sender, subject, rules) == folder:
+            found.append(subject)
+    return found
+
+
+@pytest.mark.parametrize("folder", FOLDERS)
+def test_every_message_row_is_proven_on_a_subject_the_folder_can_show(
+    folder: str, rules: dict
+) -> None:
+    """The rule the strip patterns live under, applied to the knowledge rows.
+
+    A ``messages`` row says what kind of document a subject line names, and a
+    row is only worth that if the subject line exists. Several folders used to
+    carry alternates nobody could point at: a Lyft ride receipt subject Lyft
+    does not send, a DoorDash order receipt heading no sample has, an Uber
+    receipt line invented to sit beside the real one. Each of them was a guess
+    about a template, and a guess is what a vendor folder exists to replace.
+
+    So every row has to match a subject somebody received, from a sample's own
+    headers, from a Subject line inside a text sample, from a subject the notes
+    quote, or from the example packet's receipts. A row whose pattern
+    alternates are all guesses goes; a row with one provable alternate stays,
+    because the pattern still names a message this folder is really given.
+    """
+    subjects = proven_subjects(folder, rules)
+    for index, row in enumerate(rules[folder].get("messages", [])):
+        pattern = row["subject_pattern"]
+        assert any(re.search(pattern, subject) for subject in subjects), (
+            f"{folder} messages {index} names a subject nothing in the folder "
+            f"or the example proves: {pattern}"
+        )
+
+
+def test_the_folders_that_still_carry_message_rows_are_the_ones_with_a_subject() -> None:
+    """Named here so that dropping a row cannot quietly empty a folder.
+
+    Fourteen rows came out at once when the proof rule went in, which is enough
+    removal that the remaining set should be written down rather than counted
+    again by hand later.
+    """
+    rules = clean.load_vendor_rules(VENDORS_DIR)
+    counts = {name: len(rule.get("messages", [])) for name in FOLDERS for rule in [rules[name]]}
+    assert counts == {
+        "airlines": 0,
+        "doordash": 1,
+        "hotels": 0,
+        "lufthansa": 1,
+        "lyft": 1,
+        "marriott": 1,
+        "njtransit": 1,
+        "plaintext": 0,
+        "stripe": 2,
+        "uber": 1,
+        "uber-eats": 1,
+        "united": 2,
+    }
+
+
 def sample_text(folder: str) -> list[str]:
     """Every sample in a folder as the text a reader of values would see."""
     return [

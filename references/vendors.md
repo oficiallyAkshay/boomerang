@@ -66,6 +66,18 @@ the repo has never heard of. Each section below closes with what its own
 folder declares, and that closing paragraph and the folder's `notes` say the
 same thing.
 
+A `messages` row lives under the same rule as a strip pattern: it has to be
+provable. The row says what kind of document a subject line names, so the
+subject line has to be one somebody received, recorded in the folder's own
+sample headers, in a Subject line inside a text sample, in a subject the notes
+quote, or in the example packet's receipts under `examples/receipts`. Fourteen
+rows came out when that rule went in, every one of them an invented alternate
+for a template no sample in this repo carries, and `tests/test_vendors.py`
+keeps the next one from getting in. The `subject_patterns` list is a different
+thing and is deliberately wider: it is what the search asks Gmail for, and a
+term that finds nothing costs a query, while a knowledge row that describes
+nothing misleads the model reading it.
+
 Each vendor below has a machine-readable form at `vendors/<name>/rules.json`.
 The `notes` field there must agree with the paragraph here. If they disagree,
 one of them is wrong and the pull request that changes either should change

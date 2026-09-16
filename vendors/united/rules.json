@@ -38,20 +38,8 @@
       "supersedes": "eTicket [Cc]onfirmation"
     },
     {
-      "subject_pattern": "eTicket [Cc]onfirmation",
-      "kind": "confirmation"
-    },
-    {
       "subject_pattern": "^Thanks for your purchase with United$",
       "kind": "confirmation"
-    },
-    {
-      "subject_pattern": "Wi-Fi",
-      "kind": "receipt"
-    },
-    {
-      "subject_pattern": "^Your receipt for",
-      "kind": "receipt"
     }
   ],
   "tenders": [

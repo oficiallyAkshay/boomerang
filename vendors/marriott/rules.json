@@ -32,10 +32,6 @@
     {
       "subject_pattern": "^Reservation Confirmation #\\d+ for ",
       "kind": "confirmation"
-    },
-    {
-      "subject_pattern": "^Check-In Instructions for ",
-      "kind": "confirmation"
     }
   ],
   "tenders": [
