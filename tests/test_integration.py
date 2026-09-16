@@ -46,19 +46,22 @@ FOLIO_FIRST_PAGE_MARK = "folio page 1 of 2"
 # is not one the rules know.
 UNKNOWN_SENDER = "billing@an-unlisted-vendor.example"
 
-# The committed example, and the one row in it that has cost a correction: the
-# Uber total, set at 32px over a 40px line. It is the widest figure on any
-# receipt, and it sits two receipts below a sender whose stylesheet wraps long
-# words, so it is the first thing to break when a vendor's CSS escapes its own
-# receipt. These bounds are the rendered box at the render viewport: one line
-# tall, and wide enough to be holding all six characters.
+# The committed example, and the two rows in it that have cost a correction:
+# the Uber and Uber Eats totals, each set at 32px over a 40px line. They are
+# the widest figures on any receipt, and the ride sits two receipts below a
+# sender whose stylesheet wraps long words, so they are the first things to
+# break when a vendor's CSS escapes its own receipt. Both folders once carried
+# a replace pair widening the title cell beside the figure; scoping each
+# receipt's stylesheet to its own card is what actually holds the row
+# together, and the pairs are gone. These bounds are the rendered box at the
+# render viewport in print media: one line tall, and wide enough to be holding
+# every character rather than one per line.
 EXAMPLE_PACKET = REPO_ROOT / "examples" / "packet.html"
 EXAMPLE_DATA = REPO_ROOT / "examples" / "expense_data.json"
-UBER_RECEIPT_TITLE = "Ride, home to airport"
 UBER_TOTAL_TESTID = "total_fare_amount"
-UBER_TOTAL_TEXT = "$34.86"
+UBER_TOTALS = {"Ride, home to airport": "$34.86", "Team lunch order": "$88.60"}
 ONE_LINE = 48
-TOTAL_WIDTH = (90, 106)
+MIN_TOTAL_WIDTH = 60
 
 
 def sender_for(vendor: str, rules: dict[str, dict]) -> str:
@@ -252,40 +255,58 @@ def test_the_documented_clis_run_the_same_pipeline(
     assert all(line.endswith(": data-rid attribute") for line in reported), gate
 
 
-def measure(url: str, selector: str) -> dict:
-    """The bounding box of one element, at the viewport the render uses."""
+def measure(url: str, selectors: dict[str, str]) -> dict[str, dict]:
+    """The bounding box of each named element, at the viewport the render uses.
+
+    One browser for the whole set, in print media, because that is the media
+    render_pdf prints the packet in and a rule that only applies on screen
+    would otherwise be measured instead of the one that reaches the PDF.
+    """
+    found: dict[str, dict] = {}
     with sync_playwright() as play:
         browser, _ = render_pdf.launch_browser(play)
         try:
             page = browser.new_page(viewport=render_pdf.VIEWPORT)
             page.route("**/*", render_pdf.block_remote_requests)
+            page.emulate_media(media="print")
             page.goto(url, wait_until="load")
-            found = page.locator(selector)
-            assert found.count() == 1, f"{found.count()} elements match {selector}"
-            box = found.first.bounding_box()
-            return {"box": box, "text": found.first.inner_text()}
+            for name, selector in selectors.items():
+                located = page.locator(selector)
+                assert located.count() == 1, f"{located.count()} elements match {selector}"
+                found[name] = {
+                    "box": located.first.bounding_box(),
+                    "text": located.first.inner_text(),
+                }
         finally:
             browser.close()
+    return found
 
 
-def test_the_examples_uber_total_prints_on_one_line():
+def test_the_examples_uber_totals_print_on_one_line():
     """The committed packet, measured rather than eyeballed.
 
     The selector is half the assertion. A receipt card carries ``rc`` and its
     own ordinal, and a fragment's stylesheet is rewritten to match that pair,
     so finding the cell under ``.rc.rN`` says the scoping reached the packet
-    that is committed. The box says the rule from two receipts up did not.
+    that is committed. The box says the rule from two receipts up did not, and
+    that the amount is sitting on one line with no vendor rule widening the
+    cell beside it.
     """
     data = json.loads(EXAMPLE_DATA.read_text(encoding="utf-8"))
-    ordinal = next(
-        index
+    ordinals = {
+        receipt["title"]: index
         for index, receipt in enumerate(data["receipts"], start=1)
-        if receipt["title"] == UBER_RECEIPT_TITLE
-    )
-    selector = f'.rc.r{ordinal} [data-testid="{UBER_TOTAL_TESTID}"]'
-    found = measure(EXAMPLE_PACKET.resolve().as_uri(), selector)
+        if receipt["title"] in UBER_TOTALS
+    }
+    assert sorted(ordinals) == sorted(UBER_TOTALS), ordinals
+    selectors = {
+        title: f'.rc.r{ordinal} [data-testid="{UBER_TOTAL_TESTID}"]'
+        for title, ordinal in ordinals.items()
+    }
+    found = measure(EXAMPLE_PACKET.resolve().as_uri(), selectors)
 
-    assert found["text"] == UBER_TOTAL_TEXT
-    low, high = TOTAL_WIDTH
-    assert low <= found["box"]["width"] <= high, found["box"]
-    assert found["box"]["height"] <= ONE_LINE, found["box"]
+    for title, amount in UBER_TOTALS.items():
+        box = found[title]["box"]
+        assert found[title]["text"] == amount
+        assert box["width"] > MIN_TOTAL_WIDTH, (title, box)
+        assert box["height"] <= ONE_LINE, (title, box)
