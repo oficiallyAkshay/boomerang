@@ -9,7 +9,7 @@ endobj
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
 endobj
 4 0 obj
-<< /Length 184 >>
+<< /Length 399 >>
 stream
 BT
 /F1 12 Tf
@@ -17,9 +17,16 @@ BT
 16 TL
 (Harborview Hotel folio page 1 of 2) Tj T*
 (Guest Jordan Rivera) Tj T*
-(Night 1, Monday June 8, 2026) Tj T*
-(Room $231.11) Tj T*
-(Room tax $19.36) Tj T*
+(Confirmation HV-2048841) Tj T*
+(Night 1, Thursday June 11, 2026) Tj T*
+(  Room $154.00) Tj T*
+(  Room tax $23.10) Tj T*
+(Night 2, Friday June 12, 2026) Tj T*
+(  Room $154.00) Tj T*
+(  Room tax $23.10) Tj T*
+(Night 3, Saturday June 13, 2026) Tj T*
+(  Room $154.00) Tj T*
+(  Room tax $23.10) Tj T*
 ET
 endstream
 endobj
@@ -27,7 +34,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
 endobj
 6 0 obj
-<< /Length 256 >>
+<< /Length 443 >>
 stream
 BT
 /F1 12 Tf
@@ -35,10 +42,16 @@ BT
 16 TL
 (Harborview Hotel folio page 2 of 2) Tj T*
 (Guest Jordan Rivera) Tj T*
-(Night 2, Tuesday June 9, 2026) Tj T*
-(Room $231.11) Tj T*
-(Room tax $19.36) Tj T*
-(Room and tax total $500.95) Tj T*
+(Night 4, Sunday June 14, 2026) Tj T*
+(  Room $154.00) Tj T*
+(  Room tax $23.10) Tj T*
+(Night 5, Monday June 15, 2026) Tj T*
+(  Room $154.00) Tj T*
+(  Room tax $23.10) Tj T*
+(Check out Tuesday June 16, 2026) Tj T*
+(Room, 5 nights $770.00) Tj T*
+(Room tax $115.50) Tj T*
+(Room and tax total $885.50) Tj T*
 (Charged to Visa ending 4321) Tj T*
 ET
 endstream
@@ -53,11 +66,11 @@ xref
 0000000058 00000 n 
 0000000121 00000 n 
 0000000191 00000 n 
-0000000426 00000 n 
-0000000552 00000 n 
-0000000859 00000 n 
+0000000641 00000 n 
+0000000767 00000 n 
+0000001261 00000 n 
 trailer
 << /Size 8 /Root 1 0 R >>
 startxref
-985
+1387
 %%EOF

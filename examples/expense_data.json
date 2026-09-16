@@ -1,19 +1,9 @@
 {
   "company": "Northwind Labs, Inc.",
-  "trip": "AUS to SEA onsite, June 8 to 16, 2026",
+  "trip": "AUS to SEA onsite, June 11 to 16, 2026",
   "traveler": "Jordan Rivera",
   "currency": "USD",
   "days": [
-    {
-      "label": "Monday, June 8, hotel nights billed",
-      "items": [
-        {
-          "desc": "Room and tax, 2 nights",
-          "amt": 500.95,
-          "rid": "10a0d07da121a647"
-        }
-      ]
-    },
     {
       "label": "Thursday, June 11, travel out",
       "items": [
@@ -65,8 +55,13 @@
       ]
     },
     {
-      "label": "Tuesday, June 16, personal day, flight home kept",
+      "label": "Tuesday, June 16, check out, personal day, flight home kept",
       "items": [
+        {
+          "desc": "Room and tax, 5 nights",
+          "amt": 885.5,
+          "rid": "10a0d07da121a647"
+        },
         {
           "desc": "Inflight Wi-Fi",
           "amt": 10.99,
@@ -108,8 +103,8 @@
     },
     {
       "rid": "10a0d07da121a647",
-      "title": "Folio, 2 nights",
-      "vendor": "Austin Congress Avenue"
+      "title": "Folio, 5 nights",
+      "vendor": "Harborview Hotel"
     },
     {
       "rid": "654c53dc3924c879",
