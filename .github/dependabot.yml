@@ -1,0 +1,17 @@
+# Actions are pinned to a commit sha, which no scanner can bump on its own, so
+# a version bump arrives here as a pull request that CI has to pass like any
+# other change.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # The runtime and dev pins in pyproject.toml. The cap keeps a quiet week
+  # from opening more pull requests than one person can read.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

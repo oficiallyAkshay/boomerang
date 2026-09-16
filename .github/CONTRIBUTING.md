@@ -100,6 +100,40 @@ uv run python scripts/check_prose.py --packet packet.html
 uv run python examples/build_example.py --check       # after anything that alters a packet
 ```
 
+**What CI runs.** The same gates plus the ones that need a runner. Every row
+the `ci` gate waits on blocks the merge; the coverage upload does not, because
+it cannot authenticate until the repository is public.
+
+| Check | Runs on | Blocks merge |
+| --- | --- | --- |
+| pre-commit hooks, gitleaks skipped | `checks` | yes |
+| packet prose and privacy gate | `checks` | yes |
+| secrets scan over the whole history | `checks` | yes |
+| workflow lint | `checks` | yes |
+| dependency audit | `checks` | yes |
+| pytest with coverage | `test`, on 3.11 and 3.13 | yes |
+| diff coverage at 90 percent | `test`, pull requests only | yes |
+| example check | `test`, on 3.11 and 3.13 | yes |
+| coverage upload | `test`, on 3.13 only | no |
+| gate | `ci` | yes |
+
+A pull request run takes about a minute and a half end to end: `checks` around
+50 seconds, the two test legs about a minute each beside it, the gate in
+seconds.
+
+**Test plan a change must satisfy.** Find your area and write the test that
+proves the row before you open the pull request.
+
+| Area | What a change there must prove |
+| --- | --- |
+| Vendor rules | Every strip pattern fires on the scrubbed sample, no pattern carries an amount away, the sample stays tag-balanced, and each subject pattern matches a subject the sample really prints |
+| Cleaner | Nothing active survives: the probe block in `tests/test_clean.py` gains a case for the shape you changed |
+| Packet builder | `validate` names the bad input as a problem, totals stay in `Decimal`, and the prose gate passes on the rendered packet |
+| Renderer | The page map equals what pypdf counts, the render reaches no network, and a scaled receipt stays above the readable floor |
+| Fetch | The order is deterministic whatever order the answers come back in, and one message that fails is surfaced without ending the run |
+| Docs | Every path `SKILL.md` names exists, the description stays under 200 characters, and the README vendor badge matches the folder count |
+| Example | `examples/build_example.py --check` matches byte for byte after an offline rebuild |
+
 **Git.** One branch per pull request. Never commit to `main`. Never
 `git add -A`. Plain-sentence titles. Merges are rebases.
 
