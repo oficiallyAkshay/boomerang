@@ -27,7 +27,9 @@ dev = [
 package = false
 
 [tool.pytest.ini_options]
-pythonpath = ["scripts", "tests"]
+# ``examples`` carries synth.py, the PNG, PDF and money writers the fixture
+# generator and the worked example both build their receipts with.
+pythonpath = ["scripts", "tests", "examples"]
 testpaths = ["tests"]
 
 [tool.ruff]
