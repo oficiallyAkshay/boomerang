@@ -10,6 +10,7 @@
   <a href=".github/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/oficiallyAkshay/boomerang/ci.yml?branch=main&logo=githubactions&logoColor=white&label=CI"></a>
   <a href="https://codecov.io/gh/oficiallyAkshay/boomerang"><img alt="coverage" src="https://img.shields.io/codecov/c/github/oficiallyAkshay/boomerang?logo=codecov&logoColor=white"></a>
   <img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
+  <a href="references/vendors.md"><img alt="vendors covered" src="https://img.shields.io/badge/vendors-10-6f42c1?logo=databricks&logoColor=white"></a>
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/license-MIT-2f6f4e?logo=opensourceinitiative&logoColor=white"></a>
 </p>
 

@@ -518,3 +518,27 @@ def test_the_reference_page_names_every_folder_that_ships_no_sample() -> None:
         rule = json.loads((VENDORS_DIR / folder / "rules.json").read_text(encoding="utf-8"))
         body = " ".join(sections[rule["display"]])
         assert "no sample" in body.lower(), f"references/vendors.md hides the gap in {folder}"
+
+
+# ------------------------------------------------------------------ the badge
+
+
+README_BADGE_RE = re.compile(r"vendors-(\d+)-")
+
+
+def test_the_readme_vendor_badge_matches_the_folders() -> None:
+    """The README badge and the tree it counts are checked against each other.
+
+    CI runs the whole suite on every pull request, so a vendor folder added
+    or dropped without touching the badge fails here before it reaches main.
+    """
+    with_sample = sum(1 for folder in FOLDERS if samples_for(folder))
+    readme = (VENDORS_DIR.parent / "README.md").read_text(encoding="utf-8")
+    match = README_BADGE_RE.search(readme)
+    assert match, "README.md has no vendors badge matching vendors-<N>-"
+    badge_count = int(match.group(1))
+    assert badge_count == with_sample, (
+        f"README vendor badge says {badge_count}, but {with_sample} vendor folders "
+        f"carry a sample.html or sample.txt; change the badge in README.md to "
+        f"vendors-{with_sample}-"
+    )
