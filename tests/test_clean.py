@@ -1525,7 +1525,7 @@ def test_the_amount_guard_warnings_come_out_in_filename_order(
     assert listed == [("a.html", "zulu"), ("b.html", "yankee"), ("c.html", "xray")]
     reported = [line for line in capsys.readouterr().err.splitlines() if line.strip()]
     assert reported == [
-        f"clean: {vendor} strip pattern 0 skipped, " "it would have taken an amount with it"
+        f"clean: {vendor} strip pattern 0 skipped, it would have taken an amount with it"
         for vendor in ("zulu", "yankee", "xray")
     ]
     # The guard held: every total is still on the page it belongs to.

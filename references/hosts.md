@@ -121,6 +121,22 @@ from an MCP server the user adds.
 
 Source: <https://cursor.com/docs/context/skills>
 
+## Optional: Headroom
+
+Headroom is a context compression layer for agent tool outputs, logs and RAG
+chunks. Boomerang uses it in one place only: `fetch.py --compact` writes a
+`<rid>.compact.txt` beside each plaintext body, with the legal boilerplate and
+the repeated layout text squeezed out, so the model reads a shorter file when
+it pulls values. Install it with `uv sync --extra compact`, or without uv
+`pip install headroom-ai`.
+
+It is optional on every host and it is never a dependency. Nothing imports it
+until `--compact` is passed, the flag does nothing when the package is absent,
+and a run without it is unchanged. A host already running behind
+`headroom proxy` or `headroom wrap` gets the same benefit with no flag.
+
+Source: <https://github.com/headroomlabs-ai/headroom>
+
 ## The open specification
 
 The open skills specification requires `name` and `description`. The

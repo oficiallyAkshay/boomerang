@@ -637,3 +637,119 @@ def test_the_cli_defaults_to_three_workers(tmp_path: Path, monkeypatch, capsys):
     assert main(["--start", "2026-06-08", "--end", "2026-06-09", "--out", str(tmp_path)]) == 0
     assert seen == {"workers": BODY_WORKERS}
     capsys.readouterr()
+
+
+# The Headroom step. The package is optional, so both worlds are built here:
+# a fake module in sys.modules for the installed case, and a None entry for the
+# absent one, which is what makes `from headroom import compress` raise
+# ImportError however the real package is installed on the machine running this.
+
+
+class FakeCompressResult:
+    """What headroom.compress returns: messages, plus counts we do not read."""
+
+    def __init__(self, messages: list[dict]):
+        self.messages = messages
+        self.tokens_before = 0
+        self.tokens_after = 0
+        self.tokens_saved = 0
+        self.compression_ratio = 0.0
+        self.transforms_applied: list[str] = []
+
+
+def install_fake_headroom(monkeypatch, shorten, calls: list | None = None):
+    """Put a stand in for the headroom package in sys.modules."""
+
+    def compress(messages, **kwargs):
+        if calls is not None:
+            calls.append((messages, kwargs))
+        return FakeCompressResult(shorten(messages[0]["content"]))
+
+    module = types.ModuleType("headroom")
+    module.compress = compress
+    monkeypatch.setitem(sys.modules, "headroom", module)
+
+
+def one_string_message(text: str) -> list[dict]:
+    return [{"role": "user", "content": text.split("BOILERPLATE")[0]}]
+
+
+def test_compact_bodies_writes_nothing_when_headroom_is_not_installed(tmp_path, monkeypatch):
+    (tmp_path / "a1.txt").write_text("Total $42.10", encoding="utf-8")
+    monkeypatch.setitem(sys.modules, "headroom", None)
+
+    assert fetch.compact_bodies(tmp_path, ["a1"]) == []
+    assert not (tmp_path / "a1.compact.txt").exists()
+    assert (tmp_path / "a1.txt").read_text(encoding="utf-8") == "Total $42.10"
+
+
+def test_compact_bodies_writes_the_compact_file_and_prints_both_counts(
+    tmp_path, monkeypatch, capsys
+):
+    (tmp_path / "a1.txt").write_text("Total $42.10\nBOILERPLATE and more of it", encoding="utf-8")
+    calls: list = []
+    install_fake_headroom(monkeypatch, one_string_message, calls)
+
+    assert fetch.compact_bodies(tmp_path, ["a1"]) == ["a1"]
+    assert (tmp_path / "a1.compact.txt").read_text(encoding="utf-8") == "Total $42.10\n"
+    # The full body is what the packet is built from, so it stays as it was.
+    assert (tmp_path / "a1.txt").read_text(encoding="utf-8").endswith("more of it")
+    assert "compact: a1 39 characters to 13" in capsys.readouterr().out
+
+    messages, kwargs = calls[0]
+    assert messages[0]["role"] == "user"
+    assert kwargs == {"compress_user_messages": True, "protect_recent": 0}
+
+
+def test_compact_bodies_reads_content_blocks_as_well_as_strings(tmp_path, monkeypatch, capsys):
+    (tmp_path / "a1.txt").write_text("Total $42.10 BOILERPLATE", encoding="utf-8")
+
+    def blocks(text):
+        return [{"role": "user", "content": [{"type": "text", "text": "Total"}, {"type": "text"}]}]
+
+    install_fake_headroom(monkeypatch, blocks)
+
+    assert fetch.compact_bodies(tmp_path, ["a1"]) == ["a1"]
+    assert (tmp_path / "a1.compact.txt").read_text(encoding="utf-8") == "Total"
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize(
+    "messages, expected",
+    [([], ""), ([{"role": "user", "content": None}], "")],
+)
+def test_a_message_with_no_text_compacts_to_nothing(messages, expected):
+    assert fetch._message_text(messages) == expected
+
+
+def test_compact_bodies_passes_over_a_rid_with_no_plaintext_body(tmp_path, monkeypatch, capsys):
+    (tmp_path / "a1.html").write_text("<p>pdf only</p>", encoding="utf-8")
+    install_fake_headroom(monkeypatch, one_string_message)
+
+    assert fetch.compact_bodies(tmp_path, ["a1"]) == []
+    assert not (tmp_path / "a1.compact.txt").exists()
+    assert capsys.readouterr().out == ""
+
+
+def test_the_cli_compacts_only_when_asked(tmp_path: Path, monkeypatch, capsys):
+    out = tmp_path / "receipts"
+    out.mkdir()
+    (out / "a1.txt").write_text("Total $42.10 BOILERPLATE", encoding="utf-8")
+
+    def spy(source, queries, out_dir, workers=None):
+        return ["a1"], [], [], []
+
+    fake = types.ModuleType("gmail_cli")
+    fake.GmailSource = lambda: None
+    monkeypatch.setitem(sys.modules, "gmail_cli", fake)
+    monkeypatch.setattr(fetch, "fetch_all", spy)
+    install_fake_headroom(monkeypatch, one_string_message)
+
+    argv = ["--start", "2026-06-08", "--end", "2026-06-09", "--out", str(out)]
+    assert main(argv) == 0
+    assert not (out / "a1.compact.txt").exists()
+    assert "compact:" not in capsys.readouterr().out
+
+    assert main([*argv, "--compact"]) == 0
+    assert (out / "a1.compact.txt").read_text(encoding="utf-8") == "Total $42.10 "
+    assert "compact: a1 24 characters to 13" in capsys.readouterr().out

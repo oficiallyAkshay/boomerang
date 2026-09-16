@@ -59,12 +59,13 @@ CLI: clean.py --dir RECEIPTS --out CLEAN [--vendors DIR] [--images DIR] [--fetch
   # everything else, meta files included, stays behind. One "clean: <file> vendor <name>" line
   # per receipt on stderr, in filename order, and the amount guard warnings in that order too
 CLI: cards.py RECEIPTS_DIR      # reads .html, .txt and .pdf receipts, so folios are counted too
-CLI: fetch.py --start YYYY-MM-DD --end YYYY-MM-DD --out DIR [--vendors DIR] [--dry-run] [--workers N]
+CLI: fetch.py --start YYYY-MM-DD --end YYYY-MM-DD --out DIR [--vendors DIR] [--dry-run] [--workers N] [--compact]
   # runs the two passes as concurrent queries and merges the ids by query index, not by which
   # query answered first; --workers is how many bodies are fetched at once, 3 by default
   # writes <rid>.html, <rid>.txt, <rid>.meta.json; the first kept attachment of each kind is
   # <rid>.pdf | <rid>.png | <rid>.jpg and later ones of that kind <rid>.<n>.<ext>; a message
   # with no body and no kept attachment writes nothing and is named on stdout as empty
+  # --compact adds <rid>.compact.txt per body, one stdout line each, when headroom is installed
 CLI: gmail_cli.py auth --client-secret PATH | search QUERY | get RID --out DIR ; token at ~/.config/boomerang/token.json chmod 600
 CLI: render_pdf.py packet.html packet.pdf [--expect N]      # prints the page count; exits 2 when --expect differs
   # aborts every http and https request the page makes, so nothing is fetched while rendering;
@@ -102,3 +103,14 @@ clean.clean_dir(src_dir, out_dir, vendors_dir, image_cache=None, fetch_images=Fa
 
 It raises `ValueError` when `fetch_images` is asked for with no `image_cache`. `fetch.fetch_all`
 takes the same kind of argument, `workers=3`, and its four lists stay in first seen order.
+
+## The optional Headroom step
+
+```text
+fetch.compact_bodies(out_dir, rids) -> list[str]   # the rids compacted, in the order given
+```
+
+It imports `headroom` inside the function, never at module load, and returns an empty list having
+written nothing when the package is absent. For each rid with a `<rid>.txt` on disk it writes
+`<rid>.compact.txt` and prints `compact: <rid> <before> characters to <after>`. The full body is
+left alone, so the packet is built from the same file it always was.

@@ -15,6 +15,13 @@ gmail = [
     "google-api-python-client==2.200.0",
     "google-auth-oauthlib==1.4.1",
 ]
+# Optional, never required: the compaction step in fetch.py imports headroom
+# only when --compact is passed. The bare package is taken rather than
+# headroom-ai[all], whose ML extras pull transformers and the tree-sitter
+# language pack for features nothing here uses.
+compact = [
+    "headroom-ai==0.37.0",
+]
 dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",

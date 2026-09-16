@@ -13,8 +13,9 @@ thread pool and their results are merged by query index rather than by
 whichever answered first. Bodies are fetched on a second small pool, and each
 one is written straight to disk in the worker that fetched it. The rule about
 one receipt at a time is a rule about the model's context, not about the
-script: nothing here holds a body once it is written, no body is ever read
-back, and a message whose meta file is already on disk is never fetched twice.
+script: nothing here holds a body once it is written, and a message whose meta
+file is already on disk is never fetched twice. The optional ``--compact``
+step is the one thing that reads a body back, and it reads each one once.
 
 Gmail is the only source, so the CLI has no flag for choosing one. A source is
 anything with ``search(query_str) -> list[str]`` and ``get(rid) -> dict``,
@@ -32,6 +33,11 @@ A message with no body and no attachment worth keeping writes nothing at all,
 meta file included. Writing an empty meta file would mark the message done and
 skip it on every later run, so instead it is reported as failed and tried
 again next time.
+
+Headroom is optional and is never required. When the ``headroom`` package is
+importable, ``--compact`` writes a shorter ``<rid>.compact.txt`` beside each
+body for the model to read values from. When it is not installed, the flag
+does nothing at all and the run is unchanged.
 """
 
 from __future__ import annotations
@@ -286,6 +292,63 @@ def fetch_all(
     return written, rejected, skipped, failed
 
 
+def _message_text(messages: list[dict]) -> str:
+    """The text of the first message, whether its content is a string or blocks.
+
+    Headroom hands back messages in the format it was given, and a content
+    block list is the other format it accepts, so both are read here.
+    """
+    if not messages:
+        return ""
+    content = messages[0].get("content")
+    if isinstance(content, str):
+        return content
+    blocks = content if isinstance(content, list) else []
+    return "\n".join(b["text"] for b in blocks if isinstance(b, dict) and "text" in b)
+
+
+def compact_bodies(out_dir: Path, rids: list[str]) -> list[str]:
+    """Write a compacted ``<rid>.compact.txt`` beside each plaintext body.
+
+    Headroom is a context compression layer, and a vendor body is mostly legal
+    boilerplate and repeated layout text, so the model can read its values from
+    a shorter file. It is optional and it is never a dependency: the import
+    happens here rather than at module load, and a machine without the package
+    gets an empty list back and no files written.
+
+    Returns the rids compacted, and prints one line per rid with the character
+    count before and after. A body Headroom finds nothing to remove from is
+    still written out, unchanged, so the file the model is told to read is
+    always there once the flag is passed. The full body stays on disk either
+    way, because the packet is built from it and not from the compact copy.
+    """
+    try:
+        from headroom import compress
+    except ImportError:
+        return []
+
+    out_dir = Path(out_dir)
+    compacted: list[str] = []
+    for rid in rids:
+        body = out_dir / f"{rid}.txt"
+        if not body.exists():
+            continue
+        text = body.read_text(encoding="utf-8")
+        # compress_user_messages and protect_recent are Headroom's documented
+        # settings for a standalone document: without them a lone user message
+        # is held back as recent conversation and nothing is ever compressed.
+        result = compress(
+            [{"role": "user", "content": text}],
+            compress_user_messages=True,
+            protect_recent=0,
+        )
+        compact = _message_text(result.messages)
+        (out_dir / f"{rid}.compact.txt").write_text(compact, encoding="utf-8")
+        print(f"compact: {rid} {len(text)} characters to {len(compact)}")
+        compacted.append(rid)
+    return compacted
+
+
 def _parse_date(value: str) -> date:
     return datetime.strptime(value, "%Y-%m-%d").date()
 
@@ -303,6 +366,11 @@ def main(argv: list[str] | None = None) -> int:
         default=BODY_WORKERS,
         help=f"how many bodies to fetch at once (default {BODY_WORKERS})",
     )
+    parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="also write <rid>.compact.txt, when the optional headroom package is installed",
+    )
     args = parser.parse_args(argv)
 
     rules = load_vendor_rules(args.vendors) if args.vendors else {}
@@ -318,6 +386,8 @@ def main(argv: list[str] | None = None) -> int:
     written, rejected, skipped, failed = fetch_all(
         GmailSource(), queries, args.out, workers=args.workers
     )
+    if args.compact:
+        compact_bodies(args.out, written)
     for rid in failed:
         print(f"fetch: {rid} came back empty, nothing written, it will be asked for again")
     print(

@@ -76,6 +76,9 @@ Notes on the fallback:
 - Prerequisite, done before the run: `uv sync --extra gmail`, or without uv
   `pip install google-api-python-client google-auth-oauthlib`.
 
+Headroom is optional everywhere, and a host already running behind `headroom
+proxy` or `headroom wrap` needs nothing else.
+
 One host behavior matters more than the rest. An unapproved tool call can fail
 silently: it is declined, nothing is returned, and the session carries on as if
 the step had run. If a search or calendar call comes back empty or malformed,
@@ -122,7 +125,10 @@ never fetched, and a packet built without them is short an unmentioned receipt.
 One at a time is a rule about your context, not about the script. Read values
 from the plaintext body. Open one full HTML per vendor, to learn that vendor's
 layout, and no more. A single vendor email is 60 to 125 KB of tracking links.
-Never load many raw emails into context.
+Never load many raw emails into context. When the optional Headroom package is
+installed, pass `--compact` and read values from `<rid>.compact.txt`, the same
+body with the boilerplate squeezed out. The full body stays on disk and the
+packet is still built from it.
 
 ### 4. Work out who paid
 
