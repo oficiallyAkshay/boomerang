@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """Prose and privacy gate.
 
-Scans tracked text files for two things: the em dash, which the packet style
-forbids, and any phrase whose sha256 appears in the hashed denylist. Hits are
-reported by file and line, never by content.
+Two modes, and they look at different things.
+
+With no flag it scans every tracked text file for two things: the em dash,
+which the packet style forbids, and any phrase whose sha256 appears in the
+hashed denylist. Hits are reported by file and line, never by content. The
+repo root and the denylist are resolved from this file's own path, so the tree
+scan reads the same files whatever directory it was run from, and it exits 1
+with a message when the denylist is missing or empty rather than reporting
+zero errors from a gate that was checking nothing.
+
+``--packet FILE`` scans that one file and nothing else, so it works wherever
+the skill happens to be installed and needs no git repository around it. It
+adds the checks that only make sense on a built packet: the standalone banned
+word, the data-rid attribute, and a link to a fragment of the packet itself. A
+packet is printed and mailed, so an attribute carrying a message id and a link
+that goes nowhere on paper are both noise a reviewer should never have to see.
 
 A file that opens with a UTF-16 byte order mark is decoded as UTF-16 before
 anything else looks at it. Such a file is full of NUL bytes, so the binary
 test used to wave it through unread, which is a hole in a gate whose job is
 to find a name nobody meant to ship.
-
-``--packet`` adds the checks that only make sense on a built packet: the
-standalone banned word, the data-rid attribute, and a link to a fragment of
-the packet itself. A packet is printed and mailed, so an attribute carrying a
-message id and a link that goes nowhere on paper are both noise a reviewer
-should never have to see.
 """
 
 from __future__ import annotations
@@ -26,10 +33,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Resolved from this file rather than from the working directory, so a run
+# from anywhere reads the same tree and the same denylist.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DENYLIST_PATH = REPO_ROOT / "tests" / "pii_denylist.sha256"
+
 # The two prose rules, defined once for the whole repo. build.py imports them
 # so a packet and the gate can never disagree about what they forbid.
 EM_DASH = "\u2014"  # the character itself never appears in this repo
-DENYLIST_PATH = Path("tests/pii_denylist.sha256")
 SKIP_NAMES = {"uv.lock", "pii_denylist.sha256"}
 SKIP_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2"}
 TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -106,18 +117,13 @@ def line_hits_denylist(line: str, denylist: set[str]) -> bool:
     return False
 
 
-def scan_text(
-    name: str,
-    text: str,
-    denylist: set[str],
-    flag_banned_word: bool = False,
-    flag_packet_markup: bool = False,
-) -> list[str]:
+def scan_text(name: str, text: str, denylist: set[str], packet: bool = False) -> list[str]:
     """Every rule that applies, line by line. Returns error strings.
 
-    The two flags are separate because a caller that only wants the prose
-    rules checked on packet text should not have to take the markup rules
-    with them.
+    ``packet`` turns on the three rules that only mean something on a built
+    packet. They were two flags, taken apart for a caller that wanted the
+    banned word without the markup rules; no caller ever wanted that, and one
+    flag that means "this text is a packet" is the thing both callers do want.
     """
     errors: list[str] = []
     for number, line in enumerate(text.splitlines(), start=1):
@@ -125,9 +131,9 @@ def scan_text(
             errors.append(f"{name}:{number}: em dash")
         if line_hits_denylist(line, denylist):
             errors.append(f"{name}:{number}: denylist hit")
-        if flag_banned_word and BANNED_WORD_RE.search(line):
-            errors.append(f"{name}:{number}: banned word")
-        if flag_packet_markup:
+        if packet:
+            if BANNED_WORD_RE.search(line):
+                errors.append(f"{name}:{number}: banned word")
             if DATA_RID_RE.search(line):
                 errors.append(f"{name}:{number}: data-rid attribute")
             if FRAGMENT_LINK in line:
@@ -135,34 +141,35 @@ def scan_text(
     return errors
 
 
-def scan(files: list[Path], denylist: set[str]) -> list[str]:
-    """Check every readable text file in files. Returns error strings."""
+def scan(files: list[Path], denylist: set[str], root: Path | None = None) -> list[str]:
+    """Check every readable text file in files. Returns error strings.
+
+    ``root`` is where a relative path in ``files`` is read from, so a tree scan
+    reads the repo's own files whatever directory the gate was run from, while
+    the name in an error stays the repo relative one a reader can act on.
+    """
     errors: list[str] = []
     for path in files:
-        if not path.is_file() or not is_scannable(path):
+        target = path if root is None else root / path
+        if not target.is_file() or not is_scannable(target):
             continue
-        errors.extend(scan_text(path.as_posix(), read_text(path), denylist))
+        errors.extend(scan_text(path.as_posix(), read_text(target), denylist))
     return errors
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Prose and privacy gate.")
-    parser.add_argument("--packet", type=Path, help="also check a built packet file")
-    parser.add_argument("--denylist", type=Path, default=DENYLIST_PATH)
+    parser.add_argument("--packet", type=Path, help="check this built packet, and nothing else")
     args = parser.parse_args(argv)
 
-    denylist = load_denylist(args.denylist)
-    errors = scan(git_files(), denylist)
+    denylist = load_denylist()
     if args.packet:
-        errors.extend(
-            scan_text(
-                args.packet.as_posix(),
-                read_text(args.packet),
-                denylist,
-                flag_banned_word=True,
-                flag_packet_markup=True,
-            )
-        )
+        errors = scan_text(args.packet.as_posix(), read_text(args.packet), denylist, packet=True)
+    else:
+        if not denylist:
+            print(f"check_prose: no denylist at {DENYLIST_PATH.as_posix()}, nothing to check with")
+            return 1
+        errors = scan(git_files(REPO_ROOT), denylist, root=REPO_ROOT)
 
     for error in errors:
         print(error)

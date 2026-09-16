@@ -30,7 +30,7 @@ def packet(fixture_dir: Path, fixture_data: dict, tmp_path_factory) -> dict:
     out = tmp_path_factory.mktemp("attach")
     html = write_packet(out / "packet.html", fixture_data, fixture_dir / "receipts")
     pdf = out / "packet.pdf"
-    pages = render_pdf.render(html, pdf)
+    pages, _channel = render_pdf.render(html, pdf)
     return {"dir": out, "html": html, "pdf": pdf, "pages": pages}
 
 
@@ -78,8 +78,8 @@ def test_the_output_is_stamped_and_a_second_splice_is_refused(
     once = tmp_path / "once.pdf"
     attach_pdf.splice(packet["pdf"], fixture_data, receipts_dir, once)
 
-    assert attach_pdf.is_spliced(once) is True
-    assert attach_pdf.is_spliced(packet["pdf"]) is False
+    assert attach_pdf.SPLICED_KEY in (PdfReader(str(once)).metadata or {})
+    assert attach_pdf.SPLICED_KEY not in (PdfReader(str(packet["pdf"])).metadata or {})
 
     twice = tmp_path / "twice.pdf"
     with pytest.raises(ValueError, match="spliced already"):
@@ -150,7 +150,7 @@ def test_splice_keeps_two_attachments_in_place(tmp_path: Path) -> None:
     }
 
     html = write_packet(tmp_path / "packet.html", data, receipts_dir)
-    before = render_pdf.render(html, tmp_path / "packet.pdf")
+    before, _channel = render_pdf.render(html, tmp_path / "packet.pdf")
     assert before == 4
 
     out = tmp_path / "final.pdf"
