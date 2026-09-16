@@ -156,10 +156,9 @@ uv run python scripts/clean.py --dir receipts --out clean \
 
 `--dir` cleans four at a time, carries the `.txt`, `.pdf`, `.png` and `.jpg`
 receipts across untouched, and prints its warnings in filename order; the
-one-receipt form still corrects a single file.
-`--fetch-images` is the only step that opens a socket, and it downloads from
-the cleaned fragment, so the pixels the cleaner just removed are never asked
-for. `.image-cache` is gitignored: a working directory, not part of the packet.
+one-receipt form still works. `--fetch-images` is the only step that opens a
+socket, and it downloads from the cleaned fragment, so a removed pixel is never
+asked for. `.image-cache` is gitignored: a working directory, not the packet.
 
 The cleaner reads the vendor from the `<rid>.meta.json` saved beside each
 message and prints the one it chose, so `--vendor` is for correcting it, and
@@ -230,10 +229,9 @@ rebuild, and restate the totals.
 
 Ask nothing up front. Reconstruct the trip, apply the defaults, show the list.
 
-**Inferred silently**, with no question asked: who booked the flight and the
-hotel; the trip window; personal days, meaning any day in the window with no
-work and no travel; ride classification by endpoint; duplicate meals; meals the
-company provided.
+**Inferred silently**, never asked: who booked the flight and the hotel; the
+trip window; personal days, any day in the window with no work and no travel;
+ride classification by endpoint; duplicate meals; meals the company provided.
 
 **Defaults shown in the list, not asked**: upgrades out; miles out; tips out;
 deposits out; personal-day nights and rides out with the airport legs kept;
