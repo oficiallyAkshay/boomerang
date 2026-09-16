@@ -10,12 +10,12 @@ the bottom says so.
 | Host | Where the skill folder goes | Scripts | Email and calendar |
 | --- | --- | --- | --- |
 | Claude Code | `~/.claude/skills/boomerang/`, or `.claude/skills/boomerang/` inside a project | Runs them through its shell | Whatever MCP servers the user has configured |
-| Claude.ai and the Claude desktop app | Upload the folder as a zip under Settings, Capabilities | Anthropic's sandbox | The account's Gmail connector, if enabled |
-| Cowork | Customize, Skills, add a skill folder | Not independently confirmed | Not independently confirmed |
-| Codex | `.agents/skills/` in the project, or `~/.agents/skills/` | Its exec tool | MCP declared in config only |
+| Claude.ai and the Claude desktop app | Upload the folder as a zip under Customize, Skills | Anthropic's sandbox, PyPI installs but no browser binary | The account's Gmail connector, if enabled |
+| Cowork | Not independently confirmed | Not independently confirmed | Not independently confirmed |
+| Codex | `.agents/skills/` from the cwd up to the repo root, plus `$HOME/.agents/skills` and `/etc/codex/skills` | Its exec tool | MCP declared in config only |
 | OpenClaw | `<workspace>/skills`, `.agents/skills`, or `~/.agents/skills` | Its exec tool runs Python | A user-configured MCP server or CLI |
-| Hermes | `~/.hermes/skills/`, `.hermes/skills/`, or `.agents/skills/` | Terminal and code execution toolsets | Not covered by the cited page |
-| Cursor | `.cursor/skills/` or `.agents/skills/`, and it also reads `.claude/skills/` | The agent terminal | A user-added MCP server |
+| Hermes | `~/.hermes/skills/`, or `.hermes/skills/` and `.agents/skills/` after `hermes skills trust` | Terminal and code execution toolsets | Not covered by the cited page |
+| Cursor | `.cursor/skills/` or `.agents/skills/` in a project, `~/.cursor/skills/` or `~/.agents/skills/` for every project, and it also reads `.claude/skills/` | The agent terminal | A user-added MCP server |
 
 ## Per-host notes
 
@@ -31,33 +31,43 @@ Sources: <https://code.claude.com/docs/en/agent-sdk/skills> and
 
 ### Claude.ai and the Claude desktop app
 
-Zip the skill folder and upload it under Settings, Capabilities. The
-description field is limited to 200 characters, which is why boomerang keeps
-its description under that everywhere.
+Zip the skill folder and upload it under Customize, Skills. The zip must have
+the skill folder itself as its root, and it should contain only what the host
+needs to run: `SKILL.md`, `policy.md`, `scripts/`, `references/`, `vendors/`
+and `LICENSE`. Leave out the tests, the CI workflows, the examples and
+`pyproject.toml`. The description field is limited to 200 characters, which is
+why boomerang keeps its description under that everywhere.
 
-Scripts run in Anthropic's sandbox, where extra packages cannot be installed at
-runtime. PDF rendering may therefore need the fallback path rather than a fresh
-Chromium install. Email is available through the account's Gmail connector when
-that connector is enabled.
+Scripts run in Anthropic's sandbox. PyPI packages can be installed while the
+skill is loading, but a Chromium browser binary cannot be downloaded, so
+`render_pdf.py` does not work here: the deliverable is `packet.html`, which
+the user prints to PDF. Email is available through the account's Gmail
+connector when that connector is enabled.
 
 Source: <https://support.claude.com/en/articles/12512198-how-to-create-custom-skills>
 
 ### Cowork
 
-Customize, then Skills, then add a skill folder. The same 200-character
-description limit applies. How Cowork executes skill scripts is not
-independently confirmed; assume nothing about the sandbox until it is checked.
+Cowork shares the Claude.ai sandbox, so the same Chromium limit is expected to
+apply and the deliverable there is `packet.html` rather than a PDF. That is a
+carried-over expectation, not a checked fact. No first-party page found so far
+gives a Cowork-specific path for uploading a custom skill folder: the plugins
+page names Customize for plugins and mentions uploading a custom plugin file,
+which is not the same thing. The install path is therefore in the "Not
+verified" list below.
 
-Source: <https://support.claude.com/en/articles/12512198-how-to-create-custom-skills>
+Source, for what it does cover:
+<https://support.claude.com/en/articles/13837440-use-plugins-in-claude>
 
 ### Codex
 
-The skill folder goes in `.agents/skills/` inside the project, or in
-`~/.agents/skills/` for every project. Scripts run through its exec tool. Email
-is reachable only through an MCP server declared in the configuration; there is
-no bundled mail capability.
+Codex scans `.agents/skills` from the working directory upwards to the repo
+root, so a folder at any level in between is picked up, and it also reads
+`$HOME/.agents/skills` and `/etc/codex/skills`. Scripts run through its exec
+tool. Email is reachable only through an MCP server declared in the
+configuration; there is no bundled mail capability.
 
-Source: <https://developers.openai.com/codex/skills/>
+Source: <https://learn.chatgpt.com/docs/build-skills>
 
 ### OpenClaw
 
@@ -72,17 +82,20 @@ Sources: <https://docs.openclaw.ai/tools/skills> and
 ### Hermes
 
 Skill folders are read from `~/.hermes/skills/`, `.hermes/skills/`, and
-`.agents/skills/`. Hermes exposes terminal and code execution toolsets, which
-cover the `run-python` capability.
+`.agents/skills/`. A project-local folder has to be trusted first, with
+`hermes skills trust`; the user-level `~/.hermes/skills/` needs no trust step.
+Hermes exposes terminal and code execution toolsets, which cover the
+`run-python` capability.
 
 Source: <https://hermes-agent.nousresearch.com/docs/user-guide/features/skills>
 
 ### Cursor
 
-The skill folder goes in `.cursor/skills/` or `.agents/skills/`, and Cursor
-also reads `.claude/skills/`, so an existing Claude Code install is picked up
-without copying. Scripts run through the agent terminal. Email comes from an
-MCP server the user adds.
+The skill folder goes in `.cursor/skills/` or `.agents/skills/` inside a
+project, or in `~/.cursor/skills/` or `~/.agents/skills/` for every project.
+Cursor also reads `.claude/skills/`, so an existing Claude Code install is
+picked up without copying. Scripts run through the agent terminal. Email comes
+from an MCP server the user adds.
 
 Source: <https://cursor.com/docs/context/skills>
 
@@ -92,13 +105,20 @@ The open skills specification requires `name` and `description`. The
 specification allows a description of up to 1024 characters, but Claude.ai caps
 it at 200, so this skill keeps 200 as the limit everywhere.
 
-Source: <https://agentskills.io/specification>
+It also allows a `metadata` map of string values. That is where boomerang's
+icon lives, because Anthropic's skill validator rejects a top-level key it
+does not know.
+
+Sources: <https://agentskills.io/specification> and
+<https://code.claude.com/docs/en/skills>
 
 ## Not verified
 
 These are open questions, not claims. Do not write them into the table until
 someone checks them and cites a page.
 
+- Cowork: where a custom skill folder is installed from. No first-party page
+  found gives the path
 - Cowork's execution sandbox: what runs, with what installed, and under what
   limits
 - Codex: exactly how skill scripts are executed by the exec tool
