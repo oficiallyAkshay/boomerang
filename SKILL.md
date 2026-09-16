@@ -2,6 +2,316 @@
 name: boomerang
 description: "Turn a personal inbox into a reimbursement packet: finds trip receipts, splits company-paid from self-paid, applies a written policy, outputs one PDF with a summary and the original receipts."
 license: MIT
+compatibility: "Needs a host with an email tool or the bundled Gmail fallback, a shell, and Python 3.11+"
 ---
 
-Instructions land in wave 1.
+# Boomerang
+
+Someone spent their own money on a company's behalf and now has to claim it
+back. Boomerang finds the trip receipts in their mailbox, decides which lines
+the company owes, and builds one packet: a summary table, then the original
+receipts, one per page. Nothing is sent anywhere; the user reviews and sends it
+themselves.
+
+## The split between code and judgment
+
+The rule is simple. If a wrong answer costs money or credibility, it belongs in
+a script. If a wrong answer costs one clarifying question, it belongs to you.
+
+Code owns:
+
+- Gmail query construction and windowing
+- One-at-a-time fetch to disk
+- Vendor email cleaning and image inlining
+- The card fingerprint check
+- Day tables, subtotals, and totals
+- The PDF render and page count check
+
+You own:
+
+- Identifying the trip and setting the claimable window
+- Classifying rides by endpoint
+- Flagging anomalies
+- Wording line descriptions
+
+Never recompute a total by hand. Never eyeball a card fingerprint. Run the
+script and read its output.
+
+## Capability contract
+
+Boomerang needs five capabilities. Check which ones the host gives you before
+starting, and say plainly which are missing.
+
+| Capability | On a connector host | With the bundled fallback |
+| --- | --- | --- |
+| search-email | The host's email search tool | `scripts/gmail_cli.py search QUERY` |
+| read-email | The host's message read tool | `scripts/gmail_cli.py get RID --out DIR` |
+| search-calendar | The host's calendar tool | Ask the user for the onsite dates |
+| write-file | The host's file write tool | Shell redirection |
+| run-python | The host's shell or code tool | Required; there is no substitute |
+
+Notes on the fallback:
+
+- `gmail_cli.py auth --client-secret PATH` runs the OAuth flow once. The token
+  lands at `~/.config/boomerang/token.json` with mode 600.
+- The fallback is the only path that can download attachments. Hotel folios
+  usually arrive as PDF attachments, and email connectors cannot fetch them.
+- Install the optional extra first: `uv sync --extra gmail`.
+
+One host behavior matters more than the rest. An unapproved tool call can fail
+silently: the call is declined, nothing is returned, and the session carries on
+as if the step had run. If a search or calendar call comes back empty or
+malformed, retry it once. If it fails again, tell the user what you tried and
+ask them to approve it or paste the answer.
+
+## Workflow
+
+Run these nine steps in order. Show your work at step 6 and stop there for
+correction.
+
+### 1. Find the trip
+
+Read the calendar for the onsite or working dates. Take the travel window from
+the **final** eTicket, not the first one. Itineraries get rebooked, so the first
+eTicket has the wrong dates. It is still the right place to read who paid.
+
+If there is no calendar, ask for the onsite dates and nothing else.
+
+### 2. Search the mailbox in two passes
+
+Pass one is date-windowed generic terms: receipt, confirmation, your ride, your
+order, eTicket. Pass two is one query per vendor: Lyft, Uber, DoorDash, United,
+Delta, hotel chains, Hotels.com, citizenM, Lime.
+
+Pad the window one day on each side. Ride receipts arrive six to twenty hours
+after the ride, and the airport legs get missed otherwise.
+
+`fetch.py` builds both passes from the vendor rules and does the padding for
+you:
+
+```bash
+uv run python scripts/fetch.py --start 2026-03-02 --end 2026-03-06 \
+  --out receipts --vendors vendors --source gmail
+```
+
+### 3. Fetch one receipt at a time, to disk
+
+`fetch.py` writes each message as `<rid>.html`, `<rid>.txt` and
+`<rid>.meta.json`, one message at a time, and skips anything already on disk.
+
+Read values from the plaintext body. Open one full HTML per vendor, to learn
+that vendor's layout, and no more. A single vendor email is 60 to 125 KB of
+tracking links. Never load many raw emails into context.
+
+### 4. Work out who paid
+
+Two signals, both mechanical.
+
+The card fingerprint: a last-4 that appears on exactly one receipt in the whole
+mailbox belongs to someone else.
+
+```bash
+uv run python scripts/cards.py receipts
+```
+
+The eTicket chain: read it oldest first. The phrase "previous ticket value
+applied" means the base fare was paid earlier, by someone else.
+
+Restated: the final eTicket settles the dates, the first eTicket settles who
+paid.
+
+### 5. Apply the policy
+
+Read `policy.md`. Then read `policy.local.md` if it exists, and let its lines
+override the shipped defaults. The local file is gitignored, so it is where a
+user keeps their own or their company's wording. If the two disagree, the local
+file wins, silently.
+
+Build the candidate line-item list with the defaults applied. Clean each
+receipt as you go:
+
+```bash
+uv run python scripts/clean.py receipts/<rid>.html --out clean/<rid>.html \
+  --vendors vendors --images .image_cache
+```
+
+### 6. Show the candidate list, then correct it
+
+Print the full candidate list before you build anything: every day, every line,
+every amount, and the running total. Mark each default you applied so the user
+can see it without asking.
+
+Then ask the one standing question in the next section. Wait for the answer.
+
+### 7. Build
+
+Write `expense_data.json`, then render.
+
+```bash
+uv run python scripts/build.py expense_data.json --receipts receipts \
+  --out packet.html
+```
+
+The schema is in `docs/interfaces.md`. `build.py` validates before it writes,
+and every problem it finds is a real problem. Fix the data, not the validator.
+
+Render the PDF from the HTML. The HTML is the master; the PDF is re-rendered on
+every change.
+
+```bash
+PYTHONPATH=scripts uv run python -c "
+from pathlib import Path
+import render_pdf
+pages = render_pdf.render(Path('packet.html'), Path('packet.pdf'))
+print(pages, render_pdf.verify_pages(Path('packet.pdf'), pages))
+"
+```
+
+If any receipt is a PDF attachment, splice its pages in afterwards, so the
+attachment sits right behind its card page:
+
+```bash
+PYTHONPATH=scripts uv run python -c "
+import json
+from pathlib import Path
+import attach_pdf
+data = json.loads(Path('expense_data.json').read_text())
+print(attach_pdf.splice(Path('packet.pdf'), data, Path('receipts'),
+                        Path('packet_final.pdf')))
+"
+```
+
+### 8. Restate the totals in every reply
+
+Totals drift with each revision. After any change, however small, restate the
+day subtotals, the expense total, the stipend if there is one, and the grand
+total. Take them from `build.py`, not from memory.
+
+### 9. Sweep once more the day before sending
+
+Late receipts are the most common miss. Re-run the two-pass search the day
+before the user sends the packet, with the same padded window. Add anything
+new, rebuild, and restate the totals.
+
+## Questions
+
+Ask nothing up front. Reconstruct the trip, apply the defaults, and show the
+list.
+
+**Inferred silently**, with no question asked: who booked the flight and the
+hotel; the trip window; personal days, meaning any day in the window with no
+work and no travel; ride classification by endpoint; duplicate meals; meals the
+company provided.
+
+**Defaults shown in the list, not asked**: upgrades out; miles out; tips out;
+deposits out; personal-day nights and rides out with the airport legs kept;
+flight credits in.
+
+**One standing question**, asked once, after the list:
+
+> Anything you paid for outside this inbox, by cash, or without an email
+> receipt?
+
+It catches app-only receipts, a second mailbox, cash tolls, and parking.
+
+**Ask only on real ambiguity.** There are three cases:
+
+1. A ride on a working day that touches none of the four endpoints.
+2. A change fee whose cause is unclear.
+3. A stipend the user mentioned that no email confirms.
+
+Anything else, apply the default and show it.
+
+## Receipt rendering and what gets stripped
+
+Each receipt is rendered from the vendor's own email markup. Values, fonts,
+styles, and logos are the vendor's. The result looks like what the vendor sent,
+because it is.
+
+Removed before rendering:
+
+- Tracking links and tracking pixels
+- Tip buttons and rate-your-trip controls
+- Promotional modules and app-download banners
+- Hero images and social footers
+- Scripts
+
+Never altered:
+
+- Amounts, taxes, and fees
+- Dates and times
+- Line items
+- Addresses inside the receipt
+- Vendor logos and fonts
+
+Say this plainly to the user the first time you show them a rendered receipt.
+The per-vendor detail is in `references/vendors.md`, and the machine-readable
+form is `vendors/<name>/rules.json`.
+
+Two more rendering rules. Images are inlined as base64, or they break offline
+and in the PDF. Vendor CSS is scoped to the receipt container, so two vendors
+on one page do not fight.
+
+Plaintext confirmations, which is how most hotel emails arrive, render as a
+monospace block with From, Date and Subject headers above the body.
+
+### PDF attachments
+
+On a connector host, you cannot fetch attachments. Ask the user to upload the
+folio, and say why. With the Gmail fallback, `fetch.py` writes attachments
+beside the message as `<rid>.<n>.<ext>`.
+
+Either way, list the receipt in `expense_data.json` with `"kind": "pdf"`.
+`build.py` renders a card saying the attachment is embedded, and `attach_pdf.py`
+splices the real pages in behind it.
+
+## Packet format, non-negotiable
+
+Verify every line of this before you send the packet back to the user.
+
+- [ ] One top-down table: day header, items, day subtotal; then Expenses,
+      Stipend, Total. No side-by-side totals block
+- [ ] No notes section, no Attn or Submitted by, no exclusions list, no Gmail
+      message ids, no receipt anchor links
+- [ ] Line descriptions say Hotel, Office, Airport, Home. Street addresses stay
+      inside the vendor receipts
+- [ ] No em dashes anywhere
+- [ ] One receipt per PDF page
+- [ ] The HTML is the master and the PDF was re-rendered after the last change
+
+Run the gate on the built packet:
+
+```bash
+uv run python scripts/check_prose.py --packet packet.html
+```
+
+## Known traps
+
+Each of these has cost a real packet a correction. Treat them as rules.
+
+- **Do not** read who paid from the last eTicket. Dates come from the last one,
+  who paid comes from the first one.
+- **Do not** end the search window at hotel checkout. The return airport ride
+  lands after it. Pad one day on each side.
+- **Do not** add a notes section or a side-by-side totals block. One top-down
+  table, nothing beside it.
+- **Do not** run a single search pass. Two passes, generic then per vendor, or
+  a return-leg ride goes missing.
+- **Do not** claim a ride to an address that is not home, the airport, the
+  hotel, or the office. A plausible-looking destination on a working day is
+  still personal unless it touches one of the four.
+- **Do not** claim two meals from the same slot. Duplicates within an hour:
+  keep the first, flag the second.
+
+## Out of scope
+
+Boomerang does not do these, and should say so rather than improvise:
+
+- Drafting or sending the reply email
+- Multi-city trips, which run as separate packets
+- Companions on the trip
+- Company payment portals
+- Recruiter-specific claim formats
+- The tax treatment of stipends
+- Mileage
+- Virtual interviews
