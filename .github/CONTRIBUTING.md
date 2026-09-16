@@ -68,13 +68,15 @@ parts and never the answer.
 
 **Adding a vendor.** New folder `vendors/<name>/`, holding `rules.json` with
 `name` matching the folder, `display`, `sender_domains`, `subject_patterns`,
-`strip_regex` applied with `re.S`, `unwrap_links_matching`, `amount_regex`,
-`date_regex`, and `notes` that agree with the vendor's paragraph in
-`references/vendors.md`. Ship a synthetic sample beside it, scrubbed of
-anything real and tag-balanced, so each strip pattern takes a whole element.
-Prove every pattern fires on that sample in `tests/test_vendors.py`. The amount
-guard skips any pattern that would carry a money string away, so no vendor gets
-an allowance to lose a figure its sample printed.
+`strip_regex` applied with `re.S`, `unwrap_links_matching`, an optional
+`replace` of before and after pairs for markup a strip pattern cannot fix, and
+`notes` that agree with the vendor's paragraph in `references/vendors.md`. Ship
+a synthetic sample beside it, scrubbed of anything real and tag-balanced, so
+each strip pattern takes a whole element. Prove every pattern fires on that
+sample in `tests/test_vendors.py`. The amount guard skips any pattern that would
+carry a money string away, so no vendor gets an allowance to lose a figure its
+sample printed, and a promotional module that prints an amount stays on the
+receipt for the same reason.
 
 **Adding a policy rule.** One bullet in the right section of `policy.md`, its
 basis in brackets from the closed set: `necessary to attend`, `personal
