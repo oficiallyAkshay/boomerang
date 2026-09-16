@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href=".github/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/oficiallyAkshay/boomerang/ci.yml?branch=main&logo=githubactions&logoColor=white&label=CI"></a>
+  <a href="https://codecov.io/gh/oficiallyAkshay/boomerang"><img alt="coverage" src="https://img.shields.io/codecov/c/github/oficiallyAkshay/boomerang?logo=codecov&logoColor=white"></a>
   <img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/license-MIT-2f6f4e?logo=opensourceinitiative&logoColor=white"></a>
 </p>
@@ -27,12 +28,12 @@ You spent your own money on someone else's behalf. An onsite interview, a client
 
 Boomerang builds it. Every receipt, the right total, one PDF.
 
-| Summary page | Vendor receipt |
+| Summary page | Vendor receipts |
 | --- | --- |
-| <img alt="Packet summary table: days, subtotals, stipend and total" src="assets/readme/packet-summary.png"> | <img alt="A Lyft ride receipt as it appears in the packet" src="assets/readme/packet-receipt.png"> |
+| <img alt="Packet summary table: days, subtotals, stipend and total" src="assets/readme/packet-summary.png" width="252"> | <img alt="Eight receipts from the packet: Lyft, Uber, Uber Eats, DoorDash, United, Marriott, NJ Transit and Stripe" src="assets/readme/receipts-grid.png" width="520"> |
 
 <p align="center">
-  <sub>The first page and one receipt from the synthetic example in <a href="examples/packet.pdf"><code>examples/packet.pdf</code></a>.</sub>
+  <sub>The first page and the receipts from the synthetic example in <a href="examples/packet.pdf"><code>examples/packet.pdf</code></a>.</sub>
 </p>
 
 ## What you get
