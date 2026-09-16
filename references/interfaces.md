@@ -95,12 +95,18 @@ CLI: fetch.py --vendors DIR --knowledge     # every folder's vendor knowledge, t
   # with no body and no kept attachment writes nothing and is named on stdout as empty
 CLI: gmail_cli.py auth --client-secret PATH | search QUERY | get RID --out DIR ; token at ~/.config/boomerang/token.json chmod 600
 CLI: render_pdf.py packet.html packet.pdf [--expect N]      # prints the page count; exits 2 when --expect differs
-  # names the browser it rendered with on stderr; render() returns (pages, channel)
-  # aborts every http and https request the page makes, so nothing is fetched while rendering;
-  # names on stderr any receipt scaled below half size to fit its page
+  # names the browser it rendered with on stderr, and any receipt that runs to more than one page
+  # as "receipt 3 spans 2 pages at scale 0.80"; render() returns (pages, channel, page_map)
+  # aborts every http and https request the page makes, so nothing is fetched while rendering
+  # writes the page map beside the PDF as <pdf>.pages.json:
+  #   {"summary_pages": 1, "pages": [1, 3, 1, ...], "scales": [1.0, 0.92, ...]}, one entry per
+  #   receipt in packet order, counted by printing each receipt on its own; --expect is checked
+  #   against summary_pages plus the receipt pages
 CLI: attach_pdf.py packet.pdf DATA.json --receipts DIR --out final.pdf          # prints the final page count
   # validates DATA.json against the receipts dir first and exits 2 listing the problems;
-  # stamps the output /BoomerangSpliced and refuses a packet that already carries it
+  # inserts each attachment after the last page of its own receipt, read from <packet>.pages.json;
+  # with no map beside the packet it takes each receipt to be one page and refuses a packet whose
+  # count cannot be read that way; stamps the output /BoomerangSpliced and refuses one already stamped
 CLI: check_prose.py [--packet FILE]
   # with no flag: scans every tracked text file, UTF-16 ones included, for the em dash and the
   # hashed denylist (runs of up to 4 words), resolving the repo root and the denylist from its
@@ -112,7 +118,8 @@ CLI: check_prose.py [--packet FILE]
 the cache is missing, from the cleaned fragment rather than the raw message.
 
 `build.py` prints the totals line, then `pages expected N`, which is 1 plus the receipt count and
-one more for every page the summary spills onto. On stderr it names any line whose claimed value is
+one more for every page the summary or a receipt spills onto: a receipt too long to print at a
+readable size runs on rather than shrinking, so N is a floor and the render is what counts. On stderr it names any line whose claimed value is
 not printed on its own receipt. Neither reading stops the build.
 
 `clean.py` without `--vendor` reads `<input stem>.meta.json` beside the input, takes `from` and
