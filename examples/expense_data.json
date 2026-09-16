@@ -1,0 +1,139 @@
+{
+  "company": "Northwind Labs, Inc.",
+  "trip": "AUS to SEA onsite, June 8 to 10, 2026",
+  "traveler": "Jordan Rivera",
+  "currency": "USD",
+  "days": [
+    {
+      "label": "Monday, June 8, travel out",
+      "items": [
+        {
+          "desc": "Ride, home to airport",
+          "amt": 34.86,
+          "rid": "f7e925ca92e2d2d2"
+        },
+        {
+          "desc": "Inflight Wi-Fi",
+          "amt": 10.99,
+          "rid": "31b5223f2a62e2ce"
+        },
+        {
+          "desc": "Groceries to the hotel, tip out",
+          "amt": 50.91,
+          "rid": "d2e61faed5861571"
+        }
+      ]
+    },
+    {
+      "label": "Tuesday, June 9, working day",
+      "items": [
+        {
+          "desc": "Team breakfast, voucher netted out",
+          "amt": 73.6,
+          "rid": "654c53dc3924c879"
+        },
+        {
+          "desc": "Bus fare, hotel to office",
+          "amt": 4.75,
+          "rid": "1c4f3b50684e94b5"
+        },
+        {
+          "desc": "Transit day pass",
+          "amt": 6.71,
+          "rid": "a59320850b63be2c"
+        },
+        {
+          "desc": "Software licence for the onsite",
+          "amt": 54.11,
+          "rid": "5c359f66433854d8"
+        },
+        {
+          "desc": "Room and tax, 2 nights",
+          "amt": 500.95,
+          "rid": "10a0d07da121a647"
+        }
+      ]
+    },
+    {
+      "label": "Wednesday, June 10, personal day, airport leg kept",
+      "items": [
+        {
+          "desc": "Ride, hotel to airport, Lyft Cash netted out",
+          "amt": 22.27,
+          "rid": "5b59a786336f4ceb"
+        }
+      ]
+    }
+  ],
+  "receipts": [
+    {
+      "rid": "de89b6711d085c37",
+      "title": "eTicket, AUS to SEA, paid with previous ticket value",
+      "vendor": "United"
+    },
+    {
+      "rid": "f7e925ca92e2d2d2",
+      "title": "Ride, home to airport",
+      "vendor": "Uber"
+    },
+    {
+      "rid": "31b5223f2a62e2ce",
+      "title": "Inflight Wi-Fi",
+      "vendor": "United"
+    },
+    {
+      "rid": "d2e61faed5861571",
+      "title": "Groceries delivered to the hotel",
+      "vendor": "DoorDash"
+    },
+    {
+      "rid": "19768ef7c5e3471c",
+      "title": "Stay confirmation, points redemption",
+      "vendor": "Marriott"
+    },
+    {
+      "rid": "2d00ffde43b1575f",
+      "title": "Invoice notice from the property",
+      "vendor": "citizenM"
+    },
+    {
+      "rid": "10a0d07da121a647",
+      "title": "Folio, 2 nights",
+      "vendor": "Austin Congress Avenue"
+    },
+    {
+      "rid": "654c53dc3924c879",
+      "title": "Team breakfast order",
+      "vendor": "Uber Eats"
+    },
+    {
+      "rid": "1c4f3b50684e94b5",
+      "title": "Bus fare, one way",
+      "vendor": "NJ TRANSIT"
+    },
+    {
+      "rid": "a59320850b63be2c",
+      "title": "Day pass, photo receipt",
+      "vendor": "City transit"
+    },
+    {
+      "rid": "5c359f66433854d8",
+      "title": "Software licence for the onsite",
+      "vendor": "Northgate Labs"
+    },
+    {
+      "rid": "647603912df707b3",
+      "title": "Baggage receipt, checked bag",
+      "vendor": "Lufthansa"
+    },
+    {
+      "rid": "5b59a786336f4ceb",
+      "title": "Ride, hotel to airport",
+      "vendor": "Lyft"
+    }
+  ],
+  "stipend": {
+    "desc": "Meal stipend, 1 day worked",
+    "amt": 75.0
+  }
+}

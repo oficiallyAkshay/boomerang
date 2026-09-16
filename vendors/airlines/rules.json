@@ -1,0 +1,24 @@
+{
+  "name": "airlines",
+  "display": "Airline senders",
+  "sender_domains": [
+    "delta.com",
+    "aa.com",
+    "jetblue.com",
+    "alaskaair.com",
+    "southwest.com",
+    "britishairways.com",
+    "aircanada.com"
+  ],
+  "subject_patterns": [
+    "(?:Delta|American Airlines|JetBlue|Alaska Airlines|Southwest|British Airways|Air Canada)",
+    "^Your flight (?:receipt|confirmation|itinerary)",
+    "^Your itinerary and receipt",
+    "boarding pass"
+  ],
+  "strip_regex": [],
+  "unwrap_links_matching": [],
+  "amount_regex": null,
+  "date_regex": null,
+  "notes": "A search folder, not a rendering folder: it has no sample and strips nothing. It exists so the second search pass asks the other carriers directly, because an itinerary or a receipt from a carrier with no folder of its own would otherwise be found only if pass one happened to match its subject, and so that mail from one of these senders is detected as an airline. The subject patterns name the carriers rather than the generic eTicket wording, so that a United eTicket still resolves to the united folder, which is the one that has a sample and real strip patterns. A carrier that needs real cleaning gets its own folder with its own sample, the way united and lufthansa do."
+}

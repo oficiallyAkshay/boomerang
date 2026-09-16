@@ -10,6 +10,7 @@ htmlcov/
 policy.local.md
 receipts/
 clean/
+!examples/receipts/
 out/
 *.local.*
 .env*

@@ -1,20 +1,35 @@
 {
   "name": "doordash",
   "display": "DoorDash",
-  "sender_domains": ["doordash.com"],
+  "sender_domains": [
+    "doordash.com"
+  ],
   "subject_patterns": [
-    "^Your .* order",
+    "^Final receipt for .+ from ",
+    "^Your .* order(?: confirmation)?$",
     "^Order (?:receipt|confirmation)",
     "^Thanks for your order"
   ],
   "strip_regex": [
+    "<img[^>]*src=\"https://tracksg\\.doordash\\.com/[^\"]*\"[^>]*/?>",
+    "<img alt=\"\" src=\"https://img\\.cdn4dd\\.com[^\"]*\"[^>]*>",
+    "<div style=\"display: none; max-height: 0px; overflow: hidden;\">[\\s\\S]*?</div>",
+    "<p class=\"p4\"[^>]*>This email confirms revisions made to your original DoorDash order[\\s\\S]*?</p>",
+    "<p class=\"p2\"[^>]*><a class=\"Red200\"[^>]*>Get Order Help</a></p>",
+    "<table[^>]*id=\"Footer\"[\\s\\S]*?</table>",
+    "<a[^>]*>\\s*(?:Privacy Policy|Help Center)\\s*</a>",
     "<tr[^>]*>(?:(?!</tr>).)*?<a\\b[^>]*>\\s*Track [Yy]our [Oo]rder\\s*</a>(?:(?!</tr>).)*?</tr>",
     "(?:<div[^>]*class=\"button\"[^>]*>\\s*)?<a\\b[^>]*>\\s*Track [Yy]our [Oo]rder\\s*</a>(?:\\s*</div>)?",
-    "<tr[^>]*>(?:(?!</tr>).)*?<img[^>]*src=\"[^\"]*hero[^\"]*\"[^>]*>(?:(?!</tr>).)*?</tr>",
-    "<tr[^>]*>(?:(?!</tr>).)*?(?:You are receiving this|Unsubscribe|Download the app|App Store|Google Play|facebook\\.com|twitter\\.com|instagram\\.com)(?:(?!</tr>).)*?</tr>"
+    "<tr[^>]*>(?:(?!</tr>).)*?<img[^>]*src=\"[^\"]*hero[^\"]*\"[^>]*>(?:(?!</tr>).)*?</tr>"
   ],
-  "unwrap_links_matching": ["click\\.", "/track", "utm_", "email\\."],
-  "amount_regex": "Total</td>\\s*<td[^>]*>\\s*(-?\\$[\\d,]+\\.\\d{2})",
-  "date_regex": "((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,\\s*[A-Z][a-z]+\\s+\\d{1,2},\\s+\\d{4})",
-  "notes": "Removed from a DoorDash order receipt: the track order button, the marketing hero image row, and the footer row that carries the app download links, the social links and the unsubscribe link. Kept verbatim: every item line, the subtotal, fees, tax and tip lines, the order total, the store name, the order date and the payment line."
+  "unwrap_links_matching": [
+    "click\\.",
+    "/track",
+    "utm_",
+    "email\\.",
+    "tracksg\\."
+  ],
+  "amount_regex": ">\\s*Final total charged\\s*</p>[\\s\\S]{0,600}?>\\s*(\\$[\\d,]+\\.\\d{2})\\s*</p>",
+  "date_regex": null,
+  "notes": "Removed from a DoorDash final order receipt: the open pixel on tracksg.doordash.com, the marketing hero illustration, the hidden preheader spacer, the adjustment policy boilerplate, the Get Order Help button, the footer table carrying the corporate address and its privacy and help centre links. The last three patterns cover the track order button in its two shapes and the hero image row of the older template; no module of that shape is present in this sample, and they are kept because DoorDash still sends the confirmation variant that carries them. Kept verbatim: every line item with its quantity, the weighted item unit prices, both halves of each substitution pair, the subtotal, the delivery and service fees, the tax, the Dasher tip row, the discount, the header total and the final total charged, the payment line with its card last four, and the store name. The Dasher tip is a fee row in the receipt, not a tip button, so it stays visible and policy removes it from the claim instead. date_regex is null: this template prints no order date anywhere, not in the body and not in the footer, so the date has to come from the message headers."
 }
