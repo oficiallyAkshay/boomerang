@@ -16,7 +16,7 @@
     "<div style=\"display: none; max-height: 0px; overflow: hidden;\">[\\s\\S]*?</div>",
     "<p class=\"p4\"[^>]*>This email confirms revisions made to your original DoorDash order[\\s\\S]*?</p>",
     "<p class=\"p2\"[^>]*><a class=\"Red200\"[^>]*>Get Order Help</a></p>",
-    "<table[^>]*id=\"Footer\"[\\s\\S]*?</table>",
+    "<table[^>]*\\bid=\"Footer\"[^>]*>(?:[\\s\\S]*?</table>){3}",
     "<a[^>]*>\\s*(?:Privacy Policy|Help Center)\\s*</a>",
     "<tr[^>]*>(?:(?!</tr>).)*?<a\\b[^>]*>\\s*Track [Yy]our [Oo]rder\\s*</a>(?:(?!</tr>).)*?</tr>",
     "(?:<div[^>]*class=\"button\"[^>]*>\\s*)?<a\\b[^>]*>\\s*Track [Yy]our [Oo]rder\\s*</a>(?:\\s*</div>)?",
