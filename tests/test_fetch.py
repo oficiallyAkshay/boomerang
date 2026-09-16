@@ -16,7 +16,6 @@ from fetch import (
     build_queries,
     fetch_all,
     main,
-    read_vendor_rules,
     to_gmail,
     write_message,
 )
@@ -249,30 +248,33 @@ def test_write_message_returns_the_meta_it_wrote(tmp_path: Path):
     assert meta["subject"] == "Your ride with a driver"
 
 
-# --------------------------------------------------------------- vendor io
-
-
-def test_read_vendor_rules_reads_one_json_per_folder(tmp_path: Path):
-    folder = tmp_path / "lyft"
-    folder.mkdir()
-    (folder / "rules.json").write_text(json.dumps({"name": "lyft"}), encoding="utf-8")
-    assert read_vendor_rules(tmp_path) == {"lyft": {"name": "lyft"}}
-
-
-def test_read_vendor_rules_on_an_empty_directory(tmp_path: Path):
-    assert read_vendor_rules(tmp_path) == {}
-
-
 # --------------------------------------------------------------------- cli
 
 
-def test_dry_run_prints_both_passes_and_stops(tmp_path: Path, capsys):
-    vendors = tmp_path / "vendors" / "lyft"
-    vendors.mkdir(parents=True)
-    (vendors / "rules.json").write_text(
-        json.dumps({"name": "lyft", "sender_domains": ["lyftmail.com", "lyft.com"]}),
+def write_vendor_rules(vendors_dir: Path, name: str, sender_domains: list[str]) -> None:
+    """A complete rules.json, since the CLI reads it through clean's loader."""
+    folder = vendors_dir / name
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "rules.json").write_text(
+        json.dumps(
+            {
+                "name": name,
+                "display": name.title(),
+                "sender_domains": sender_domains,
+                "subject_patterns": [],
+                "strip_regex": [],
+                "unwrap_links_matching": [],
+                "amount_regex": None,
+                "date_regex": None,
+                "notes": "",
+            }
+        ),
         encoding="utf-8",
     )
+
+
+def test_dry_run_prints_both_passes_and_stops(tmp_path: Path, capsys):
+    write_vendor_rules(tmp_path / "vendors", "lyft", ["lyftmail.com", "lyft.com"])
     code = main(
         [
             "--start",

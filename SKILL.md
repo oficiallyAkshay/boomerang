@@ -159,26 +159,18 @@ Render the PDF from the HTML. The HTML is the master; the PDF is re-rendered on
 every change.
 
 ```bash
-PYTHONPATH=scripts uv run python -c "
-from pathlib import Path
-import render_pdf
-pages = render_pdf.render(Path('packet.html'), Path('packet.pdf'))
-print(pages, render_pdf.verify_pages(Path('packet.pdf'), pages))
-"
+uv run python scripts/render_pdf.py packet.html packet.pdf --expect 12
 ```
+
+It prints the page count. `--expect N` is the page count check: one summary
+page plus one page per receipt. It exits 2 when the count differs.
 
 If any receipt is a PDF attachment, splice its pages in afterwards, so the
 attachment sits right behind its card page:
 
 ```bash
-PYTHONPATH=scripts uv run python -c "
-import json
-from pathlib import Path
-import attach_pdf
-data = json.loads(Path('expense_data.json').read_text())
-print(attach_pdf.splice(Path('packet.pdf'), data, Path('receipts'),
-                        Path('packet_final.pdf')))
-"
+uv run python scripts/attach_pdf.py packet.pdf expense_data.json \
+  --receipts receipts --out packet_final.pdf
 ```
 
 ### 8. Restate the totals in every reply

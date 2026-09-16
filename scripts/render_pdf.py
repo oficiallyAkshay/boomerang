@@ -91,15 +91,8 @@ def _stamp_title(pdf_path: Path, title: str) -> None:
         writer.write(handle)
 
 
-def _print_to_pdf(play, url: str, pdf_path: Path) -> None:  # pragma: no cover
-    """Open the packet under print media, fit each receipt, and print to PDF.
-
-    The tests do exercise every line below, but coverage cannot see them: the
-    playwright sync API switches greenlets on each call and the default tracer
-    loses its trace function across the switch. Setting
-    concurrency = ["greenlet"] under [tool.coverage.run] makes this visible
-    again, at which point the pragma above can come off.
-    """
+def _print_to_pdf(play, url: str, pdf_path: Path) -> None:
+    """Open the packet under print media, fit each receipt, and print to PDF."""
     browser = play.chromium.launch()
     try:
         page = browser.new_page(viewport=VIEWPORT)
