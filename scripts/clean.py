@@ -18,7 +18,7 @@ What ``clean_html`` always removes, whatever the vendor rules say:
 - In ``<style>`` blocks and in ``style=""`` attributes: every ``@import`` rule,
   every declaration holding ``expression(``, ``-moz-binding`` or ``behavior:``,
   every ``page-break-*`` and ``break-*`` declaration, and every ``url(...)``
-  whose scheme is not ``data:``, which becomes ``none``.
+  that is not a ``data:image/`` or ``data:font/`` URI, which becomes ``none``.
 - An image ``src`` that is not http, https or ``data:image/``.
 - Any ``<style`` or ``</style`` token left over once the complete style blocks
   have been taken out, so a message truncated in the middle of a stylesheet
@@ -27,10 +27,12 @@ What ``clean_html`` always removes, whatever the vendor rules say:
 Three choices are worth stating plainly, because whoever reads a packet should
 know what was done to the page in front of them.
 
-1. Links. A tracking link named by ``unwrap_links_matching`` is replaced by the
-   text it wrapped. Every other anchor keeps its tag and its styling but loses
-   ``href``, ``target`` and any handler attribute, so the wording and the
-   vendor look survive and nothing in a packet is clickable.
+1. Links. A tracking link is replaced by the text it wrapped. Four shapes are
+   unwrapped for every vendor, listed once in ``GENERIC_UNWRAP``, and a
+   rules.json adds the shapes that are its own in ``unwrap_links_matching``.
+   Every other anchor keeps its tag and its styling but loses ``href``,
+   ``target`` and any handler attribute, so the wording and the vendor look
+   survive and nothing in a packet is clickable.
 2. Images. ``inline_images`` reads from a cache directory and never opens a
    socket. Only the CLI, and only with ``--fetch-images``, downloads anything,
    and it downloads from the cleaned fragment, so a tracking pixel the cleaner
@@ -57,17 +59,19 @@ know what was done to the page in front of them.
    around it, because a style attribute is full of decimals
    (``line-height:1.25rem``) and none of them is an amount.
 5. Rewrites. A vendor may also carry an optional ``replace`` list of
-   ``[regex, replacement]`` pairs, applied with ``re.sub`` after the strip
-   patterns and behind the same amount guard. It is for markup a vendor laid
-   out for a mail client's width that a packet's narrower column squeezes: an
-   Uber total row gives the word Total a cell at ``width:100%``, which leaves
-   the amount beside it one character per line.
+   ``[regex, replacement]`` pairs, applied with ``re.sub`` behind the same
+   amount guard. It is for markup a vendor laid out for a mail client's width
+   that a packet's narrower column squeezes: an Uber total row gives the word
+   Total a cell at ``width:100%``, which leaves the amount beside it one
+   character per line. The pairs run first, ahead of every pass that
+   sanitises, so a replacement can put a script or an iframe into the fragment
+   and the fragment still comes out with nothing in it that can act.
 
-``clean_dir`` cleans a whole directory, one thread per receipt, because the
-receipts on disk have nothing to do with each other. It is the stage the
-workflow runs beside ``cards.py`` and the folio read, and the one place where
-the strip-pattern warnings need handling: each worker collects its own and
-they are printed together, in filename order, once the pool is finished.
+``clean_dir`` cleans a whole directory, one receipt after another in filename
+order. It is the stage the workflow runs beside ``cards.py`` and the folio
+read. Sequential rather than pooled: the strip-pattern warnings come out in
+the order the files are listed with nothing to collect or re-sort, and one
+shared ``failed-images.json`` can no longer be written by two cleans at once.
 
 Stdlib only. Regex over the markup, deliberately: these are email tables, the
 input is one saved message at a time, and a parser dependency buys nothing here.
@@ -86,8 +90,6 @@ import re
 import shutil
 import socket
 import sys
-import threading
-from concurrent.futures import ThreadPoolExecutor
 from email.utils import parseaddr
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -116,7 +118,6 @@ IMAGE_SIGNATURES = (
 # receipt photo are already what the packet needs; only markup gets cleaned.
 COPY_SUFFIXES = (".txt", ".pdf", ".png", ".jpg")
 CLEAN_SUFFIX = ".html"
-DIR_WORKERS = 4
 
 REQUIRED_KEYS = (
     "name",
@@ -125,8 +126,6 @@ REQUIRED_KEYS = (
     "subject_patterns",
     "strip_regex",
     "unwrap_links_matching",
-    "amount_regex",
-    "date_regex",
     "notes",
 )
 LIST_KEYS = (
@@ -135,27 +134,47 @@ LIST_KEYS = (
     "strip_regex",
     "unwrap_links_matching",
 )
+# The keys whose every entry is a regex, checked when the rules are loaded.
+PATTERN_KEYS = ("strip_regex", "subject_patterns", "unwrap_links_matching")
+
+# The tracking link shapes every vendor sends, unwrapped for all of them. A
+# rules.json lists only the shapes that are its own, so a sender domain that
+# wraps its links in ``click.`` never has to say so.
+GENERIC_UNWRAP = (r"click\.", r"/track", r"utm_", r"email\.")
 
 # At rules that wrap other rules. Their contents get scoped; the wrapper line
 # itself is left alone. Anything else at rule shaped (font-face, keyframes,
 # page) holds descriptors rather than selectors, so its body is left alone too.
 NESTED_AT_RULES = {"media", "supports", "layer", "container", "document", "scope"}
 
+# The run of attributes between a tag's name and the bracket that closes the
+# tag. A quoted value is taken whole, so a ``>`` written inside one is content
+# and not the end of the tag: ``<a title="1 > 2" onclick="evil()">`` is read as
+# one tag, and the handler on it is found and defused. Every regex that walks a
+# tag uses this rather than ``[^>]*``, because a tag the pattern cut short is a
+# tag whose remaining attributes were never looked at.
+#
+# Possessive, so the run is read once, left to right. A quote character can be
+# taken either as the start of a quoted value or as one more plain character,
+# and without the possessive quantifier a tag full of quotes that never reaches
+# a bracket would be retried every way round.
+ATTRS = r"""(?:"[^"]*"|'[^']*'|[^>])*+"""
+
 COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 SCRIPT_RE = re.compile(r"<script\b.*?</script\s*>", re.S | re.I)
-LONE_SCRIPT_RE = re.compile(r"</?script\b[^>]*>", re.I)
-STYLE_RE = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.S | re.I)
+LONE_SCRIPT_RE = re.compile(rf"</?script\b{ATTRS}>", re.I)
+STYLE_RE = re.compile(rf"<style\b{ATTRS}>(.*?)</style\s*>", re.S | re.I)
 # What is left once the complete blocks are out: an opener with no closer
 # takes the CSS that follows it, up to the next tag, and the bare tokens go.
-ORPHAN_STYLE_RE = re.compile(r"<style\b[^>]*>([^<]*)", re.I)
-LONE_STYLE_RE = re.compile(r"</?style\b[^>]*>?", re.I)
-HEAD_RE = re.compile(r"<head\b[^>]*>.*?</head\s*>", re.S | re.I)
-BODY_RE = re.compile(r"<body\b[^>]*>(.*)</body\s*>", re.S | re.I)
-DOCTYPE_RE = re.compile(r"<!doctype[^>]*>", re.I)
-WRAPPER_RE = re.compile(r"</?(?:html|body)\b[^>]*>", re.I)
-IMG_RE = re.compile(r"<img\b[^>]*>", re.I)
-ANCHOR_RE = re.compile(r"<a\b([^>]*)>(.*?)</a\s*>", re.S | re.I)
-OPEN_ANCHOR_RE = re.compile(r"<a\b([^>]*)>", re.I)
+ORPHAN_STYLE_RE = re.compile(rf"<style\b{ATTRS}>([^<]*)", re.I)
+LONE_STYLE_RE = re.compile(rf"</?style\b{ATTRS}>?", re.I)
+HEAD_RE = re.compile(rf"<head\b{ATTRS}>.*?</head\s*>", re.S | re.I)
+BODY_RE = re.compile(rf"<body\b{ATTRS}>(.*)</body\s*>", re.S | re.I)
+DOCTYPE_RE = re.compile(rf"<!doctype{ATTRS}>", re.I)
+WRAPPER_RE = re.compile(rf"</?(?:html|body)\b{ATTRS}>", re.I)
+IMG_RE = re.compile(rf"<img\b{ATTRS}>", re.I)
+ANCHOR_RE = re.compile(rf"<a\b({ATTRS})>(.*?)</a\s*>", re.S | re.I)
+OPEN_ANCHOR_RE = re.compile(rf"<a\b({ATTRS})>", re.I)
 LINK_ATTR_RE = re.compile(
     r"""\s+(?:href|target|ping|rel|on\w+)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.I
 )
@@ -195,12 +214,12 @@ DANGEROUS_ELEMENTS = (
 VOID_ELEMENTS = ("base", "input", "link", "meta", "source", "track")
 PAIRED_ELEMENTS = tuple(name for name in DANGEROUS_ELEMENTS if name not in VOID_ELEMENTS)
 ELEMENT_BOUNDS = {
-    name: (re.compile(rf"<{name}\b[^>]*>", re.I), re.compile(rf"</{name}\s*>", re.I))
+    name: (re.compile(rf"<{name}\b{ATTRS}>", re.I), re.compile(rf"</{name}\s*>", re.I))
     for name in PAIRED_ELEMENTS
 }
-LONE_ELEMENT_RE = re.compile(rf"</?(?:{'|'.join(DANGEROUS_ELEMENTS)})\b[^>]*>", re.I)
+LONE_ELEMENT_RE = re.compile(rf"</?(?:{'|'.join(DANGEROUS_ELEMENTS)})\b{ATTRS}>", re.I)
 
-TAG_RE = re.compile(r"<([A-Za-z][-\w]*)([^>]*)>")
+TAG_RE = re.compile(rf"<([A-Za-z][-\w]*)({ATTRS})>")
 HANDLER_ATTR_RE = re.compile(r"""\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.I)
 SRCSET_ATTR_RE = re.compile(r"""\s+srcset\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.I)
 URL_ATTR_RE = re.compile(
@@ -221,10 +240,18 @@ CSS_URL_RE = re.compile(r"""url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)""", re
 # page-break-before and friends, and the modern break-before spelling. The
 # lookbehind keeps word-break and line-break out of it.
 CSS_BREAK_DECL_RE = re.compile(r"[^;{}]*(?<![-\w])(?:page-)?break-[-\w]+\s*:[^;{}]*;?", re.I)
+# The only data URIs a receipt's CSS has any use for. A data:text/html in a
+# url() is a document, not a picture, so it goes the way a remote URL does.
+CSS_DATA_SCHEMES = ("data:image/", "data:font/")
+# Comments and whitespace in front of a rule's selector or at-rule keyword.
+# Taken off before the keyword is read, so a commented @media is still an
+# at-rule and is never handed to the selector scoping as if it were one.
+CSS_LEAD_RE = re.compile(r"\A\s*(?:/\*.*?\*/\s*)+", re.S)
 
-# A money string as a receipt prints one. Counted before and after each
-# vendor strip pattern, never parsed.
-MONEY_RE = re.compile(r"\d+\.\d{2}")
+# A money string as a receipt prints one. Counted before and after each vendor
+# strip pattern, never parsed. The comma is there because a euro receipt writes
+# its total as 88,60 and the guard has to see that amount to protect it.
+MONEY_RE = re.compile(r"\d+[.,]\d{2}")
 # Everything between angle brackets, taken out before the counting so that the
 # decimals CSS is made of are never mistaken for money.
 MARKUP_RE = re.compile(r"<[^>]*>")
@@ -372,8 +399,9 @@ def sanitize_css(css: str) -> str:
     or ``behavior:`` go, because each of those runs code in some browser. Page
     break declarations go, because the packet gives each receipt one page and
     counts on getting it. Every other ``url(...)`` becomes ``none`` unless it
-    is a data URI, so no rule can reach the network. Everything else is left
-    exactly as the vendor wrote it.
+    is a picture or a font written inline, so no rule can reach the network and
+    no rule can hand a browser a second document to parse. Everything else is
+    left exactly as the vendor wrote it.
     """
     css = CSS_IMPORT_RE.sub("", css)
     css = CSS_BANNED_DECL_RE.sub("", css)
@@ -381,7 +409,7 @@ def sanitize_css(css: str) -> str:
 
     def rewrite(found: re.Match[str]) -> str:
         value = next(group for group in found.groups() if group is not None)
-        if _scheme_of(value).startswith("data:"):
+        if _scheme_of(value).startswith(CSS_DATA_SCHEMES):
             return found.group(0)
         return "none"
 
@@ -426,14 +454,17 @@ def _scope_css(css: str, scope: str = SCOPE) -> str:
             continue
         prelude = css[index:brace]
         body, index = _read_block(css, brace + 1)
-        stripped = prelude.strip()
+        lead = CSS_LEAD_RE.match(prelude)
+        head = prelude[lead.end() :] if lead else prelude
+        stripped = head.strip()
         if stripped.startswith("@"):
             named = re.match(r"@([-\w]+)", stripped)
             at_rule = named.group(1).lower() if named else ""
             inner = _scope_css(body, scope) if at_rule in NESTED_AT_RULES else body
             out.append(f"{prelude}{{{inner}}}")
         else:
-            out.append(f"{_scope_selectors(prelude, scope)}{{{body}}}")
+            front = prelude[: lead.end()] if lead else ""
+            out.append(f"{front}{_scope_selectors(head, scope)}{{{body}}}")
     return "".join(out)
 
 
@@ -689,7 +720,30 @@ def _rule_problems(loaded: object) -> list[str]:
             problems.append(f"{key} must be a list")
     if "name" in loaded and not isinstance(loaded["name"], str):
         problems.append("name must be a string")
+    problems.extend(_pattern_problems(loaded))
     problems.extend(_replace_problems(loaded))
+    return problems
+
+
+def _pattern_problems(loaded: dict) -> list[str]:
+    """Every pattern a vendor wrote, compiled here rather than mid clean.
+
+    A pattern that does not compile raises from wherever it was first used,
+    which is halfway through a receipt and says nothing about which file the
+    bad pattern is in. Compiling at load time names the key and the index.
+    """
+    problems: list[str] = []
+    for key in PATTERN_KEYS:
+        entries = loaded.get(key)
+        if not isinstance(entries, list):
+            continue
+        for index, pattern in enumerate(entries):
+            if not isinstance(pattern, str):
+                continue
+            try:
+                re.compile(pattern)
+            except re.error as error:
+                problems.append(f"{key} {index} does not compile: {error}")
     return problems
 
 
@@ -698,7 +752,8 @@ def _replace_problems(loaded: dict) -> list[str]:
 
     The field is optional, so a rules.json without it is complete. A rules.json
     with it has to hold a list of two string pairs, because every pair is fed
-    straight to ``re.sub`` as a pattern and a replacement.
+    straight to ``re.sub`` as a pattern and a replacement, and both halves have
+    to be something ``re.sub`` will accept.
     """
     if "replace" not in loaded:
         return []
@@ -710,7 +765,35 @@ def _replace_problems(loaded: dict) -> list[str]:
             return ["replace must hold pairs"]
         if not all(isinstance(half, str) for half in pair):
             return ["replace pairs must hold two strings"]
-    return []
+    problems: list[str] = []
+    for index, (pattern, replacement) in enumerate(pairs):
+        try:
+            compiled = re.compile(pattern)
+        except re.error as error:
+            problems.append(f"replace {index} does not compile: {error}")
+            continue
+        try:
+            _stand_in_for(compiled).sub(replacement, "")
+        except re.error as error:
+            problems.append(f"replace {index} is not a usable replacement: {error}")
+    return problems
+
+
+def _stand_in_for(compiled: re.Pattern[str]) -> re.Pattern[str]:
+    """A pattern that matches nothing but carries the same groups as this one.
+
+    ``re.sub`` only reads a replacement template where the pattern matched, so
+    a template naming a group that does not exist would go unnoticed until a
+    receipt happened to match. Substituting on the empty string against this
+    stand in, which has the same groups by number and by name, reads the
+    template once at load time instead.
+    """
+    names = {index: name for name, index in compiled.groupindex.items()}
+    parts = [
+        f"(?P<{names[index]}>)" if index in names else "()"
+        for index in range(1, compiled.groups + 1)
+    ]
+    return re.compile("".join(parts))
 
 
 def load_vendor_rules(vendors_dir: Path) -> dict[str, dict]:
@@ -830,33 +913,37 @@ def _printed_amounts(fragment: str) -> int:
     return len(MONEY_RE.findall(MARKUP_RE.sub(" ", fragment)))
 
 
-def _apply_strip_patterns(body: str, rules: dict) -> str:
+def _apply_strip_patterns(body: str, rules: dict) -> tuple[str, list[str]]:
     """Apply a vendor's strip patterns, one at a time, keeping every amount.
 
     A pattern is kept only when the fragment still prints as many money
     strings as it did before. Vendor rows are written by the vendor, and a
     promo that shares a table row with the total is common enough that a
     pattern which takes the total with it has to lose rather than the total.
+
+    Returns the fragment and the lines describing what was skipped. The lines
+    come back rather than going to stderr here, so a caller cleaning a whole
+    directory prints them in whatever order it is working through its files.
     """
     patterns = rules.get("strip_regex") or []
-    vendor = str(rules.get("name") or "generic")
+    vendor = str(rules.get("name") or GENERIC)
+    warnings: list[str] = []
     kept = _printed_amounts(body)
     for index, pattern in enumerate(patterns):
         candidate = re.sub(pattern, "", body, flags=re.S | re.I)
         found = _printed_amounts(candidate)
         if found < kept:
-            print(
+            warnings.append(
                 f"clean: {vendor} strip pattern {index} skipped, "
-                "it would have taken an amount with it",
-                file=sys.stderr,
+                "it would have taken an amount with it"
             )
             continue
         body = candidate
         kept = found
-    return body
+    return body, warnings
 
 
-def _apply_replacements(body: str, rules: dict) -> str:
+def _apply_replacements(body: str, rules: dict) -> tuple[str, list[str]]:
     """Apply a vendor's replace pairs, one at a time, keeping every amount.
 
     A strip pattern takes markup out. A replace pair rewrites it in place, for
@@ -864,25 +951,28 @@ def _apply_replacements(body: str, rules: dict) -> str:
     client's width and not for a packet's. Each pair is a regex and a
     replacement, fed to ``re.sub`` the same way a strip pattern is, and guarded
     the same way: a pair whose result prints fewer money strings than the
-    fragment did before is skipped and named on stderr, because a rewrite is
-    no better a reason to lose a total than a removal is.
+    fragment did before is skipped and named, because a rewrite is no better a
+    reason to lose a total than a removal is.
+
+    Returns the fragment and the lines describing what was skipped, the same
+    way ``_apply_strip_patterns`` does.
     """
     pairs = rules.get("replace") or []
     vendor = str(rules.get("name") or GENERIC)
+    warnings: list[str] = []
     kept = _printed_amounts(body)
     for index, (pattern, replacement) in enumerate(pairs):
         candidate = re.sub(pattern, replacement, body, flags=re.S | re.I)
         found = _printed_amounts(candidate)
         if found < kept:
-            print(
+            warnings.append(
                 f"clean: {vendor} replace pattern {index} skipped, "
-                "it would have taken an amount with it",
-                file=sys.stderr,
+                "it would have taken an amount with it"
             )
             continue
         body = candidate
         kept = found
-    return body
+    return body, warnings
 
 
 def _take_styles(body: str) -> tuple[str, str]:
@@ -901,11 +991,19 @@ def _take_styles(body: str) -> tuple[str, str]:
 
 
 def clean_html(raw: str, rules: dict | None = None, image_cache: Path | None = None) -> str:
-    """Return the receipt fragment: vendor markup, scoped CSS, nothing live."""
+    """Return the receipt fragment: vendor markup, scoped CSS, nothing live.
+
+    The vendor's replace pairs run first, before anything that sanitises. A
+    pair rewrites markup with text a rules.json author wrote, and text from a
+    rules.json is text: putting it in ahead of the script removal, the element
+    stripping and the attribute defusing means a replacement can no more leave
+    something active in the fragment than the vendor's own markup can.
+    """
     rules = rules or {}
     body = raw or ""
 
     body = COMMENT_RE.sub("", body)
+    body, warnings = _apply_replacements(body, rules)
     body, styles = _take_styles(body)
     body = SCRIPT_RE.sub("", body)
     body = LONE_SCRIPT_RE.sub("", body)
@@ -919,12 +1017,11 @@ def clean_html(raw: str, rules: dict | None = None, image_cache: Path | None = N
     body = _strip_elements(body)
     body = IMG_RE.sub(lambda m: "" if _is_tracking_pixel(m.group(0)) else m.group(0), body)
 
-    body = _apply_strip_patterns(body, rules)
-    body = _apply_replacements(body, rules)
+    body, stripped = _apply_strip_patterns(body, rules)
+    for line in warnings + stripped:
+        print(line, file=sys.stderr)
 
-    unwrap = rules.get("unwrap_links_matching") or []
-    if unwrap:
-        body = _unwrap_links(body, unwrap)
+    body = _unwrap_links(body, [*GENERIC_UNWRAP, *(rules.get("unwrap_links_matching") or [])])
     body = _defuse_anchors(body)
     body = _defuse_tags(body)
 
@@ -940,60 +1037,24 @@ def clean_html(raw: str, rules: dict | None = None, image_cache: Path | None = N
 # ------------------------------------------------------------- whole directory
 
 
-_COLLECTED = threading.local()
-
-
-class _WarningRouter:
-    """Stands in for stderr while a directory clean is running.
-
-    ``_apply_strip_patterns`` names a skipped pattern on stderr as it works,
-    and four cleans at once would shuffle those lines into each other. For the
-    length of the pool this object is ``sys.stderr``, and it hands every worker
-    thread its own list to write into. What the workers collect is printed
-    afterwards in filename order. A thread that has no list of its own, which
-    is any thread but a worker, writes straight through to the real stream.
-    """
-
-    def __init__(self, target):
-        self._target = target
-
-    def write(self, text: str) -> int:
-        collected = getattr(_COLLECTED, "lines", None)
-        if collected is None:
-            return self._target.write(text)
-        collected.append(text)
-        return len(text)
-
-    def flush(self) -> None:
-        self._target.flush()
-
-    def __getattr__(self, name: str):
-        return getattr(object.__getattribute__(self, "_target"), name)
-
-
 def _clean_one(
     source: Path, out_dir: Path, vendors_dir: Path, image_cache: Path | None, download: bool
-) -> tuple[str, str, str]:
-    """One receipt, in one worker. Returns its name, its vendor and its warnings.
+) -> tuple[str, str]:
+    """One receipt, cleaned and written out. Returns its name and its vendor.
 
     The vendor is read from the headers saved beside the message, exactly as
     the single file CLI reads them, so a directory run and a file run choose
-    the same rules. The fragment is written here rather than handed back, so
-    no worker holds a receipt once it is done with it.
+    the same rules. It is a function of its own only because ``clean_dir``
+    takes a ``fetch_images`` flag of the same name as the fetching function.
     """
     name, rules = detect_from_meta(source, vendors_dir)
-    collected: list[str] = []
-    _COLLECTED.lines = collected
-    try:
-        cleaned = clean_html(source.read_text(encoding="utf-8", errors="replace"), rules)
-        if download:
-            fetch_images(cleaned, image_cache)
-        if image_cache is not None:
-            cleaned = inline_images(cleaned, image_cache)
-    finally:
-        _COLLECTED.lines = None
+    cleaned = clean_html(source.read_text(encoding="utf-8", errors="replace"), rules)
+    if download:
+        fetch_images(cleaned, image_cache)
+    if image_cache is not None:
+        cleaned = inline_images(cleaned, image_cache)
     (out_dir / source.name).write_text(cleaned + "\n", encoding="utf-8")
-    return source.name, name, "".join(collected)
+    return source.name, name
 
 
 def clean_dir(
@@ -1002,20 +1063,22 @@ def clean_dir(
     vendors_dir: Path,
     image_cache: Path | None = None,
     fetch_images: bool = False,
-    workers: int = DIR_WORKERS,
 ) -> list[tuple[str, str]]:
-    """Clean every receipt in a directory at once, and carry the rest across.
+    """Clean every receipt in a directory, in filename order, and carry the rest across.
 
-    Each ``.html`` file is cleaned in its own thread: they share no state, and
-    the vendor for each is read from its own ``.meta.json``. A ``.txt``,
-    ``.pdf``, ``.png`` or ``.jpg`` beside them is copied through unchanged,
-    because a plaintext body, a folio and a receipt photo are already what the
-    packet wants. Anything else, the meta files included, stays behind.
+    Each ``.html`` file is cleaned in turn, with the vendor for each read from
+    its own ``.meta.json``. A ``.txt``, ``.pdf``, ``.png`` or ``.jpg`` beside
+    them is copied through unchanged, because a plaintext body, a folio and a
+    receipt photo are already what the packet wants. Anything else, the meta
+    files included, stays behind.
 
     Returns ``(filename, vendor)`` for each file cleaned, in filename order,
-    with ``"generic"`` for a receipt whose sender no rules claim. The order is
-    the sorted order of the directory whatever the threads did, so two runs
-    over one directory read the same.
+    with ``"generic"`` for a receipt whose sender no rules claim.
+
+    One receipt at a time, walking the sorted directory. Two things fall out of
+    that: the amount guard warnings reach stderr in filename order with nothing
+    to collect or re-sort, and the one ``failed-images.json`` a fetch shares
+    across a whole directory is never written by two cleans at once.
 
     ``fetch_images`` is the one flag that opens a socket, it needs an
     ``image_cache`` to fill, and it downloads from the cleaned fragment, never
@@ -1026,48 +1089,28 @@ def clean_dir(
     out_dir.mkdir(parents=True, exist_ok=True)
     if fetch_images and image_cache is None:
         raise ValueError("clean_dir: fetch_images needs an image_cache directory")
+    cache = None if image_cache is None else Path(image_cache)
 
-    sources: list[Path] = []
+    listed: list[tuple[str, str]] = []
     for path in sorted(src_dir.iterdir()):
         if not path.is_file():
             continue
         suffix = path.suffix.lower()
         if suffix == CLEAN_SUFFIX:
-            sources.append(path)
+            listed.append(_clean_one(path, out_dir, vendors_dir, cache, fetch_images))
         elif suffix in COPY_SUFFIXES:
             shutil.copy2(path, out_dir / path.name)
-    if not sources:
-        return []
-
-    cache = None if image_cache is None else Path(image_cache)
-    real_stderr = sys.stderr
-    sys.stderr = _WarningRouter(real_stderr)
-    try:
-        with ThreadPoolExecutor(max_workers=max(1, min(workers, len(sources)))) as pool:
-            done = list(
-                pool.map(
-                    lambda path: _clean_one(path, out_dir, vendors_dir, cache, fetch_images),
-                    sources,
-                )
-            )
-    finally:
-        sys.stderr = real_stderr
-
-    for _, _, warnings in done:
-        if warnings:
-            real_stderr.write(warnings)
-    return [(name, vendor) for name, vendor, _ in done]
+    return listed
 
 
 # ------------------------------------------------------------------------ cli
 
 
 def _run_dir(args: argparse.Namespace) -> int:
-    """The ``--dir`` form: one directory in, one directory out, threads between.
+    """The ``--dir`` form: one directory in, one directory out.
 
     Every line it prints is in filename order, the vendor lines and the strip
-    pattern warnings alike, so the output of a run reads the same whatever
-    order the pool happened to finish in.
+    pattern warnings alike, because the receipts are cleaned in that order.
     """
     listed = clean_dir(
         args.dir,
@@ -1075,7 +1118,6 @@ def _run_dir(args: argparse.Namespace) -> int:
         args.vendors,
         image_cache=args.images,
         fetch_images=args.fetch_images,
-        workers=args.workers,
     )
     for name, vendor in listed:
         print(f"clean: {name} vendor {vendor}", file=sys.stderr)
@@ -1099,12 +1141,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--images", type=Path, help="image cache directory")
     parser.add_argument(
         "--fetch-images", action="store_true", help="download missing images into the cache"
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=DIR_WORKERS,
-        help=f"how many receipts --dir cleans at once (default {DIR_WORKERS})",
     )
     args = parser.parse_args(argv)
 
