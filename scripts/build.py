@@ -5,7 +5,10 @@ Reads an expense_data.json, checks it against the schema in references/interface
 and renders one self contained HTML file: a cover block, one summary table, and
 one section per receipt in the order the data lists them. The head carries a
 content security policy that allows no script and no remote fetch of any kind,
-so a receipt fragment cannot reach the network from inside a packet.
+so a receipt fragment cannot reach the network from inside a packet. Each
+fragment's own stylesheet is narrowed as it goes in, from the container class
+the cleaner scoped it to down to that one receipt's card, so no vendor's CSS
+reaches another vendor's receipt.
 
 Money is handled with Decimal throughout. ``totals`` returns Decimal values
 quantized to two places, so a packet's lines always add up to its total and
@@ -36,6 +39,7 @@ import argparse
 import base64
 import html
 import json
+import math
 import re
 import sys
 from datetime import UTC, datetime
@@ -76,7 +80,13 @@ MEAL_WORDS = ("breakfast", "brunch", "lunch", "dinner", "coffee", "snack")
 MEAL_MINUTES = 60
 # What a receipt fragment looks like when it never went through clean.py.
 UNCLEANED_RE = re.compile(r"<script|<html|<head|on\w+=", re.I)
-TAG_RE = re.compile(r"<[^>]*>")
+
+# The cleaner leaves every vendor selector prefixed with this class, and the
+# packet gives each receipt that class plus its own ordinal, so the prefix is
+# what a fragment's stylesheet is narrowed through at insert time.
+SCOPE_CLASS = "rc"
+SCOPE_CLASS_RE = re.compile(rf"\.{SCOPE_CLASS}(?![\w-])")
+STYLE_BLOCK_RE = re.compile(r"(<style\b[^>]*>)(.*?)(</style\s*>)", re.S | re.I)
 
 CSS = """
 body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;margin:0;color:#111;
@@ -185,11 +195,43 @@ def _check_packet_text(
         problems.append(f"{prefix} contains a banned word")
 
 
+def _is_finite(value: object) -> bool:
+    """False for a NaN or an infinity, whichever type carried it in.
+
+    ``json.loads`` reads ``NaN``, ``Infinity`` and ``-Infinity`` without
+    complaint, so a packet can be handed one of the three in a file that is
+    otherwise valid JSON. Every later reading of such a value is nonsense: it
+    totals to NaN, it formats as ``nan``, and it compares false against
+    itself, so it is refused here rather than printed.
+    """
+    if isinstance(value, Decimal):
+        return value.is_finite()
+    if isinstance(value, float):
+        return math.isfinite(value)
+    return True
+
+
 def _check_amount(problems: list[str], where: str, amt: object, field: str = "amt") -> None:
     if not _is_number(amt):
         problems.append(f"{where}: {field} expected a number")
+    elif not _is_finite(amt):
+        problems.append(f"{where}: {field} is not a finite number")
     elif _too_many_decimals(amt):
         problems.append(f"{where}: {field} has more than 2 decimals")
+
+
+def _check_item_amount(problems: list[str], where: str, amt: object) -> None:
+    """A line amount is what the vendor charged, so it never runs below zero.
+
+    Money the vendor gave back is a refund and belongs in ``refund``, where
+    the packet nets it off and the line says so. A negative ``amt`` would net
+    silently into the day subtotal instead, which is the same arithmetic with
+    nothing on the page to explain it.
+    """
+    before = len(problems)
+    _check_amount(problems, where, amt)
+    if len(problems) == before and amt < 0:
+        problems.append(f"{where}: amt is less than zero, money given back goes in refund")
 
 
 def _check_refund(problems: list[str], where: str, item: dict) -> None:
@@ -205,8 +247,12 @@ def _check_refund(problems: list[str], where: str, item: dict) -> None:
         problems.append(f"{where}: refund is less than zero")
         return
     amt = item.get("amt")
-    if _is_number(amt) and refund > amt:
+    if not _is_number(amt) or not _is_finite(amt):
+        return
+    if refund > amt:
         problems.append(f"{where}: refund is more than amt")
+    elif refund == amt:
+        problems.append(f"{where}: fully refunded, drop it")
 
 
 def _check_local(problems: list[str], where: str, item: dict) -> None:
@@ -300,7 +346,7 @@ def _check_days(problems: list[str], data: dict, receipt_rids: set[str]) -> None
                 problems.append(f"{spot}: expected an object")
                 continue
             _check_packet_text(problems, spot, "desc", item.get("desc"))
-            _check_amount(problems, spot, item.get("amt"))
+            _check_item_amount(problems, spot, item.get("amt"))
             _check_item_extras(problems, spot, item)
             rid = item.get("rid")
             if not isinstance(rid, str) or not RID_RE.match(rid):
@@ -445,17 +491,16 @@ def load_expense_data(path: Path, receipts_dir: Path | None = None) -> dict:
 # -------------------------------------------------------------------- totals
 
 
-def day_list(data: dict) -> list:
-    """The days, or a validate shaped error rather than a surprise later.
+def _days(data: dict) -> list:
+    """The days, or nothing at all when they are not a list.
 
-    ``validate`` reports a days list of the wrong shape and stops the build.
-    A caller that skipped it gets the same sentence here instead of an
+    ``validate`` is the one place a days list of the wrong shape is reported,
+    and it stops the build before any of this runs. The check here is only so
+    that a caller who skipped it gets an empty packet rather than an
     AttributeError from the middle of a subtotal.
     """
-    days = data.get("days", [])
-    if not isinstance(days, list):
-        raise ValueError("days: expected a list")
-    return days
+    days = data.get("days")
+    return days if isinstance(days, list) else []
 
 
 def item_claim(item: dict) -> Decimal:
@@ -487,7 +532,7 @@ def totals(data: dict) -> dict:
     """
     days: list[tuple[str, Decimal]] = []
     expenses = Decimal("0.00")
-    for day in day_list(data):
+    for day in _days(data):
         subtotal = Decimal("0.00")
         for item in day.get("items", []):
             subtotal += item_claim(item)
@@ -557,36 +602,50 @@ def find_receipt_file(receipts_dir: Path, rid: str, kind: object = None) -> Path
 
 
 def _pdf_pages(path: Path) -> int:
-    try:
-        from pypdf import PdfReader
+    """How many pages a receipt PDF holds, or zero when it will not open.
 
-        return len(PdfReader(str(path)).pages)
+    ``render_pdf.page_count`` does the counting, so the packet and the
+    renderer never disagree about how long a folio is. It carries no guard of
+    its own, and the import itself can fail on a machine with no renderer
+    installed, so the one guard for both lives here: a damaged or unreadable
+    pdf reads as zero pages, and callers say so rather than presenting the
+    zero as a real count.
+    """
+    try:
+        import render_pdf
+
+        return render_pdf.page_count(path)
     except Exception:
-        # A damaged or unreadable pdf reads as zero pages. Callers say so
-        # rather than presenting the zero as a real count.
         return 0
 
 
 def _receipt_text(path: Path) -> str | None:
     """What a receipt prints, as plain text, or None when it cannot be read.
 
-    Only for the amount reading at the end of the CLI. HTML loses its tags,
-    a pdf is read with pypdf, and an image is not read at all: a photo of a
+    Only for the amount reading at the end of the CLI. A pdf is read with
+    ``attach_pdf.extract_text``, which is what the folio reading in the skill
+    uses, html loses its tags to ``cards.strip_tags``, which is what the card
+    fingerprint reads through, and an image is not read at all: a photo of a
     receipt says nothing a substring test can use.
+
+    Both imports are made here rather than at the top of the module. Each of
+    those two imports this one, so a module level import would be a cycle.
     """
     kind = SUFFIX_KIND[path.suffix.lower()]
     if kind == "image":
         return None
     if kind == "pdf":
         try:
-            from pypdf import PdfReader
+            import attach_pdf
 
-            return "\n".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
+            return attach_pdf.extract_text(path)
         except Exception:
             return None
     body = path.read_text(encoding="utf-8", errors="replace")
     if kind == "html":
-        body = TAG_RE.sub(" ", body)
+        import cards
+
+        return cards.strip_tags(body)
     return html.unescape(body)
 
 
@@ -650,7 +709,7 @@ def _stipend_line(stipend: dict, currency: str) -> str:
 def _summary_table(data: dict, currency: str) -> str:
     figures = totals(data)
     rows = ['<table class="sum">', '<tr><th>Item</th><th class="amt">Amount</th></tr>']
-    for day, (label, subtotal) in zip(day_list(data), figures["days"], strict=True):
+    for day, (label, subtotal) in zip(_days(data), figures["days"], strict=True):
         rows.append(f'<tr class="day"><td colspan="2">{html.escape(label)}</td></tr>')
         for item in day.get("items", []):
             desc = _item_line(item, currency)
@@ -679,10 +738,69 @@ def _summary_table(data: dict, currency: str) -> str:
     return "\n".join(rows)
 
 
+def _scope_css(css: str, number: int) -> str:
+    """One fragment's stylesheet, narrowed to the receipt it came in with.
+
+    The cleaner prefixes every vendor selector with ``.rc``, which keeps a
+    vendor's CSS out of the summary table but not out of the next vendor's
+    receipt: one sender's ``.rc table{word-break:break-word}`` reaches every
+    table in the packet, and the receipt that suffers for it is the one
+    further down the page whose amount column it squeezes. Here that prefix
+    gains the receipt's own ordinal, so ``.rc table`` becomes ``.rc.r3 table``
+    and stops at receipt three.
+
+    Only a selector is rewritten. Everything between a ``{`` and its ``}`` is
+    copied across untouched, and so is the inside of a comment, so a
+    declaration or a note that happens to read ``.rc`` is left exactly as the
+    vendor wrote it.
+    """
+    scope = f".{SCOPE_CLASS}.r{number}"
+    out: list[str] = []
+    run: list[tuple[bool, str]] = []
+    start = index = 0
+    length = len(css)
+
+    def flush(selectors: bool) -> None:
+        """Emit the run just read, rewriting it only where it named elements."""
+        for comment, text in run:
+            out.append(SCOPE_CLASS_RE.sub(scope, text) if selectors and not comment else text)
+        run.clear()
+
+    while index < length:
+        if css.startswith("/*", index):
+            end = css.find("*/", index + 2)
+            end = length if end < 0 else end + 2
+            run.append((False, css[start:index]))
+            run.append((True, css[index:end]))
+            start = index = end
+            continue
+        char = css[index]
+        if char in "{}":
+            run.append((False, css[start:index]))
+            # A run that ends at an open brace was a selector list. One that
+            # ends at a close brace was the declarations inside a rule.
+            flush(char == "{")
+            out.append(char)
+            index += 1
+            start = index
+            continue
+        index += 1
+    run.append((False, css[start:]))
+    flush(False)
+    return "".join(out)
+
+
+def _scope_fragment(body: str, number: int) -> str:
+    """A receipt's markup with each of its style blocks scoped to it alone."""
+    return STYLE_BLOCK_RE.sub(
+        lambda match: match.group(1) + _scope_css(match.group(2), number) + match.group(3),
+        body,
+    )
+
+
 def render_packet(data: dict, receipts_dir: Path) -> str:
     """The whole packet as one self contained HTML string."""
     receipts_dir = Path(receipts_dir)
-    day_list(data)
     currency = data.get("currency") or "USD"
     company = html.escape(str(data.get("company", "")))
     title = f"Expense reimbursement packet, {company}"
@@ -708,13 +826,16 @@ def render_packet(data: dict, receipts_dir: Path) -> str:
     for number, receipt in enumerate(data.get("receipts", []), start=1):
         rid = str(receipt.get("rid", ""))
         heading = html.escape(f"Receipt {number}: {receipt.get('title', '')}")
-        body = _receipt_body(find_receipt_file(receipts_dir, rid, receipt.get("kind")))
+        found = find_receipt_file(receipts_dir, rid, receipt.get("kind"))
+        body = _scope_fragment(_receipt_body(found), number)
         # The section is numbered, not identified. A rid is a mailbox id and
         # the packet shows no mailbox ids, in an attribute or anywhere else.
+        # The same number is the second class on the card, which is the half
+        # of the scoping that lets this receipt's CSS find it and no other.
         out.append(
             f'<section class="rsec" data-receipt="{number}">'
             f'<div class="rhead">{heading}</div>'
-            f'<div class="rc">{body}</div></section>'
+            f'<div class="{SCOPE_CLASS} r{number}">{body}</div></section>'
         )
 
     out.append("</div></body></html>")
@@ -722,6 +843,23 @@ def render_packet(data: dict, receipts_dir: Path) -> str:
 
 
 # ----------------------------------------------------------------------- cli
+
+
+def _printed_forms(item: dict) -> list[str]:
+    """Every way one line's amount could be printed on its own receipt.
+
+    The claimed value, first. A line paid in another currency also counts as
+    printed when the receipt shows its ``local_amt``, because that is the
+    figure the vendor actually put on the page: the claim is the home currency
+    conversion, which the receipt has no reason to carry.
+    """
+    forms: list[str] = []
+    for value in (item_claim(item), item.get("local_amt")):
+        if value is None:
+            continue
+        amount = _decimal(value)
+        forms += [f"{amount:f}", f"{amount:,f}"]
+    return forms
 
 
 def unprinted_amounts(data: dict, receipts_dir: Path) -> list[str]:
@@ -738,7 +876,7 @@ def unprinted_amounts(data: dict, receipts_dir: Path) -> list[str]:
     }
     texts: dict[object, str | None] = {}
     unprinted: list[str] = []
-    for day in day_list(data):
+    for day in _days(data):
         for item in day.get("items", []):
             rid = item.get("rid")
             if rid not in texts:
@@ -747,8 +885,7 @@ def unprinted_amounts(data: dict, receipts_dir: Path) -> list[str]:
             body = texts[rid]
             if body is None:
                 continue
-            claimed = item_claim(item)
-            if any(form in body for form in (f"{claimed:f}", f"{claimed:,f}")):
+            if any(form in body for form in _printed_forms(item)):
                 continue
             unprinted.append(str(item.get("desc", "")))
     return unprinted
