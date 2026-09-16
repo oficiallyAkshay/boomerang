@@ -1,0 +1,430 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Boomerang: inbox to reimbursement packet",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "external": {
+          "label": "Source outside the skill"
+        },
+        "messagebus": {
+          "label": "Tool call the model issues"
+        },
+        "cloud": {
+          "label": "Model judgment"
+        },
+        "backend": {
+          "label": "Code (script)"
+        },
+        "database": {
+          "label": "File on disk"
+        },
+        "frontend": {
+          "label": "Deliverable"
+        }
+      }
+    }
+  },
+  "components": [
+    {
+      "id": "calendar",
+      "type": "external",
+      "label": "Calendar",
+      "sublabel": "trip dates",
+      "pos": [
+        32,
+        52
+      ],
+      "size": [
+        164,
+        62
+      ]
+    },
+    {
+      "id": "inbox",
+      "type": "external",
+      "label": "Inbox",
+      "sublabel": "email tool or Gmail",
+      "pos": [
+        32,
+        190
+      ],
+      "size": [
+        164,
+        62
+      ]
+    },
+    {
+      "id": "trip",
+      "type": "cloud",
+      "label": "Find the trip",
+      "sublabel": "dates and place",
+      "tag": "model",
+      "pos": [
+        252,
+        52
+      ],
+      "size": [
+        164,
+        62
+      ]
+    },
+    {
+      "id": "pass1",
+      "type": "messagebus",
+      "label": "Pass 1: generic terms",
+      "sublabel": "padded date window",
+      "pos": [
+        252,
+        144
+      ],
+      "size": [
+        164,
+        62
+      ]
+    },
+    {
+      "id": "pass2",
+      "type": "messagebus",
+      "label": "Pass 2: vendor senders",
+      "sublabel": "one query per sender",
+      "pos": [
+        252,
+        236
+      ],
+      "size": [
+        164,
+        62
+      ]
+    },
+    {
+      "id": "fetch",
+      "type": "messagebus",
+      "label": "Fetch bodies to disk",
+      "sublabel": "one at a time, concurrent",
+      "pos": [
+        472,
+        190
+      ],
+      "size": [
+        164,
+        62
+      ]
+    },
+    {
+      "id": "clean",
+      "type": "backend",
+      "label": "Clean vendor markup",
+      "sublabel": "clean.py",
+      "tag": "code",
+      "pos": [
+        692,
+        90
+      ],
+      "size": [
+        192,
+        62
+      ]
+    },
+    {
+      "id": "cards",
+      "type": "backend",
+      "label": "Who paid",
+      "sublabel": "card fingerprint, cards.py",
+      "tag": "code",
+      "pos": [
+        692,
+        190
+      ],
+      "size": [
+        192,
+        62
+      ]
+    },
+    {
+      "id": "folio",
+      "type": "backend",
+      "label": "Folio text",
+      "sublabel": "attach_pdf.extract_text",
+      "tag": "code",
+      "pos": [
+        692,
+        290
+      ],
+      "size": [
+        192,
+        62
+      ]
+    },
+    {
+      "id": "policy",
+      "type": "cloud",
+      "label": "Policy",
+      "sublabel": "policy.md + policy.local.md",
+      "tag": "model",
+      "pos": [
+        990,
+        90
+      ],
+      "size": [
+        180,
+        62
+      ]
+    },
+    {
+      "id": "candidates",
+      "type": "cloud",
+      "label": "Candidate list",
+      "sublabel": "one question to you",
+      "tag": "model",
+      "pos": [
+        990,
+        220
+      ],
+      "size": [
+        180,
+        62
+      ]
+    },
+    {
+      "id": "expense",
+      "type": "database",
+      "label": "expense_data.json",
+      "sublabel": "what goes in",
+      "pos": [
+        32,
+        446
+      ],
+      "size": [
+        164,
+        62
+      ]
+    },
+    {
+      "id": "build",
+      "type": "backend",
+      "label": "Build packet.html",
+      "sublabel": "build.py",
+      "tag": "code",
+      "pos": [
+        276,
+        446
+      ],
+      "size": [
+        164,
+        62
+      ]
+    },
+    {
+      "id": "render",
+      "type": "backend",
+      "label": "Render packet.pdf",
+      "sublabel": "render_pdf.py, Chrome",
+      "tag": "code",
+      "pos": [
+        519,
+        446
+      ],
+      "size": [
+        164,
+        62
+      ]
+    },
+    {
+      "id": "splice",
+      "type": "backend",
+      "label": "Splice folios",
+      "sublabel": "attach_pdf.py",
+      "tag": "code",
+      "pos": [
+        762,
+        446
+      ],
+      "size": [
+        164,
+        62
+      ]
+    },
+    {
+      "id": "packet",
+      "type": "frontend",
+      "label": "Packet",
+      "sublabel": "HTML master + PDF",
+      "pos": [
+        990,
+        446
+      ],
+      "size": [
+        180,
+        62
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "In parallel over receipts on disk",
+      "wraps": [
+        "clean",
+        "cards",
+        "folio"
+      ],
+      "pad": 22
+    }
+  ],
+  "connections": [
+    {
+      "id": "calendar-trip",
+      "from": "calendar",
+      "to": "trip"
+    },
+    {
+      "id": "trip-window",
+      "from": "trip",
+      "to": "pass1",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "inbox-pass1",
+      "from": "inbox",
+      "to": "pass1",
+      "variant": "emphasis"
+    },
+    {
+      "id": "inbox-pass2",
+      "from": "inbox",
+      "to": "pass2",
+      "variant": "emphasis"
+    },
+    {
+      "id": "pass1-fetch",
+      "from": "pass1",
+      "to": "fetch"
+    },
+    {
+      "id": "pass2-fetch",
+      "from": "pass2",
+      "to": "fetch"
+    },
+    {
+      "id": "fetch-clean",
+      "from": "fetch",
+      "to": "clean"
+    },
+    {
+      "id": "fetch-cards",
+      "from": "fetch",
+      "to": "cards",
+      "variant": "emphasis"
+    },
+    {
+      "id": "fetch-folio",
+      "from": "fetch",
+      "to": "folio"
+    },
+    {
+      "id": "clean-candidates",
+      "from": "clean",
+      "to": "candidates"
+    },
+    {
+      "id": "cards-candidates",
+      "from": "cards",
+      "to": "candidates"
+    },
+    {
+      "id": "folio-candidates",
+      "from": "folio",
+      "to": "candidates"
+    },
+    {
+      "id": "policy-candidates",
+      "from": "policy",
+      "to": "candidates",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "candidates-expense",
+      "from": "candidates",
+      "to": "expense",
+      "label": "you answer",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [
+        [
+          1080,
+          402
+        ],
+        [
+          114,
+          402
+        ]
+      ],
+      "labelAt": [
+        600,
+        388
+      ]
+    },
+    {
+      "id": "expense-build",
+      "from": "expense",
+      "to": "build"
+    },
+    {
+      "id": "build-render",
+      "from": "build",
+      "to": "render",
+      "label": "HTML"
+    },
+    {
+      "id": "render-splice",
+      "from": "render",
+      "to": "splice",
+      "label": "PDF"
+    },
+    {
+      "id": "splice-packet",
+      "from": "splice",
+      "to": "packet",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Code does the mechanical work",
+      "items": [
+        "clean.py strips vendor markup from fetched mail",
+        "cards.py fingerprints the card that paid",
+        "build.py, render_pdf.py and attach_pdf.py make the packet"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "The model supplies judgment",
+      "items": [
+        "Which trip the receipts belong to, and how wide to pad the window",
+        "How policy.md and policy.local.md apply to each receipt",
+        "One candidate list, one question, before anything is built"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "What runs in parallel",
+      "items": [
+        "Two search passes run before a single fetch stage",
+        "Cleaning, card matching and folio text run over the same receipts at once",
+        "The packet stage is strictly sequential: build, render, splice"
+      ]
+    }
+  ]
+}
