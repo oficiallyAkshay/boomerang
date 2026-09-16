@@ -352,10 +352,12 @@ DAYS = [
 
 STIPEND = {"desc": "Meal stipend, 2 days worked", "amt": 75.00}
 
-# The summary table fits on one Letter page, and the receipts that follow are
-# one per page, which is the count render_pdf is asked to hold to. The number
-# is read back off a render rather than guessed: build the example and the
-# page count it prints is SUMMARY_PAGES plus one page per receipt.
+# The summary table fits on one Letter page. How many pages the receipts take
+# is not something this script can count: a receipt too long to print at a
+# readable size runs on to the next page, so the render is what says where each
+# one went. It writes a page map beside the PDF and this script reads it back,
+# checks the summary still took the one page, and checks the map accounts for
+# every page in the file.
 SUMMARY_PAGES = 1
 
 TEXT_SUFFIXES = {".html", ".txt"}
@@ -542,10 +544,21 @@ def clean_receipts(receipts: Path, cleaned: Path, cache: Path, fetch: bool) -> l
 def build_packet(data_path: Path, cleaned: Path, out_html: Path, out_pdf: Path) -> int:
     """build, render_pdf, attach_pdf. Returns the final page count."""
     run("build", str(data_path), "--receipts", str(cleaned), "--out", str(out_html))
-    expected = SUMMARY_PAGES + len(SOURCES)
     with tempfile.TemporaryDirectory() as raw:
         rendered = Path(raw) / "rendered.pdf"
-        run("render_pdf", str(out_html), str(rendered), "--expect", str(expected))
+        printed = int(run("render_pdf", str(out_html), str(rendered)).strip())
+        mapping = json.loads(Path(f"{rendered}.pages.json").read_text(encoding="utf-8"))
+        expected = mapping["summary_pages"] + sum(mapping["pages"])
+        if len(mapping["pages"]) != len(SOURCES):
+            raise SystemExit(f"page map covers {len(mapping['pages'])} of {len(SOURCES)} receipts")
+        if mapping["summary_pages"] != SUMMARY_PAGES or printed != expected:
+            raise SystemExit(
+                f"render printed {printed} pages, the page map accounts for {expected} "
+                f"with {mapping['summary_pages']} of them the summary"
+            )
+        for number, count in enumerate(mapping["pages"], start=1):
+            if count > 1:
+                print(f"[example]   receipt {number} runs to {count} pages")
         pages = run(
             "attach_pdf",
             str(rendered),

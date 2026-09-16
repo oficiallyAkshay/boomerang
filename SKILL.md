@@ -180,8 +180,8 @@ standing question in the next section and wait.
 
 ### 7. Build, render, splice
 
-The work narrows here: the build waits on the cleaned directory and the splice
-waits on the render. Write `expense_data.json`, then build.
+The build waits on the cleaned directory and the splice on the render. Write
+`expense_data.json`, then build.
 
 ```bash
 uv run python scripts/build.py expense_data.json --receipts clean \
@@ -189,23 +189,25 @@ uv run python scripts/build.py expense_data.json --receipts clean \
 ```
 
 Build from `clean`, the folder step 5 writes, never from `receipts`: a raw
-vendor email still carries its tracking pixels and its live links, and building
-from it puts all of that in the packet. The schema is in
-`references/interfaces.md`, and `build.py` validates before it writes: every
-problem it finds is a real one, so fix the data, not the validator.
+vendor email carries its tracking pixels and its live links into the packet.
+
+The schema is in `references/interfaces.md`. `build.py` validates before it
+writes, and every problem it finds is real: fix the data, not the validator.
 
 ```bash
-uv run python scripts/render_pdf.py packet.html packet.pdf --expect 12
+uv run python scripts/render_pdf.py packet.html packet.pdf
 ```
 
-`build.py` prints `pages expected N`, the number `--expect` takes, and names on
-stderr any line whose claimed value is not printed on its own receipt. Explain
-every name: a hand-typed value, a netted refund and a receipt still to come are
-three different answers. `render_pdf.py` exits 2 when `--expect` differs.
+`build.py` prints `pages expected N`, a floor: every receipt starts on its own
+page, and a long receipt continues onto the next page rather than shrinking
+below readable size. Read the render's count and its `receipt N spans` lines,
+then pass that count back as `--expect`, which exits 2 when it differs. Explain
+every line `build.py` names on stderr as claiming what its receipt does not
+print: a hand-typed value, a netted refund and a receipt to come all differ.
 
-If any receipt is a PDF attachment, splice its pages in afterwards, so the
-attachment sits behind its card page. Step 5 copies a folio across untouched,
-so it is `clean/<rid>.pdf`:
+If any receipt is a PDF attachment, splice its pages in behind it afterwards.
+The splice reads `packet.pdf.pages.json`, which the render writes beside the
+PDF, so keep the two together. Step 5 copies a folio to `clean/<rid>.pdf`:
 
 ```bash
 uv run python scripts/attach_pdf.py packet.pdf expense_data.json \
@@ -306,7 +308,8 @@ Verify every line of this before you send the packet back to the user.
 - [ ] Line descriptions say Hotel, Office, Airport, Home. Street addresses stay
       inside the vendor receipts
 - [ ] No em dashes anywhere
-- [ ] One receipt per PDF page
+- [ ] Every receipt starts on its own page; a long receipt continues onto the
+      next page rather than shrinking below readable size
 - [ ] The HTML is the master and the PDF was re-rendered after the last change
 
 Run the gate on the built packet:
