@@ -21,7 +21,7 @@
     "<tr><td[^>]*><b>Share your Experience</b></td></tr>[\\s\\S]*?</td></tr>",
     "<tr><td[^>]*><b>Additional Information</b></td></tr>[\\s\\S]*?</td></tr>",
     "<b>Refund Information</b>[\\s\\S]*?(?=</td>)",
-    "<img[^>]*src=\"https://media\\.united\\.com/assets/m/[^\"]*ua_\\d+x\\d+\\.jpe?g\"[^>]*>",
+    "<img[^>]*src=[\"']?https://media\\.united\\.com/assets/m/[^\"'>\\s]*ua_\\d+x\\d+\\.jpe?g[^>]*>",
     "<a[^>]*>(?:View our Privacy Policy|View our Legal Notices)</a>",
     "<tr class=\"no-display\">[\\s\\S]*?</tr>"
   ],

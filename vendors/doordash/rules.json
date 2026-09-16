@@ -11,8 +11,8 @@
     "^Thanks for your order"
   ],
   "strip_regex": [
-    "<img[^>]*src=\"https://tracksg\\.doordash\\.com/[^\"]*\"[^>]*/?>",
-    "<img alt=\"\" src=\"https://img\\.cdn4dd\\.com[^\"]*\"[^>]*>",
+    "<img[^>]*src=[\"']?https://tracksg\\.doordash\\.com/[^\"'>\\s]*[^>]*/?>",
+    "<img alt=(?:\"\"|'')\\s+src=[\"']?https://img\\.cdn4dd\\.com[^\"'>\\s]*[^>]*>",
     "<div style=\"display: none; max-height: 0px; overflow: hidden;\">[\\s\\S]*?</div>",
     "<p class=\"p4\"[^>]*>This email confirms revisions made to your original DoorDash order[\\s\\S]*?</p>",
     "<p class=\"p2\"[^>]*><a class=\"Red200\"[^>]*>Get Order Help</a></p>",

@@ -26,12 +26,15 @@ part in each `vendors/<name>/rules.json`, and `tests/test_clean.py` proves each
 line of it with the exact markup a vendor would have to send.
 
 Three mechanical notes. Images are inlined as base64, so a packet renders the
-same offline and in the PDF, with no request going back to the vendor. Vendor
-CSS is scoped to that one receipt's card, so two vendors sitting on one page do
-not overwrite each other's styles. A promotional or tip module that prints an
-amount is kept: the guard that stops a strip pattern carrying a figure away
-cannot tell a real amount from an advertised one, so some marketing text does
-survive on a receipt.
+same offline and in the PDF, with no request going back to the vendor. Every
+source is read the way a browser reads one, double quoted, single quoted or
+bare, so no quoting style leaves a picture pointing back at a vendor, and an
+image a rule holds at zero height, which is how a hidden spacer is sized, is
+taken as a beacon and removed. Vendor CSS is scoped to that one receipt's card,
+so two vendors sitting on one page do not overwrite each other's styles. A
+promotional or tip module that prints an amount is kept: the guard that stops a
+strip pattern carrying a figure away cannot tell a real amount from an
+advertised one, so some marketing text does survive on a receipt.
 
 Each vendor below has a machine-readable form at `vendors/<name>/rules.json`.
 The `notes` field there must agree with the paragraph here. If they disagree,

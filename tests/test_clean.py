@@ -206,11 +206,30 @@ def test_a_tracking_pixel_with_a_bracket_in_its_alt_is_still_a_pixel() -> None:
 
 @pytest.mark.parametrize("attribute", ["href", "src", "action", "data", "poster", "background"])
 @pytest.mark.parametrize("value", ["javascript:alert(1)", "data:text/html,<script>x</script>"])
-def test_no_live_scheme_survives_in_a_url_attribute(attribute: str, value: str) -> None:
-    out = clean.clean_html(f'<div {attribute}="{value}">Fare</div>')
+@pytest.mark.parametrize("quote", ['"', "'", ""])
+def test_no_live_scheme_survives_in_a_url_attribute(attribute: str, value: str, quote: str) -> None:
+    """Double quoted, single quoted and bare, because a browser reads all three."""
+    if not quote and " " in value:
+        pytest.skip("a bare attribute value cannot hold a space")
+    out = clean.clean_html(f"<div {attribute}={quote}{value}{quote}>Fare</div>")
     assert "javascript:" not in out
     assert "data:text/html" not in out
     assert ">Fare</div>" in out
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        '<img src="https://cdn.example.com/a.png" srcset="https://cdn.example.com/a@2x.png 2x">',
+        "<img src='https://cdn.example.com/a.png' srcset='https://cdn.example.com/a@2x.png 2x'>",
+        "<img src=https://cdn.example.com/a.png srcset=https://cdn.example.com/a@2x.png>",
+    ],
+)
+def test_srcset_goes_whichever_way_it_was_quoted(tag: str) -> None:
+    """A srcset is a second source for the same picture and never survives."""
+    out = clean.clean_html(f"<body>{tag}</body>")
+    assert "srcset" not in out
+    assert "a@2x.png" not in out
 
 
 def test_formaction_is_treated_as_a_url_attribute() -> None:
@@ -606,6 +625,48 @@ def test_tracking_pixels_are_removed(tag: str) -> None:
     assert clean.clean_html(f"<body>{tag}<p>Keep</p></body>") == "<p>Keep</p>"
 
 
+@pytest.mark.parametrize(
+    "tag",
+    [
+        "<img src='https://example.com/o/open?id=9' width='600'>",
+        "<img src=https://example.com/o/open?id=9 width=600>",
+        "<img src='https://example.com/a.gif' style='width:1px;height:1px'>",
+        '<img src=https://example.com/a.gif style="width:1px;height:1px">',
+        "<img src='https://example.com/a.gif' width=1 height=1>",
+    ],
+)
+def test_a_tracking_pixel_is_a_pixel_whichever_way_it_was_quoted(tag: str) -> None:
+    """A browser reads all three quoting forms alike, so the cleaner must too."""
+    assert clean.clean_html(f"<body>{tag}<p>Keep</p></body>") == "<p>Keep</p>"
+
+
+@pytest.mark.parametrize(
+    "style",
+    [
+        "display:none; max-height: 0px; font-size: 0px; overflow: hidden",
+        "max-width:0;display:none",
+        "height:0",
+        "max-height:0px;",
+    ],
+)
+def test_an_image_held_at_zero_in_css_is_a_pixel(style: str) -> None:
+    """A hidden preheader image is sized in CSS rather than in attributes.
+
+    It carries no width or height attribute and no hint in its URL, so the
+    only thing that gives it away is the rule holding it at nothing, written
+    either as a plain height or as the max- form a mail client honours. The
+    unit is optional, because a zero needs none.
+    """
+    tag = f"<img src='https://res.example.com/?x=1' style=\"{style}\"/>"
+    assert clean.clean_html(f"<body>{tag}<p>Keep</p></body>") == "<p>Keep</p>"
+
+
+def test_a_real_image_sized_in_css_is_not_read_as_a_pixel() -> None:
+    """The zero test is about zero: a logo with a width in CSS keeps it."""
+    tag = '<img src="https://cdn.example.com/logo.png" style="max-width:100%;height:34px">'
+    assert tag in clean.clean_html(f"<body>{tag}</body>")
+
+
 def test_real_images_survive() -> None:
     tag = '<img src="https://cdn.example.com/logo.png" width="34" height="34" alt="Vendor">'
     assert tag in clean.clean_html(f"<body>{tag}</body>")
@@ -892,6 +953,54 @@ def test_inline_images_replaces_only_what_is_cached(tmp_path: Path, no_network: 
     assert 'src="data:image/png;base64,' in out
     assert f'src="{missing}"' in out
     assert f"src='{empty}'" in out
+
+
+@pytest.mark.parametrize(
+    ("tag", "expected"),
+    [
+        ('<img src="URL">', 'src="data:image/png;base64,'),
+        ("<img src='URL'>", "src='data:image/png;base64,"),
+        ("<img src=URL>", 'src="data:image/png;base64,'),
+        ('<img src = "URL">', 'src="data:image/png;base64,'),
+        ("<img SRC='URL' alt='logo'>", "src='data:image/png;base64,"),
+    ],
+)
+def test_a_cached_image_is_inlined_whichever_way_it_was_quoted(
+    tmp_path: Path, no_network: None, tag: str, expected: str
+) -> None:
+    """The quote the vendor opened with is the quote the data URI keeps.
+
+    A bare source is the one that changes shape, and it gains double quotes
+    rather than staying bare, because a data URI is long enough to be worth
+    delimiting. What matters either way is that no form is left pointing at
+    the network in a finished packet.
+    """
+    url = "https://cdn.example.com/logo.png"
+    (tmp_path / clean.cache_name(url)).write_bytes(PNG)
+    out = clean.inline_images(tag.replace("URL", url), tmp_path)
+    assert expected in out
+    assert url not in out
+
+
+@pytest.mark.parametrize("tag", ['<img src="URL">', "<img src='URL'>", "<img src=URL>"])
+def test_a_fetch_asks_for_an_image_whichever_way_it_was_quoted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, public_dns: None, tag: str
+) -> None:
+    url = "https://cdn.example.com/logo.png"
+    _answer_with(monkeypatch, PNG)
+    assert clean.fetch_images(tag.replace("URL", url), tmp_path) == 1
+    assert (tmp_path / clean.cache_name(url)).read_bytes() == PNG
+
+
+@pytest.mark.parametrize("tag", ['<img src="URL" alt="x">', "<img src='URL' alt='x'>"])
+def test_a_failed_image_becomes_alt_text_whichever_way_it_was_quoted(
+    tmp_path: Path, no_network: None, tag: str
+) -> None:
+    url = "https://cdn.example.com/gone.png"
+    (tmp_path / clean.FAILED_RECORD).write_text(json.dumps([url]), encoding="utf-8")
+    assert clean.inline_images(tag.replace("URL", url), tmp_path) == (
+        '<span class="img-alt">x</span>'
+    )
 
 
 def test_inline_images_guesses_the_mime_type_past_a_query_string(
