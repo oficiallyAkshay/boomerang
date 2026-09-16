@@ -33,6 +33,6 @@ Full ruleset in [`policy.md`](policy.md).
 
 ## Where it runs
 
-Claude desktop app, Claude.ai, Claude Code, Cowork, Codex, Hermes. Anywhere that reads a skill folder.
+Claude desktop app, Claude.ai, Claude Code, Cowork, Codex, OpenClaw, Hermes. Anywhere that reads a skill folder.
 
 MIT
