@@ -61,7 +61,10 @@ cleaned HTML plus the text, PDF and image receipts copied across untouched.
 cache, the cache is then pruned of anything that is not an image and anything
 over 200 KB and trimmed to 1.5 MB, and the receipts are cleaned again offline
 against the pruned cache. That way the committed packet matches the committed
-cache exactly, which is what ``--check`` verifies.
+cache exactly, which is what ``--check`` verifies. The fetch also leaves a
+record of the URLs that answered with an error page rather than a picture, and
+that record is committed beside the cached images, so the offline pass prints
+those images' alt text exactly as the fetching pass would.
 
 Stdlib only, plus the repo's own scripts.
 """
@@ -525,26 +528,40 @@ def prune_cache(cache: Path) -> tuple[int, int]:
     is not an image is a stray fragment of someone's session, so an entry under
     ``MIN_IMAGE_BYTES`` or without one of the four signatures is unlinked here
     and never reaches a commit.
+
+    The one file no pass touches is the fetch's failure record, which is not a
+    cache entry at all: it is the list of URLs that answered with an error page
+    rather than a picture, and it is what tells an offline clean to print those
+    images' alt text instead of leaving a broken image in the packet.
     """
     if not cache.is_dir():
         return 0, 0
-    for path in [path for path in sorted(cache.iterdir()) if path.is_file()]:
+    sys.path.insert(0, str(SCRIPTS))
+    import clean
+
+    def entries() -> list[Path]:
+        return [
+            path
+            for path in sorted(cache.iterdir())
+            if path.is_file() and path.name != clean.FAILED_RECORD
+        ]
+
+    for path in entries():
         with path.open("rb") as handle:
             head = handle.read(12)
         if path.stat().st_size < MIN_IMAGE_BYTES or not looks_like_an_image(head):
             path.unlink()
-    files = [path for path in sorted(cache.iterdir()) if path.is_file()]
-    for path in files:
+    for path in entries():
         if path.stat().st_size > MAX_IMAGE_BYTES:
             path.unlink()
-    files = [path for path in sorted(cache.iterdir()) if path.is_file()]
+    files = entries()
     files.sort(key=lambda path: path.stat().st_size, reverse=True)
     total = sum(path.stat().st_size for path in files)
     while total > MAX_CACHE_BYTES and files:
         biggest = files.pop(0)
         total -= biggest.stat().st_size
         biggest.unlink()
-    kept = [path for path in cache.iterdir() if path.is_file()]
+    kept = entries()
     return len(kept), sum(path.stat().st_size for path in kept)
 
 
