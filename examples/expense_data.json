@@ -16,11 +16,6 @@
           "desc": "Software licence for the onsite",
           "amt": 54.11,
           "rid": "5c359f66433854d8"
-        },
-        {
-          "desc": "Groceries to the hotel, tip out, dated by the message header",
-          "amt": 50.91,
-          "rid": "d2e61faed5861571"
         }
       ]
     },
@@ -88,7 +83,7 @@
     },
     {
       "rid": "d2e61faed5861571",
-      "title": "Groceries delivered to the hotel",
+      "title": "Groceries delivered to the hotel, flagged not claimed",
       "vendor": "DoorDash"
     },
     {
