@@ -1,0 +1,32 @@
+{
+  "name": "uber-eats",
+  "display": "Uber Eats",
+  "sender_domains": [
+    "uber.com"
+  ],
+  "subject_patterns": [
+    "^(?:\\[Personal\\]\\s*)?Your .*(?:day (?:morning|afternoon|evening|night) )?order with Uber Eats",
+    "^Your Uber Eats (?:receipt|order)",
+    "Uber Eats"
+  ],
+  "strip_regex": [
+    "<table[^>]*>(?:(?!<table)[\\s\\S]){0,4000}?Say thanks with a rating or tip for the courier[\\s\\S]*?Rate your order[\\s\\S]*?</a></td></tr></tbody></table>",
+    "<img[^>]*(?:one-savings|one-cashback|UO_logo)[^>]*>[\\s\\S]{0,1200}?Uber One savings and other promotions applied[\\s\\S]{0,300}?</table>",
+    "<a[^>]*>(?:(?!</a>)[\\s\\S])*?(?:app_store|play_store|download the app|Download PDF)(?:(?!</a>)[\\s\\S])*?</a>",
+    "<img[^>]*src=\"[^\"]*(?:merchant-photo|image-proc/processed_images)[^\"]*\"[^>]*>",
+    "<a[^>]*>[\\s\\S]{0,300}?(?:facebook|twitter|instagram|x-logo|social)[\\s\\S]{0,300}?</a>",
+    "<span[^>]*data-testid=\"company_name_address\"[\\s\\S]*?</span>",
+    "My Account\\s*</a>[\\s\\S]{0,4000}?Terms and Conditions\\s*</a>",
+    "<table[^>]*>(?:(?!<table)[\\s\\S]){0,3000}?(?:Contact support|Need help\\?)[\\s\\S]*?</table>"
+  ],
+  "unwrap_links_matching": [
+    "click\\.",
+    "/track",
+    "utm_",
+    "email\\.",
+    "uber\\.com"
+  ],
+  "amount_regex": "data-testid=\"total_fare_amount\"[^>]*>\\s*([£$€₹][0-9][0-9,]*\\.[0-9]{2})\\s*<",
+  "date_regex": "<div class=\"date\"[^>]*>\\s*([A-Z][a-z]{2}\\s+\\d{1,2},\\s+\\d{4})",
+  "notes": "Uber Eats order receipts use the same shell as Uber ride receipts but a different set of modules. Removed: the rate and tip block for the courier; the Uber One savings strip; the app download and Download PDF buttons; the merchant and dish photography served from S3, whose paths identify the real merchant; the social link row; the corporate address footer and the account and terms link cluster; and the support modules. Kept verbatim: every basket line with its quantity and options, the subtotal, the delivery and service fees, the tax, every discount and credit row, the order total, the order date and the order completed timestamp, both tender rows when a voucher and a card split the bill, and the card last four. Uber Eats and Uber ride mail share the sender domain uber.com, so a message from that domain resolves to the uber rules by domain; the subject line is what separates an Eats order from a trip."
+}

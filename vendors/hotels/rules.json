@@ -1,0 +1,26 @@
+{
+  "name": "hotels",
+  "display": "Hotel senders",
+  "sender_domains": [
+    "hotels.com",
+    "citizenm.com",
+    "hilton.com",
+    "hyatt.com",
+    "ihg.com",
+    "booking.com",
+    "airbnb.com",
+    "sonder.com"
+  ],
+  "subject_patterns": [
+    "^Reservation Confirmation",
+    "(?:hotel|stay|room) (?:reservation|confirmation)",
+    "your (?:reservation|booking) (?:is )?confirmed",
+    "^Your (?:hotel )?booking confirmation",
+    "folio"
+  ],
+  "strip_regex": [],
+  "unwrap_links_matching": [],
+  "amount_regex": null,
+  "date_regex": null,
+  "notes": "A search folder, not a rendering folder: it has no sample and strips nothing. It exists so the second search pass asks the hotel chains directly, because a hotel confirmation often has a subject line the generic pass one terms never match, and so that mail from one of these senders is detected as a hotel rather than falling through to the plaintext catch all. The subject patterns are deliberately narrow, so a stay confirmation that arrives as a text body from a domain not listed here still reaches the plaintext rules and renders as a monospace block. A chain that needs real cleaning gets its own folder with its own sample, the way marriott does."
+}
