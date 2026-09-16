@@ -164,7 +164,7 @@ def test_splice_refuses_a_symlink_that_points_outside(packet: dict, tmp_path: Pa
 
 
 def test_cli_prints_the_final_page_count(
-    packet: dict, fixture_dir: Path, fixture_data: dict, tmp_path: Path, capsys
+    packet: dict, cleaned_receipts: Path, fixture_data: dict, tmp_path: Path, capsys
 ) -> None:
     data_path = tmp_path / "expense_data.json"
     data_path.write_text(json.dumps(fixture_data), encoding="utf-8")
@@ -174,7 +174,7 @@ def test_cli_prints_the_final_page_count(
             str(packet["pdf"]),
             str(data_path),
             "--receipts",
-            str(fixture_dir / "receipts"),
+            str(cleaned_receipts),
             "--out",
             str(out),
         ]
