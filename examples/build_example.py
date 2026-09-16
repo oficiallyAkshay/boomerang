@@ -54,13 +54,7 @@ directory with the network switched off, inlining only what the committed cache
 already holds, and exits 1 if the packet HTML differs by a single byte or the
 PDF page count moves.
 
-Two notes on how the documented pipeline is run here.
-
-SKILL.md step 7 shows ``build.py ... --receipts receipts``. This script passes
-the cleaned directory instead, because ``build.py`` inserts an HTML receipt
-into the packet as is: handing it the raw mail would put the vendors' scripts
-and tracking pixels straight into the packet. The cleaned directory holds the
-cleaned HTML plus the text, PDF and image receipts copied across untouched.
+One note on how the documented pipeline is run here.
 
 ``clean.py --fetch-images`` has no size cap, so the fetch is run once into the
 cache, the cache is then pruned of anything that is not an image and anything
@@ -293,19 +287,19 @@ VENDOR_LABELS = {
 }
 
 # Every claimed amount below is printed on the receipt it points at, and every
-# day here is the date that receipt prints. The right hand column is where the
-# date was read: a vendor's own date_regex, the body of a receipt that has no
-# pattern, or the message header for the two that print no date at all.
-#   uber_ride    34.86  the charged total          Jun 11, date_regex
-#   stripe       54.11  the amount paid            Jun 11, date_regex
+# day here is the date that receipt carries. The right hand column is where the
+# date was read: the body of the receipt itself, or the message header for the
+# one receipt that prints no date at all.
+#   uber_ride    34.86  the charged total          Jun 11, on the receipt
+#   stripe       54.11  the amount paid            Jun 11, on the receipt
 #   uber_eats    73.60  88.60 ordered, less the 15.00 voucher, card tender
-#                                                  Jun 12, date_regex
+#                                                  Jun 12, on the receipt
 #   transit       6.71  the figure on the photographed pass
 #                                                  Jun 12, message header
-#   njtransit     4.75  the charged total          Jun 15, date_regex
+#   njtransit     4.75  the charged total          Jun 15, on the receipt
 #   lyft         22.27  40.67 charged, less 18.40 of Lyft Cash, card tender
-#                                                  Jun 15, date_regex
-#   united_wifi  10.99  the charged total          Jun 16, date_regex
+#                                                  Jun 15, on the receipt
+#   united_wifi  10.99  the charged total          Jun 16, on the receipt
 #   folio       885.50  room and tax for five nights, from the folio total
 #                                                  Jun 16, the check-out day
 #                                                  printed on page 2

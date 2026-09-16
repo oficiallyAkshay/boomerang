@@ -121,6 +121,12 @@ from an MCP server the user adds.
 
 Source: <https://cursor.com/docs/context/skills>
 
+## Optional: Headroom
+
+A host can sit behind Headroom, a proxy or wrapper that compresses everything
+the model reads, this skill included. It needs no change here and no setting of
+its own: <https://github.com/headroomlabs-ai/headroom>.
+
 ## The open specification
 
 The open skills specification requires `name` and `description`. The
