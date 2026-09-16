@@ -53,8 +53,15 @@ Each vendor directory holds one, at `vendors/<name>/rules.json`.
 ```text
 CLI: build.py DATA.json --receipts DIR --out packet.html   # totals, then "pages expected N"
 CLI: clean.py IN.html --out OUT.html [--vendor NAME|generic] [--vendors DIR] [--images DIR] [--fetch-images]
+CLI: clean.py --dir RECEIPTS --out CLEAN [--vendors DIR] [--images DIR] [--fetch-images] [--workers N]
+  # cleans every .html in RECEIPTS at once (4 at a time by default), reading each file's vendor
+  # from its own <rid>.meta.json; .txt, .pdf, .png and .jpg are copied through unchanged and
+  # everything else, meta files included, stays behind. One "clean: <file> vendor <name>" line
+  # per receipt on stderr, in filename order, and the amount guard warnings in that order too
 CLI: cards.py RECEIPTS_DIR      # reads .html, .txt and .pdf receipts, so folios are counted too
-CLI: fetch.py --start YYYY-MM-DD --end YYYY-MM-DD --out DIR [--vendors DIR] [--dry-run]
+CLI: fetch.py --start YYYY-MM-DD --end YYYY-MM-DD --out DIR [--vendors DIR] [--dry-run] [--workers N]
+  # runs the two passes as concurrent queries and merges the ids by query index, not by which
+  # query answered first; --workers is how many bodies are fetched at once, 3 by default
   # writes <rid>.html, <rid>.txt, <rid>.meta.json; the first kept attachment of each kind is
   # <rid>.pdf | <rid>.png | <rid>.jpg and later ones of that kind <rid>.<n>.<ext>; a message
   # with no body and no kept attachment writes nothing and is named on stdout as empty
@@ -79,4 +86,19 @@ not printed on its own receipt. Neither reading stops the build.
 
 `clean.py` without `--vendor` reads `<input stem>.meta.json` beside the input, takes `from` and
 `subject` from it, and prints the vendor it chose, or `generic`, to stderr. `--vendor generic`
-forces the generic clean.
+forces the generic clean, and `--vendor` is refused with `--dir`, which reads every meta file
+itself.
+
+## The stage that runs three ways
+
+Cleaning, the card fingerprint and the folio read all take the receipts directory and write
+nothing the other two need, so they run at once. `cards.py` and `attach_pdf.extract_text` need
+no argument they did not already have; the cleaner's directory form is:
+
+```text
+clean.clean_dir(src_dir, out_dir, vendors_dir, image_cache=None, fetch_images=False, workers=4)
+  -> list[tuple[str, str]]   # (filename, vendor or "generic") per .html, in filename order
+```
+
+It raises `ValueError` when `fetch_images` is asked for with no `image_cache`. `fetch.fetch_all`
+takes the same kind of argument, `workers=3`, and its four lists stay in first seen order.

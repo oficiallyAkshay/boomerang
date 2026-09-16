@@ -1,22 +1,34 @@
-"""Tests for the two pass windowed search and the one at a time fetch."""
+"""Tests for the two pass windowed search and the pooled fetch.
+
+The concurrency tests use a source that counts how many calls are in flight at
+once, under a lock, and holds each call at a barrier so a caller that ran the
+work one item at a time would break the barrier rather than pass by accident.
+The ordering tests do the opposite: they make the queries finish in the wrong
+order on purpose and check that what comes back is still ordered by query.
+"""
 
 from __future__ import annotations
 
 import json
 import sys
+import threading
 import types
 from datetime import date
 from pathlib import Path
 
 import build
+import fetch
 import pytest
 from fetch import (
+    BODY_WORKERS,
     GENERIC_TERMS,
+    SEARCH_WORKERS,
     Query,
     attachment_ext,
     build_queries,
     fetch_all,
     main,
+    search_all,
     to_gmail,
     write_message,
 )
@@ -166,7 +178,8 @@ def test_ids_are_deduped_across_queries_keeping_first_seen_order(tmp_path: Path)
     queries = [build_queries(START, END, VENDORS)[0], build_queries(START, END, VENDORS)[1]]
     written, _, _, _ = fetch_all(source, queries, tmp_path)
     assert written == ["aaa", "bbb", "ccc"]
-    assert source.fetched == ["aaa", "bbb", "ccc"]
+    # The pool decides who is fetched when; the returned order is the merge.
+    assert sorted(source.fetched) == ["aaa", "bbb", "ccc"]
 
 
 def test_a_message_already_on_disk_is_not_fetched_again(tmp_path: Path):
@@ -410,3 +423,217 @@ def test_the_cli_names_every_message_that_came_back_empty(tmp_path: Path, capsys
     assert code == 0
     assert f"fetch: {rid} came back empty" in out
     assert "1 empty" in out
+
+
+# ------------------------------------------------------------- running at once
+
+BARRIER_TIMEOUT = 10.0
+
+
+def numbered_queries(count: int) -> list[Query]:
+    """Distinct queries, so a fake source can tell one from another."""
+    return [Query(terms=[f"q{index}"], after=START, before=END) for index in range(count)]
+
+
+def _barrier(width: int) -> threading.Barrier | None:
+    """A rendezvous for width callers, or None when one caller is expected."""
+    return threading.Barrier(width, timeout=BARRIER_TIMEOUT) if width > 1 else None
+
+
+class ConcurrentSource:
+    """A source that records how many of its calls overlapped.
+
+    ``peak`` is the most calls that were ever in flight together, counted under
+    a lock. Each phase can be given a width, and when it has one every call in
+    that phase waits at a barrier before answering: a caller that worked
+    through the list one item at a time would sit there until the barrier
+    timed out, so the test fails loudly rather than quietly proving nothing.
+    """
+
+    def __init__(self, results, messages, *, search_width: int = 1, get_width: int = 1):
+        self.results = results
+        self.messages = messages
+        self.search_barrier = _barrier(search_width)
+        self.get_barrier = _barrier(get_width)
+        self.searched: list[str] = []
+        self.fetched: list[str] = []
+        self._lock = threading.Lock()
+        self.live = 0
+        self.peak = 0
+
+    def _enter(self) -> None:
+        with self._lock:
+            self.live += 1
+            self.peak = max(self.peak, self.live)
+
+    def _leave(self) -> None:
+        with self._lock:
+            self.live -= 1
+
+    def search(self, query: str) -> list[str]:
+        self._enter()
+        try:
+            if self.search_barrier is not None:
+                self.search_barrier.wait()
+            with self._lock:
+                self.searched.append(query)
+            return list(self.results.get(query, []))
+        finally:
+            self._leave()
+
+    def get(self, rid: str) -> dict:
+        self._enter()
+        try:
+            if self.get_barrier is not None:
+                self.get_barrier.wait()
+            with self._lock:
+                self.fetched.append(rid)
+            return self.messages[rid]
+        finally:
+            self._leave()
+
+
+def test_the_searches_run_at_the_same_time():
+    """Four queries, four callers in flight, and the merge still by query."""
+    queries = numbered_queries(SEARCH_WORKERS)
+    results = {to_gmail(q): [f"rid{index}"] for index, q in enumerate(queries)}
+    source = ConcurrentSource(results, {}, search_width=SEARCH_WORKERS)
+
+    assert search_all(source, queries) == [f"rid{index}" for index in range(SEARCH_WORKERS)]
+    assert source.peak == SEARCH_WORKERS
+
+
+def test_the_search_pool_never_grows_past_four():
+    """Twelve queries still only ever have four callers in the mailbox."""
+    queries = numbered_queries(3 * SEARCH_WORKERS)
+    results = {to_gmail(q): [f"rid{index}"] for index, q in enumerate(queries)}
+    source = ConcurrentSource(results, {}, search_width=SEARCH_WORKERS)
+
+    assert search_all(source, queries) == [f"rid{index}" for index in range(len(queries))]
+    assert source.peak == SEARCH_WORKERS
+
+
+def test_no_queries_means_no_pool_at_all():
+    assert search_all(ConcurrentSource({}, {}), []) == []
+
+
+class OutOfOrderSource:
+    """A source whose first query is the last one to answer.
+
+    The second query releases the first, so the completion order is the
+    reverse of the query order every single run. Whatever comes back has to be
+    in query order regardless, which is the whole point of the merge.
+    """
+
+    def __init__(self, first: str, answers: dict[str, list[str]]):
+        self.first = first
+        self.answers = answers
+        self.released = threading.Event()
+
+    def search(self, query: str) -> list[str]:
+        if query == self.first:
+            assert self.released.wait(BARRIER_TIMEOUT), "the later query never answered"
+        else:
+            self.released.set()
+        return list(self.answers.get(query, []))
+
+
+def test_the_order_is_the_query_order_not_the_answer_order():
+    queries = numbered_queries(2)
+    first, second = (to_gmail(q) for q in queries)
+    source = OutOfOrderSource(first, {first: ["slow", "shared"], second: ["fast", "shared"]})
+
+    assert search_all(source, queries) == ["slow", "shared", "fast"]
+
+
+def test_the_bodies_are_fetched_at_the_same_time(tmp_path: Path):
+    rids = [f"body{index}" for index in range(BODY_WORKERS)]
+    queries = numbered_queries(1)
+    source = ConcurrentSource(
+        {to_gmail(queries[0]): rids},
+        {rid: message() for rid in rids},
+        get_width=BODY_WORKERS,
+    )
+
+    written, rejected, skipped, failed = fetch_all(source, queries, tmp_path)
+    assert (written, rejected, skipped, failed) == (rids, [], [], [])
+    assert source.peak == BODY_WORKERS
+    for rid in rids:
+        assert (tmp_path / f"{rid}.meta.json").exists()
+
+
+def test_one_worker_fetches_one_body_at_a_time(tmp_path: Path):
+    rids = ["body0", "body1", "body2"]
+    queries = numbered_queries(1)
+    source = ConcurrentSource({to_gmail(queries[0]): rids}, {rid: message() for rid in rids})
+
+    written, _, _, _ = fetch_all(source, queries, tmp_path, workers=1)
+    assert written == rids
+    assert source.fetched == rids
+    assert source.peak == 1
+
+
+def test_written_and_failed_keep_first_seen_order_under_the_pool(tmp_path: Path):
+    """An empty message in the middle lands in failed, and the rest keep order."""
+    rids = ["body0", "body1", "body2"]
+    queries = numbered_queries(1)
+    source = ConcurrentSource(
+        {to_gmail(queries[0]): rids},
+        {
+            "body0": message(),
+            "body1": message(html=None, text=None),
+            "body2": message(),
+        },
+        get_width=BODY_WORKERS,
+    )
+
+    written, rejected, skipped, failed = fetch_all(source, queries, tmp_path)
+    assert written == ["body0", "body2"]
+    assert failed == ["body1"]
+    assert (rejected, skipped) == ([], [])
+
+
+def test_the_cli_passes_its_worker_count_through(tmp_path: Path, monkeypatch, capsys):
+    seen: dict[str, int] = {}
+
+    def spy(source, queries, out_dir, workers=BODY_WORKERS):
+        seen["workers"] = workers
+        return [], [], [], []
+
+    fake = types.ModuleType("gmail_cli")
+    fake.GmailSource = lambda: None
+    monkeypatch.setitem(sys.modules, "gmail_cli", fake)
+    monkeypatch.setattr(fetch, "fetch_all", spy)
+
+    code = main(
+        [
+            "--start",
+            "2026-06-08",
+            "--end",
+            "2026-06-09",
+            "--out",
+            str(tmp_path / "receipts"),
+            "--workers",
+            "2",
+        ]
+    )
+    assert code == 0
+    assert seen == {"workers": 2}
+    assert "0 written" in capsys.readouterr().out
+
+
+def test_the_cli_defaults_to_three_workers(tmp_path: Path, monkeypatch, capsys):
+    seen: dict[str, int] = {}
+
+    def spy(source, queries, out_dir, workers=None):
+        seen["workers"] = workers
+        return [], [], [], []
+
+    fake = types.ModuleType("gmail_cli")
+    fake.GmailSource = lambda: None
+    monkeypatch.setitem(sys.modules, "gmail_cli", fake)
+    monkeypatch.setattr(fetch, "fetch_all", spy)
+
+    assert main(["--start", "2026-06-08", "--end", "2026-06-09", "--out", str(tmp_path)]) == 0
+    assert seen == {"workers": BODY_WORKERS}
+    capsys.readouterr()

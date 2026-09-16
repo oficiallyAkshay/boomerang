@@ -40,4 +40,6 @@ select = ["E", "F", "I", "B", "UP"]
 [tool.coverage.run]
 source = ["scripts"]
 omit = ["scripts/gmail_cli.py"]
-concurrency = ["greenlet"]
+# greenlet for the playwright render, thread for the pools in fetch.py and
+# clean.py. Without thread, work done in a worker reads as never run at all.
+concurrency = ["greenlet", "thread"]
