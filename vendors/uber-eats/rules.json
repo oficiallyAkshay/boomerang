@@ -16,7 +16,7 @@
     "<img[^>]*src=\"[^\"]*(?:merchant-photo|image-proc/processed_images)[^\"]*\"[^>]*>",
     "<a[^>]*>[\\s\\S]{0,300}?(?:facebook|twitter|instagram|x-logo|social)[\\s\\S]{0,300}?</a>",
     "<span[^>]*data-testid=\"company_name_address\"[\\s\\S]*?</span>",
-    "My Account\\s*</a>[\\s\\S]{0,4000}?Terms and Conditions\\s*</a>",
+    "<a[^>]*>\\s*My Account\\s*</a>[\\s\\S]{0,4000}?Terms and Conditions\\s*</a>",
     "<table[^>]*>(?:(?!<table)[\\s\\S]){0,3000}?(?:Contact support|Need help\\?)[\\s\\S]*?</table>"
   ],
   "unwrap_links_matching": [

@@ -17,7 +17,7 @@
     "<t[dr][^>]*>[\\s\\S]{0,2000}?Assistance should you need it[\\s\\S]*?Report damaged baggage[\\s\\S]{0,400}?</t[dr]>",
     ">\\s*(?:Lufthansa Group Notification|Thank you for flying with us|Please do not reply to this email\\.)\\s*<",
     "<a[^>]*>(?:(?!</a>)[\\s\\S])*?(?:Lufthansa\\.com|Help and contact|Privacy statement|Imprint)(?:(?!</a>)[\\s\\S])*?</a>",
-    "Corporate Headquarters:[\\s\\S]*?MID:\\s*\\d+"
+    "<tr[^>]*>(?:(?!<tr\\b)[\\s\\S])*?Corporate Headquarters:[\\s\\S]*?MID:\\s*\\d+[\\s\\S]{0,400}?</tr>"
   ],
   "unwrap_links_matching": [
     "click\\.",

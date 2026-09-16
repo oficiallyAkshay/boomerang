@@ -18,7 +18,7 @@
     "<img[^>]*src=\"https://static-maps\\.uber\\.com[^\"]*\"[^>]*>",
     "<a[^>]*>[\\s\\S]{0,300}?(?:facebook|twitter|instagram|x-logo|social)[\\s\\S]{0,300}?</a>",
     "<span[^>]*data-testid=\"company_name_address\"[\\s\\S]*?</span>",
-    "My Account\\s*</a>[\\s\\S]{0,4000}?Terms and Conditions\\s*</a>",
+    "<a[^>]*>\\s*My Account\\s*</a>[\\s\\S]{0,4000}?Terms and Conditions\\s*</a>",
     "<table[^>]*>(?:(?!<table)[\\s\\S]){0,3000}?(?:Contact support|Report lost item|Forgot something\\?)[\\s\\S]*?</table>",
     "<tr[^>]*>(?:(?!</tr>).)*?(?:Rate your (?:trip|driver|ride)|How was your (?:trip|ride))(?:(?!</tr>).)*?</tr>"
   ],
