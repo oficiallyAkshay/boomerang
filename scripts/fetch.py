@@ -11,6 +11,13 @@ the padding.
 Messages are fetched one at a time and written straight to disk. Nothing
 holds more than a single body in memory, and a message whose meta file is
 already on disk is never fetched twice.
+
+Gmail is the only source, so the CLI has no flag for choosing one. A source is
+anything with ``search(query_str) -> list[str]`` and ``get(rid) -> dict``,
+where the dict carries ``html``, ``text``, ``from``, ``subject``, ``date`` and
+``attachments`` as a list of ``(filename, bytes)`` pairs. Each message is
+written out as ``<rid>.html``, ``<rid>.txt``, ``<rid>.meta.json`` and its
+attachments as ``<rid>.<n>.<ext>``.
 """
 
 from __future__ import annotations
@@ -51,24 +58,6 @@ class Query:
     from_domains: list[str] = field(default_factory=list)
     after: date = date(1970, 1, 1)
     before: date = date(1970, 1, 1)
-
-
-class FetchReport(list):
-    """The rids written this run.
-
-    A plain list of the rids, so it matches the interface, with the refused
-    and the already-on-disk rids carried alongside for the caller to print.
-    """
-
-    def __init__(
-        self,
-        written: list[str] | None = None,
-        rejected: list[str] | None = None,
-        skipped: list[str] | None = None,
-    ) -> None:
-        super().__init__(written or [])
-        self.rejected = list(rejected or [])
-        self.skipped = list(skipped or [])
 
 
 def build_queries(window_start: date, window_end: date, vendor_rules: dict) -> list[Query]:
@@ -121,10 +110,17 @@ def attachment_ext(filename: str) -> str | None:
 def write_message(out_dir: Path, rid: str, message: dict) -> dict:
     """Write one message body, its attachments and its meta file.
 
+    The rid is checked first. It becomes a file name several times over, so a
+    rid that is not a safe file name raises here rather than writing anywhere.
+    ``fetch_all`` already refuses such rids, and the check is repeated because
+    this function is callable on its own.
+
     The meta file is written last. A run cut short halfway leaves no meta
     file, so the next run fetches that message again instead of trusting a
     half written body.
     """
+    if not isinstance(rid, str) or not RID_RE.match(rid):
+        raise ValueError(f"message id is not a valid id: {rid!r}")
     out_dir = Path(out_dir)
     html = message.get("html")
     if html:
@@ -155,8 +151,15 @@ def write_message(out_dir: Path, rid: str, message: dict) -> dict:
     return meta
 
 
-def fetch_all(source, queries: list[Query], out_dir: Path) -> list[str]:
-    """Run every query, then fetch each new message once, in first seen order."""
+def fetch_all(
+    source, queries: list[Query], out_dir: Path
+) -> tuple[list[str], list[str], list[str]]:
+    """Run every query, then fetch each new message once, in first seen order.
+
+    Returns ``(written, rejected, skipped)``: the rids fetched this run, the
+    rids refused by the id pattern, and the rids whose meta file was already
+    on disk.
+    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -180,7 +183,7 @@ def fetch_all(source, queries: list[Query], out_dir: Path) -> list[str]:
             continue
         write_message(out_dir, rid, source.get(rid))
         written.append(rid)
-    return FetchReport(written, rejected, skipped)
+    return written, rejected, skipped
 
 
 def _parse_date(value: str) -> date:
@@ -193,7 +196,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--end", type=_parse_date, required=True, help="YYYY-MM-DD")
     parser.add_argument("--out", type=Path, required=True, help="receipts directory")
     parser.add_argument("--vendors", type=Path, help="vendors directory for pass two")
-    parser.add_argument("--source", choices=["gmail"], default="gmail")
     parser.add_argument("--dry-run", action="store_true", help="print the queries and stop")
     args = parser.parse_args(argv)
 
@@ -207,11 +209,11 @@ def main(argv: list[str] | None = None) -> int:
 
     from gmail_cli import GmailSource
 
-    report = fetch_all(GmailSource(), queries, args.out)
+    written, rejected, skipped = fetch_all(GmailSource(), queries, args.out)
     print(
-        f"fetch: {len(report)} written, "
-        f"{len(getattr(report, 'skipped', []))} already on disk, "
-        f"{len(getattr(report, 'rejected', []))} refused"
+        f"fetch: {len(written)} written, "
+        f"{len(skipped)} already on disk, "
+        f"{len(rejected)} refused"
     )
     return 0
 

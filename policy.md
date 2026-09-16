@@ -3,27 +3,31 @@
 The ruleset boomerang applies when it builds a packet. Copy it, edit it, or
 override single lines in `policy.local.md`.
 
+The basis for every rule below is standard practice for accountable
+reimbursement, unless the line says otherwise. Where a rule rests on something
+else, that basis is named in brackets at the end of it.
+
 ## Scope
 
-- One destination per packet. Multi-city trips run as separate packets (standard practice for accountable reimbursement)
-- Multi-company supported: one trip, two onsites, same city. Flight and shared hotel nights split evenly by default; hotel nights and ground rides on a working day go entirely to that day's company. Two packets, two totals, each noting the shared fare (standard practice for accountable reimbursement)
-- Drove instead of flew: tolls and parking only. No mileage. Gas out by default (standard practice for accountable reimbursement)
+- One destination per packet. Multi-city trips run as separate packets
+- Multi-company supported: one trip, two onsites, same city. Flight and shared hotel nights split evenly by default; hotel nights and ground rides on a working day go entirely to that day's company. Two packets, two totals, each noting the shared fare
+- Drove instead of flew: tolls and parking only. No mileage. Gas out by default
 
 ## Discovery
 
-- Onsite date from calendar; travel window from the final eTicket (standard practice for accountable reimbursement)
-- Gmail in two passes, window padded a day each side (standard practice for accountable reimbursement)
-- Recruiter-forwarded confirmations carry the policy: what they booked, what they'll reimburse, fees payable at property (standard practice for accountable reimbursement)
-- Hotel folios arrive as attachments the connector can't fetch; ask for upload or use gmail_cli (standard practice for accountable reimbursement)
-- One mailbox only. Receipts elsewhere are collected by upload or forward (standard practice for accountable reimbursement)
-- Final sweep the day before sending (standard practice for accountable reimbursement)
+- Onsite date from calendar; travel window from the final eTicket
+- Gmail in two passes, window padded a day each side
+- Recruiter-forwarded confirmations carry the policy: what they booked, what they'll reimburse, fees payable at property
+- Hotel folios arrive as attachments the connector can't fetch; ask for upload or use gmail_cli
+- One mailbox only. Receipts elsewhere are collected by upload or forward
+- Final sweep the day before sending
 
 ## Who paid
 
-- A card last-4 seen on one receipt in the whole mailbox is someone else's (standard practice for accountable reimbursement)
-- Read eTicket chains oldest first; "previous ticket value applied" means the base fare was paid by someone else (standard practice for accountable reimbursement)
+- A card last-4 seen on one receipt in the whole mailbox is someone else's
+- Read eTicket chains oldest first; "previous ticket value applied" means the base fare was paid by someone else
 - Flight credits are cash-equivalent, in. Miles, points, vouchers, out (cash-equivalent)
-- Net refunds against their line; fully refunded items out (standard practice for accountable reimbursement)
+- Net refunds against their line; fully refunded items out
 
 ## Flight
 
@@ -37,7 +41,7 @@ override single lines in `policy.local.md`.
 - Company paid: room and tax out; desk charges in (resort fee, parking, incidentals actually used) (necessary to attend)
 - User paid: room and tax for working nights and required travel nights in (necessary to attend)
 - Personal-day nights out. Refundable deposits and auth holds out. Minibar, laundry, room service out unless replacing a claimable meal (personal benefit)
-- Mandatory hotel fees as one line (standard practice for accountable reimbursement)
+- Mandatory hotel fees as one line
 
 ## Ground transport, regardless of who booked the trip
 
@@ -57,7 +61,7 @@ override single lines in `policy.local.md`.
 
 ## Stipend
 
-- Only when stated in writing or by the user. One line, days worked only (standard practice for accountable reimbursement)
+- Only when stated in writing or by the user. One line, days worked only
 
 ## Cancelled or postponed onsite
 
@@ -65,4 +69,4 @@ override single lines in `policy.local.md`.
 
 ## Currency
 
-- Claim the card's posted home-currency amount; the receipt shows the local total. Note the conversion once per line (standard practice for accountable reimbursement)
+- Claim the card's posted home-currency amount; the receipt shows the local total. Note the conversion once per line

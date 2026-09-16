@@ -6,8 +6,7 @@ import hashlib
 from pathlib import Path
 
 import check_prose
-
-EM_DASH = "\u2014"  # written as an escape so this file stays clean
+from check_prose import EM_DASH
 
 
 def sha(phrase: str) -> str:

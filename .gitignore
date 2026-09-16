@@ -9,6 +9,7 @@ htmlcov/
 .claude/settings.local.json
 policy.local.md
 receipts/
+clean/
 out/
 *.local.*
 .env*

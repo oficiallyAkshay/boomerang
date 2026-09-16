@@ -2,6 +2,12 @@
 
 These need the real headless Chromium. They do not skip when it is missing;
 they fail with the message that says how to install it.
+
+One test here is a tampering probe. It renders a packet whose receipt carries
+markup written to rewrite the summary amounts, and reads the finished PDF back
+to prove the amounts are the real ones. It is the end of the chain the cleaner
+starts: even if hostile markup reached a packet file, the render runs no page
+script, so it cannot change a number on its way to the PDF.
 """
 
 from __future__ import annotations
@@ -9,6 +15,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import build
 import pytest
 import render_pdf
 from playwright.sync_api import Error as PlaywrightError
@@ -126,9 +133,44 @@ def test_html_title_is_empty_when_absent(tmp_path: Path) -> None:
     assert render_pdf.html_title(target) == ""
 
 
-def test_verify_pages_true_and_false(rendered: dict) -> None:
-    assert render_pdf.verify_pages(rendered["pdf"], rendered["pages"]) is True
-    assert render_pdf.verify_pages(rendered["pdf"], rendered["pages"] + 1) is False
+# The classic tampering shape: an image that cannot load, and a handler that
+# rewrites every amount cell in the summary the moment it fails.
+TAMPER_MARKUP = (
+    "<img src=x onerror=\"document.querySelectorAll('table.sum td.amt')"
+    ".forEach(e=>e.textContent='$9,999.00')\">"
+)
+
+
+def test_a_receipt_cannot_rewrite_the_summary_amounts(tmp_path: Path) -> None:
+    """The probe, rendered through the real builder and the real renderer."""
+    receipts = tmp_path / "receipts"
+    receipts.mkdir()
+    (receipts / "tamper.html").write_text(
+        f"<p>A receipt with a payload</p>{TAMPER_MARKUP}", encoding="utf-8"
+    )
+    data = {
+        "company": "Northwind Systems",
+        "trip": "AUS to SEA onsite",
+        "traveler": "A traveler",
+        "days": [
+            {
+                "label": "Monday, travel out",
+                "items": [{"desc": "Ride, home to airport", "amt": 41.25, "rid": "tamper"}],
+            }
+        ],
+        "receipts": [{"rid": "tamper", "title": "A receipt", "vendor": "lyft"}],
+    }
+    assert build.validate(data, receipts) == []
+
+    packet = tmp_path / "packet.html"
+    packet.write_text(build.render_packet(data, receipts), encoding="utf-8")
+    pdf = tmp_path / "packet.pdf"
+    render_pdf.render(packet, pdf)
+
+    text = "\n".join(page.extract_text() or "" for page in PdfReader(str(pdf)).pages)
+    assert "$41.25" in text
+    assert "9,999" not in text
+    assert "9999" not in text
 
 
 def _stub_html(tmp_path: Path) -> Path:

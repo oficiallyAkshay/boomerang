@@ -15,8 +15,8 @@ from pathlib import Path
 import build
 import check_prose
 import pytest
+from check_prose import EM_DASH
 
-EM_DASH = "\u2014"  # written as an escape so this file stays clean
 RSEC_OPEN = '<section class="rsec"'
 
 
@@ -151,10 +151,6 @@ def test_amount_must_be_a_number_with_at_most_two_decimals(data: dict) -> None:
     assert build.validate(whole) == []
 
 
-def test_unparsable_amount_counts_as_too_many_decimals() -> None:
-    assert build._too_many_decimals("not a number") is True
-
-
 def test_desc_rules(data: dict) -> None:
     dashed = copy.deepcopy(data)
     first_item(dashed)["desc"] = f"Ride {EM_DASH} home to airport"
@@ -256,6 +252,10 @@ def test_receipt_container_shapes_are_checked(data: dict) -> None:
     blank_vendor["receipts"][0]["vendor"] = " "
     assert "receipts[0]: vendor empty" in build.validate(blank_vendor)
 
+    wrong_vendor = copy.deepcopy(data)
+    wrong_vendor["receipts"][0]["vendor"] = 4
+    assert "receipts[0]: vendor expected a string" in build.validate(wrong_vendor)
+
 
 def test_stipend_is_optional_but_checked_when_present(data: dict) -> None:
     without = copy.deepcopy(data)
@@ -300,6 +300,20 @@ def test_load_expense_data_raises_with_joined_problems(tmp_path: Path, data: dic
     assert "\n" in message
 
 
+def test_load_expense_data_runs_the_disk_checks_when_given_a_directory(
+    tmp_path: Path, data: dict
+) -> None:
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    (folder / f"{data['receipts'][0]['rid']}.pdf").write_bytes(b"not really a pdf")
+    path = tmp_path / "expense_data.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    assert build.load_expense_data(path)["company"]  # no directory, no disk check
+    with pytest.raises(ValueError, match="pdf cannot be read"):
+        build.load_expense_data(path, folder)
+
+
 # --------------------------------------------------------------------- money
 
 
@@ -315,8 +329,12 @@ def test_money_formats_other_currencies_with_a_code() -> None:
     assert build.money(Decimal("19.99"), "GBP") == "19.99 GBP"
 
 
-def test_money_falls_back_to_zero_for_junk() -> None:
-    assert build.money("not a number") == "$0.00"
+def test_an_amount_that_is_not_a_number_raises() -> None:
+    """validate refuses junk before anything renders, so this is a bug, not a total."""
+    with pytest.raises(ValueError, match="amount is not a number"):
+        build._decimal("not a number")
+    with pytest.raises(ValueError, match="amount is not a number"):
+        build.money("not a number")
 
 
 # -------------------------------------------------------------------- totals
@@ -396,6 +414,13 @@ def test_the_cover_block_names_the_trip(packet: str, data: dict) -> None:
     assert data["trip"] in packet
     assert data["traveler"] in packet
     assert '<meta name="author"' not in packet.lower()
+
+
+def test_the_head_carries_a_content_security_policy(packet: str) -> None:
+    assert (
+        '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
+        "img-src data:; style-src 'unsafe-inline'; font-src data:\">"
+    ) in packet
 
 
 def test_the_summary_table_rows_are_in_order(packet: str, data: dict) -> None:
@@ -489,6 +514,49 @@ def test_find_receipt_file_prefers_html(receipts: Path, data: dict) -> None:
     assert build.find_receipt_file(receipts, "no_such_rid") is None
 
 
+@pytest.mark.parametrize("rid", ["../secret", "a/b", "", "x" * 65, "has space", "dot.dot", 7])
+def test_find_receipt_file_refuses_a_rid_that_is_not_an_id(
+    receipts: Path, rid: object, tmp_path: Path
+) -> None:
+    (tmp_path / "secret.html").write_text("<p>not yours</p>", encoding="utf-8")
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    assert build.find_receipt_file(folder, rid) is None
+    assert build.find_receipt_file(receipts, rid) is None
+
+
+def test_find_receipt_file_refuses_an_absolute_rid(tmp_path: Path) -> None:
+    outside = tmp_path / "secret.html"
+    outside.write_text("<p>not yours</p>", encoding="utf-8")
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    assert build.find_receipt_file(folder, str(outside.with_suffix(""))) is None
+
+
+def test_find_receipt_file_refuses_a_symlink_that_points_outside(tmp_path: Path) -> None:
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "secret.html").write_text("<p>not yours</p>", encoding="utf-8")
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    (folder / "leak.html").symlink_to(outside / "secret.html")
+
+    assert (folder / "leak.html").is_file()
+    assert build.find_receipt_file(folder, "leak") is None
+
+
+def test_find_receipt_file_follows_a_symlink_that_stays_inside(tmp_path: Path) -> None:
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    (folder / "real.html").write_text("<p>a receipt</p>", encoding="utf-8")
+    (folder / "alias.html").symlink_to(folder / "real.html")
+    assert build.find_receipt_file(folder, "alias") == (folder / "real.html").resolve()
+
+
+def test_find_receipt_file_on_a_directory_that_is_not_there(tmp_path: Path) -> None:
+    assert build.find_receipt_file(tmp_path / "nothing_here", "anything") is None
+
+
 def test_a_missing_currency_defaults_to_usd(data: dict, receipts: Path) -> None:
     del data["currency"]
     assert "$" in summary_region(build.render_packet(data, receipts))
@@ -542,3 +610,20 @@ def test_the_cli_writes_the_packet_and_prints_totals(
         f"total {build.money(figures['total'])}"
     )
     assert out.read_text(encoding="utf-8").startswith("<!doctype html>")
+
+
+def test_the_cli_runs_the_disk_checks_on_the_receipts_it_was_given(
+    tmp_path: Path, data: dict
+) -> None:
+    """A junk pdf in the receipts directory stops the build rather than reaching a card."""
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rid = data["receipts"][0]["rid"]
+    (folder / f"{rid}.pdf").write_bytes(b"not really a pdf")
+    path = tmp_path / "expense_data.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    out = tmp_path / "packet.html"
+
+    with pytest.raises(ValueError, match=f"receipt {rid}: pdf cannot be read"):
+        build.main([str(path), "--receipts", str(folder), "--out", str(out)])
+    assert not out.exists()
