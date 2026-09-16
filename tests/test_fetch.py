@@ -17,6 +17,7 @@ from datetime import date
 from pathlib import Path
 
 import build
+import clean
 import fetch
 import pytest
 from fetch import (
@@ -35,6 +36,7 @@ from fetch import (
 
 START = date(2026, 6, 8)
 END = date(2026, 6, 9)
+VENDORS_DIR = Path(__file__).resolve().parents[1] / "vendors"
 
 # A two day window, padded a day each side, with before: pushed one more day
 # because Gmail treats it as exclusive.
@@ -115,6 +117,154 @@ def test_vendors_without_domains_produce_no_query():
 def test_a_none_rules_entry_is_tolerated():
     queries = build_queries(START, END, {"broken": None})
     assert len(queries) == 1
+
+
+# ---------------------------------------------------------- the arrival lag
+
+# Two vendors with the same domains and different lags, so the only thing that
+# can move one window end and not the other is the lag itself.
+LAGGED = {
+    "lyft": {"name": "lyft", "sender_domains": ["lyft.com"], "arrival_lag_days": 1},
+    "marriott": {"name": "marriott", "sender_domains": ["marriott.com"], "arrival_lag_days": 2},
+}
+
+
+def test_each_vendor_window_ends_on_its_own_lag():
+    """A folio lands two days after checkout, a ride the same evening.
+
+    Both queries are built from the same window, and the ends differ by
+    exactly the difference between the two folders' lags.
+    """
+    queries = build_queries(START, END, LAGGED)
+    by_name = {q.from_domains[0]: q for q in queries[1:]}
+    assert by_name["lyft.com"].before == date(2026, 6, 10)
+    assert by_name["marriott.com"].before == date(2026, 6, 11)
+
+
+def test_no_lag_moves_the_window_start():
+    """Nothing arrives before the thing it is a receipt for."""
+    queries = build_queries(START, END, LAGGED)
+    assert {q.after for q in queries} == {date(2026, 6, 7)}
+
+
+def test_pass_one_keeps_the_flat_day_whatever_the_vendors_say():
+    """It is one query for every vendor, so no single lag would be right."""
+    assert build_queries(START, END, LAGGED)[0].before == date(2026, 6, 10)
+
+
+def test_a_vendor_that_says_nothing_gets_the_default_day():
+    queries = build_queries(START, END, {"quiet": {"sender_domains": ["quiet.example"]}})
+    assert queries[1].before == date(2026, 6, 10)
+
+
+@pytest.mark.parametrize("lag", [0, -5], ids=["zero", "negative"])
+def test_a_lag_below_a_day_is_floored_at_a_day(lag: int):
+    """The rules accept the shape; the padding never shrinks below the flat day."""
+    assert fetch.arrival_lag({"arrival_lag_days": lag}) == 1
+
+
+@pytest.mark.parametrize("bad", ["2", 1.5, True, None], ids=["string", "float", "bool", "null"])
+def test_a_lag_of_the_wrong_type_reads_as_the_default(bad: object):
+    """load_vendor_rules refuses these; a caller passing its own dict is safe."""
+    assert fetch.arrival_lag({"arrival_lag_days": bad}) == 1
+
+
+def test_the_lag_of_nothing_at_all_is_the_default():
+    assert fetch.arrival_lag(None) == 1
+    assert fetch.arrival_lag({}) == 1
+
+
+# ------------------------------------------------------------ vendor knowledge
+
+# One folder with something in every field, and one that declares nothing.
+KNOWING = {
+    "folio": {
+        "name": "folio",
+        "sender_domains": ["folio.example"],
+        "arrival_lag_days": 2,
+        "messages": [
+            {"subject_pattern": "^Your folio", "kind": "receipt", "supersedes": "^Your booking"},
+            {"subject_pattern": "^Your booking", "kind": "confirmation"},
+        ],
+        "tenders": [{"label_pattern": "Points", "kind": "points"}],
+        "last4_pattern": r"Card\s+(\d{4})",
+        "line_categories": [{"label_pattern": "Resort fee", "category": "resort_fee"}],
+        "missing": ["total", "currency"],
+        "endpoints": True,
+    },
+    "quiet": {"name": "quiet", "sender_domains": ["quiet.example"]},
+}
+
+# The keys load_vendor_rules demands of any folder, so a rules.json written for
+# one of these tests carries only the fields the test is actually about.
+BARE_RULES = {
+    "display": "Folio",
+    "subject_patterns": [],
+    "strip_regex": [],
+    "unwrap_links_matching": [],
+    "notes": "",
+}
+
+
+def test_every_folder_is_in_the_knowledge_even_when_it_declares_nothing():
+    """A folder left out would read as one nobody has looked at yet."""
+    knowledge = fetch.vendor_knowledge(KNOWING)
+    assert sorted(knowledge) == ["folio", "quiet"]
+    assert knowledge["quiet"] == {
+        "messages": [],
+        "tenders": [],
+        "line_categories": [],
+        "arrival_lag_days": 1,
+        "endpoints": False,
+        "missing": [],
+        "last4_pattern": "",
+    }
+
+
+def test_the_knowledge_carries_every_declared_field():
+    facts = fetch.vendor_knowledge(KNOWING)["folio"]
+    assert facts["arrival_lag_days"] == 2
+    assert facts["endpoints"] is True
+    assert facts["missing"] == ["total", "currency"]
+    assert facts["last4_pattern"] == r"Card\s+(\d{4})"
+    assert facts["messages"][0]["supersedes"] == "^Your booking"
+    assert facts["tenders"] == [{"label_pattern": "Points", "kind": "points"}]
+    assert facts["line_categories"][0]["category"] == "resort_fee"
+
+
+def test_a_none_rules_entry_still_gets_a_knowledge_entry():
+    assert fetch.vendor_knowledge({"broken": None})["broken"]["arrival_lag_days"] == 1
+
+
+def test_a_knowledge_row_that_is_not_an_object_is_left_out():
+    """load_vendor_rules refuses one; a caller's own dict must not crash here."""
+    rules = {"odd": {"tenders": ["not a row", {"label_pattern": "Visa", "kind": "card"}]}}
+    assert fetch.vendor_knowledge(rules)["odd"]["tenders"] == [
+        {"label_pattern": "Visa", "kind": "card"}
+    ]
+
+
+def test_the_printout_is_a_header_line_and_only_what_was_declared():
+    lines = fetch.knowledge_lines(fetch.vendor_knowledge(KNOWING))
+    assert lines == [
+        "folio  lag 2d  endpoints yes",
+        "  messages: receipt ^Your folio (supersedes ^Your booking) | confirmation ^Your booking",
+        "  tenders: points Points",
+        "  lines: resort_fee Resort fee",
+        "  missing: total, currency",
+        r"  last4: Card\s+(\d{4})",
+        "quiet  lag 1d  endpoints no",
+    ]
+
+
+def test_the_printout_reads_the_real_folders(capsys):
+    """Every shipped folder prints, and the two lags the repo actually uses."""
+    rules = clean.load_vendor_rules(VENDORS_DIR)
+    lines = fetch.knowledge_lines(fetch.vendor_knowledge(rules))
+    headers = [line for line in lines if not line.startswith("  ")]
+    assert len(headers) == len(rules)
+    assert "marriott  lag 2d  endpoints no" in headers
+    assert "lyft  lag 1d  endpoints yes" in headers
 
 
 # ----------------------------------------------------------------- to_gmail
@@ -385,6 +535,48 @@ def test_dry_run_prints_both_passes_and_stops(tmp_path: Path, capsys):
     )
     assert code == 0
     assert capsys.readouterr().out.splitlines() == [GENERIC_QUERY, LYFT_QUERY]
+
+
+def test_the_knowledge_flag_needs_no_window_and_no_out(tmp_path: Path, capsys):
+    """It asks about the folders, not about a trip, so it takes neither."""
+    write_vendor_rules(tmp_path / "vendors", "lyft", ["lyftmail.com"])
+    assert main(["--vendors", str(tmp_path / "vendors"), "--knowledge"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["lyft  lag 1d  endpoints no"]
+
+
+def test_the_knowledge_flag_prints_what_a_folder_declares(tmp_path: Path, capsys):
+    folder = tmp_path / "vendors" / "folio"
+    folder.mkdir(parents=True)
+    (folder / "rules.json").write_text(json.dumps(KNOWING["folio"] | BARE_RULES), encoding="utf-8")
+    assert main(["--vendors", str(tmp_path / "vendors"), "--knowledge"]) == 0
+    out = capsys.readouterr().out
+    assert "folio  lag 2d  endpoints yes" in out
+    assert "  tenders: points Points" in out
+    assert "  missing: total, currency" in out
+
+
+def test_the_knowledge_flag_with_no_vendors_prints_nothing(capsys):
+    assert main(["--knowledge"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_a_fetch_without_a_window_says_which_flags_are_missing(capsys):
+    with pytest.raises(SystemExit) as raised:
+        main(["--out", "receipts"])
+    assert raised.value.code == 2
+    assert "--start and --end are required" in capsys.readouterr().err
+
+
+def test_a_fetch_without_an_out_directory_says_so(capsys):
+    with pytest.raises(SystemExit) as raised:
+        main(["--start", "2026-06-08", "--end", "2026-06-09"])
+    assert raised.value.code == 2
+    assert "--out is required" in capsys.readouterr().err
+
+
+def test_a_dry_run_needs_no_out_directory(capsys):
+    assert main(["--start", "2026-06-08", "--end", "2026-06-09", "--dry-run"]) == 0
+    assert capsys.readouterr().out.splitlines() == [GENERIC_QUERY]
 
 
 def test_the_cli_fetches_through_the_gmail_source(tmp_path: Path, capsys, monkeypatch):

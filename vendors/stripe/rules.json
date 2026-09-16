@@ -17,5 +17,30 @@
   "unwrap_links_matching": [
     "files\\.stripe\\.com"
   ],
-  "notes": "This is Stripe's own hosted receipt template, sent on behalf of a merchant, so one entry covers every vendor that bills through Stripe. The sender local part is invoice+statements, with the merchant's Stripe account id appended for small merchants and dropped when a large merchant self hosts the same template on its own domain. Removed: the download invoice and download receipt buttons, the merchant support block with its support site, address and phone, the Powered by Stripe badge, and the hidden preheader spacer. Kept verbatim: the hero amount, the paid date, every line item with its quantity and service period, the subtotal, the total excluding tax, the tax line with its jurisdiction and rate, the total, the amount paid, the receipt and invoice numbers, and the payment method with its card brand mark and last four."
+  "arrival_lag_days": 1,
+  "messages": [
+    {
+      "subject_pattern": "^Your receipt from .+ #\\d{4}-\\d{4}",
+      "kind": "receipt"
+    },
+    {
+      "subject_pattern": "^Your receipt from ",
+      "kind": "receipt"
+    }
+  ],
+  "tenders": [
+    {
+      "label_pattern": "Payment method",
+      "kind": "card"
+    }
+  ],
+  "last4_pattern": "Payment method\\s*-\\s*(\\d{4})",
+  "line_categories": [
+    {
+      "label_pattern": "Tax\\b",
+      "category": "tax"
+    }
+  ],
+  "endpoints": false,
+  "notes": "This is Stripe's own hosted receipt template, sent on behalf of a merchant, so one entry covers every vendor that bills through Stripe. The sender local part is invoice+statements, with the merchant's Stripe account id appended for small merchants and dropped when a large merchant self hosts the same template on its own domain. Removed: the download invoice and download receipt buttons, the merchant support block with its support site, address and phone, the Powered by Stripe badge, and the hidden preheader spacer. Kept verbatim: the hero amount, the paid date, every line item with its quantity and service period, the subtotal, the total excluding tax, the tax line with its jurisdiction and rate, the total, the amount paid, the receipt and invoice numbers, and the payment method with its card brand mark and last four. Timing and reading: a hosted receipt is sent as the charge settles, within a day. The payment method row prints the brand as an image and the last four digits after a dash, which no default card shape reads, so this folder carries a last4_pattern of its own."
 }

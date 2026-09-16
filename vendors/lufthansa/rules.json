@@ -22,5 +22,21 @@
   "unwrap_links_matching": [
     "my\\.information\\.lufthansa\\.com"
   ],
-  "notes": "Removed from a Lufthansa service mail: the app download banner, the rate this email feedback widget, the assistance and report damaged baggage call to action, the preheader lines, the service and contact link row, and the corporate footer carrying the registered office, the executive board and the court registration. Kept verbatim: the baggage tag number and its status, the drop off date, the itinerary block with flight number, departure and arrival codes, cities and dates, and the passenger line. Known gap: the sample is a baggage receipt, which is receipt shaped but carries no monetary amount at all. Treat this folder as the Lufthansa layout reference. A Lufthansa document that does carry a price puts it in a right aligned cell after its label, in the same shape the Lufthansa Group templates use everywhere."
+  "arrival_lag_days": 1,
+  "messages": [
+    {
+      "subject_pattern": "^Your baggage receipt \\d{10} for ",
+      "kind": "receipt"
+    },
+    {
+      "subject_pattern": "^Your (?:booking|ticket) confirmation",
+      "kind": "confirmation"
+    }
+  ],
+  "missing": [
+    "total",
+    "currency"
+  ],
+  "endpoints": false,
+  "notes": "Removed from a Lufthansa service mail: the app download banner, the rate this email feedback widget, the assistance and report damaged baggage call to action, the preheader lines, the service and contact link row, and the corporate footer carrying the registered office, the executive board and the court registration. Kept verbatim: the baggage tag number and its status, the drop off date, the itinerary block with flight number, departure and arrival codes, cities and dates, and the passenger line. Known gap: the sample is a baggage receipt, which is receipt shaped but carries no monetary amount at all. Treat this folder as the Lufthansa layout reference. A Lufthansa document that does carry a price puts it in a right aligned cell after its label, in the same shape the Lufthansa Group templates use everywhere. Timing and reading: a service mail lands within a day of the flight. The baggage receipt names no tender and no line at all, and the missing facts are the total and the currency."
 }

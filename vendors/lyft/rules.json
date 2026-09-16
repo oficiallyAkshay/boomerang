@@ -19,14 +19,61 @@
     "<table class=\\\"wrapto600px\\\"(?:(?!<table class=\\\"wrapto600px\\\")[\\s\\S])*?Get help and more[\\s\\S]*?height: 2px;\\\"></td>\\s*</tr>\\s*</table>\\s*</td>\\s*</tr>\\s*</table>",
     "To protect against unauthorized behavior[\\s\\S]*?will not be charged\\.",
     "<img[^>]*src=\\\"https://api\\.lyft\\.com/[^\\\"]*\\\"[^>]*>",
-    "(?:©|&copy;)\\s*OpenStreetMap",
+    "(?:\u00a9|&copy;)\\s*OpenStreetMap",
     "<div class=\\\"h-expense-transaction\\\"[\\s\\S]*?</div>",
     "Dispatching Base:[\\s\\S]*?Texas state rideshare regulator\\.",
-    "(?:©|&copy;|&#169;)\\s*\\d{4} Lyft, Inc\\.[\\s\\S]*?CPUC ID No\\.[^<]*</a>",
+    "(?:\u00a9|&copy;|&#169;)\\s*\\d{4} Lyft, Inc\\.[\\s\\S]*?CPUC ID No\\.[^<]*</a>",
     "Select 'You' on the home screen in the Lyft app[\\s\\S]*?additional help\\."
   ],
   "unwrap_links_matching": [
     "lyftmail\\.com"
   ],
-  "notes": "Removed from a Lyft ride receipt: the header Add tip button; the how Lyft prioritizes your safety module, taken at the outer table that holds its heading, its shield panel and its learn more link; the ride safety summary widget, taken at its own module table so the illustration of a rider goes with the thumbs up and thumbs down controls below it; the credit card rewards promo; the get help and more module, taken at its outer table so the whole cluster goes at once; the authorization hold notice; the static route map, whose URL carries the route geometry, and the OpenStreetMap credit it leaves behind; the regulatory licence block naming the dispatching base, the vehicle plate and the driver licence; the copyright and CPUC footer; and the Lyft app instruction block. Kept verbatim: the fare breakdown with its distance and duration label, every surcharge and toll row, both tender rows and their Upfront Fare sublabels, the pickup and dropoff rows with their times and addresses, and the receipt number. Each of the three module patterns is anchored on the outer table rather than on the row that carries the text, because every one of these modules is an icon or an illustration above a label: a pattern that matched the label alone left the picture behind, which is how a stripped safety panel kept its shield and a stripped help cluster kept five rows of icons and chevrons with nothing written beside them. The safety module is the one match that does not balance on its own, and that is the vendor's markup rather than the pattern: Lyft's callout box opens a second table row without closing the first, so the module carries an orphan opening tag and taking the module takes that with it. The hidden expense microdata block has a pattern here and the amount guard keeps it anyway: the block repeats the charged total, and a pattern that would take an amount with it is skipped rather than run, so the block stays in the fragment, where Lyft's own styling renders it as nothing. Lyft prints no Total row of its own: the charged total is in the tender rows and again in the hidden microdata block, and the date is in the visible headline banner, which is kept."
+  "arrival_lag_days": 1,
+  "messages": [
+    {
+      "subject_pattern": "^Your ride with ",
+      "kind": "receipt"
+    },
+    {
+      "subject_pattern": "^Receipt for your cancelled ride$",
+      "kind": "receipt"
+    },
+    {
+      "subject_pattern": "^Your Lyft ride receipt",
+      "kind": "receipt"
+    }
+  ],
+  "tenders": [
+    {
+      "label_pattern": "Lyft Cash",
+      "kind": "stored_value"
+    },
+    {
+      "label_pattern": "(?:Visa|Mastercard|Amex|American Express|Discover) \\*\\d{4}",
+      "kind": "card"
+    }
+  ],
+  "line_categories": [
+    {
+      "label_pattern": "Lyft fare",
+      "category": "fare"
+    },
+    {
+      "label_pattern": "Congestion Surcharge",
+      "category": "ride_extra"
+    },
+    {
+      "label_pattern": "Driver Benefit Fund Surcharge",
+      "category": "ride_extra"
+    },
+    {
+      "label_pattern": "Toll:",
+      "category": "toll"
+    }
+  ],
+  "missing": [
+    "total"
+  ],
+  "endpoints": true,
+  "notes": "Removed from a Lyft ride receipt: the header Add tip button; the how Lyft prioritizes your safety module, taken at the outer table that holds its heading, its shield panel and its learn more link; the ride safety summary widget, taken at its own module table so the illustration of a rider goes with the thumbs up and thumbs down controls below it; the credit card rewards promo; the get help and more module, taken at its outer table so the whole cluster goes at once; the authorization hold notice; the static route map, whose URL carries the route geometry, and the OpenStreetMap credit it leaves behind; the regulatory licence block naming the dispatching base, the vehicle plate and the driver licence; the copyright and CPUC footer; and the Lyft app instruction block. Kept verbatim: the fare breakdown with its distance and duration label, every surcharge and toll row, both tender rows and their Upfront Fare sublabels, the pickup and dropoff rows with their times and addresses, and the receipt number. Each of the three module patterns is anchored on the outer table rather than on the row that carries the text, because every one of these modules is an icon or an illustration above a label: a pattern that matched the label alone left the picture behind, which is how a stripped safety panel kept its shield and a stripped help cluster kept five rows of icons and chevrons with nothing written beside them. The safety module is the one match that does not balance on its own, and that is the vendor's markup rather than the pattern: Lyft's callout box opens a second table row without closing the first, so the module carries an orphan opening tag and taking the module takes that with it. The hidden expense microdata block has a pattern here and the amount guard keeps it anyway: the block repeats the charged total, and a pattern that would take an amount with it is skipped rather than run, so the block stays in the fragment, where Lyft's own styling renders it as nothing. Lyft prints no Total row of its own: the charged total is in the tender rows and again in the hidden microdata block, and the date is in the visible headline banner, which is kept. Timing and reading: ride receipts land 6 to 20 hours after the ride, so one day of padding covers them. The tender rows split Lyft Cash from the card, so the card row is the charge to claim unless policy says otherwise, the fare rows carry the surcharges and the toll, the pickup and drop-off rows carry both endpoints, and the missing fact is the total."
 }

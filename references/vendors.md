@@ -36,6 +36,35 @@ promotional or tip module that prints an amount is kept: the guard that stops a
 strip pattern carrying a figure away cannot tell a real amount from an
 advertised one, so some marketing text does survive on a receipt.
 
+## What a folder knows besides the markup
+
+A vendor folder is not only a set of strip patterns. Alongside them each
+`rules.json` carries what the model needs before it has read a single receipt:
+how many days after the event that vendor's mail arrives, which of its subject
+lines is the money record and which one supersedes which, what its tender rows
+mean, what each charge line is for, what its receipt simply does not print, and
+whether it names both ends of a journey. None of it is used while cleaning. It
+is read once, at the search step and again at the who-paid and policy steps,
+with:
+
+```bash
+uv run python scripts/fetch.py --vendors vendors --knowledge
+```
+
+The lag is the only one that changes what a script does: the second search pass
+pads that vendor's window end by it, so a folio that lands two days after
+checkout is inside the window that asked for it, while the window start stays
+one day out for everyone because nothing arrives before the thing it is a
+receipt for. The rest is data the model reads: a tender row marked `points`
+says this document settled in points and the cash is on another one, a
+`missing` entry says a figure is absent rather than zero, and a `last4_pattern`
+says where a vendor prints card digits that no general shape would find. The
+kinds and categories come from closed sets, listed in
+`references/interfaces.md`, so a folder cannot invent a category the rest of
+the repo has never heard of. Each section below closes with what its own
+folder declares, and that closing paragraph and the folder's `notes` say the
+same thing.
+
 Each vendor below has a machine-readable form at `vendors/<name>/rules.json`.
 The `notes` field there must agree with the paragraph here. If they disagree,
 one of them is wrong and the pull request that changes either should change
@@ -76,6 +105,12 @@ costs the page nothing. Known gap: Lyft prints no Total row at all. The charged 
 before the message is cleaned, and the visible total is the sum of the tender
 rows, which stay.
 
+Timing and reading: ride receipts land 6 to 20 hours after the ride, so one day
+of padding covers them. The tender rows split Lyft Cash from the card, so the
+card row is the charge to claim unless policy says otherwise; the fare rows
+carry the surcharges and the toll; the pickup and drop-off rows carry both
+endpoints; and the missing fact is the total.
+
 ## DoorDash
 
 A DoorDash final receipt carries the itemised order, the subtotal, the delivery
@@ -91,6 +126,11 @@ sample does not have. The tip line is kept visible even though policy leaves
 tips out of the claim, so the receipt and the claimed amount can be reconciled
 by eye. Known gap: this template prints no date anywhere, so a DoorDash line
 takes its date from the message headers.
+
+Timing and reading: an order receipt lands within a day of the delivery. The
+final receipt is an update and supersedes the order confirmation it revises,
+the card and the credits share one payment line, the Dasher tip is a tip line
+and the fees are their own, and the missing fact is the date.
 
 ## United
 
@@ -108,6 +148,12 @@ Alliance footer banner, the privacy and legal footer links, and the hidden
 rows. The baggage allowance table has a pattern here too, and the table stays:
 it prints 0.00 USD twice for the two free bags, those are amounts, and a
 pattern that would take an amount with it is skipped and named on stderr.
+
+Timing and reading: a receipt lands within a day of the purchase or the flight.
+The eTicket itinerary and receipt supersedes the eTicket confirmation for the
+same trip, the Previous Ticket Balance row is the tender that settles who paid,
+the fare, tax, bag and Wi-Fi lines are each categorised, and the Wi-Fi purchase
+is a separate receipt with a card row of its own.
 
 ## Uber
 
@@ -141,6 +187,12 @@ patterns, and the amount guard covers a rewrite the same way it covers a
 removal: a pair that would leave the fragment printing fewer money strings is
 skipped and named on stderr.
 
+Timing and reading: ride receipts land 6 to 20 hours after the ride, so one day
+of padding covers them. Every subject this folder claims is a receipt, the card
+is the only tender, the fare rows carry the toll and the surcharges and the two
+credit rows are promotions, and the pickup and drop-off rows carry both
+endpoints.
+
 ## Uber Eats
 
 Uber Eats order receipts arrive in the same shell as Uber ride receipts, from
@@ -162,6 +214,11 @@ order total sits in the same row shape as an Uber ride total, and it stays on
 one line for the same reason: the packet scopes each receipt's stylesheet to
 its own card, so no `replace` pair is needed here either.
 
+Timing and reading: an order receipt lands within a day of the delivery. A
+voucher and a card can split the bill, so both tender rows matter; the basket
+subtotal is the meal line, the two fees are their own and the four credit rows
+are promotions; and the pickup and delivery rows carry both endpoints.
+
 ## Marriott
 
 A Marriott stay confirmation keeps the property name and address, the
@@ -180,6 +237,12 @@ four anywhere in it. The amount pattern is written so it also reads the
 currency amount a cash rate confirmation puts in the same cells, and the cash
 the guest actually settles appears on the folio, not here.
 
+Timing and reading: a folio follows checkout by a day or two, so this folder
+pads its second pass by two days. Both tender rows are points rather than cash,
+the room rate, the tax line and the parking lines are categorised, and the
+missing facts are the total and the currency, because the folio rather than the
+confirmation carries the charge.
+
 ## Lufthansa
 
 Lufthansa is the one folder whose sample is not a charge receipt. Kept: the
@@ -195,6 +258,10 @@ Lufthansa layout reference; a Lufthansa document that does carry a price puts
 it in a right aligned cell after its label, the way every Lufthansa Group
 template does.
 
+Timing and reading: a service mail lands within a day of the flight. The
+baggage receipt names no tender and no charge line at all, and the missing
+facts are the total and the currency.
+
 ## NJ TRANSIT MyTix
 
 An NJ TRANSIT MyTix purchase receipt keeps the purchase date and timestamp, the
@@ -208,6 +275,12 @@ script and every comment before the vendor patterns run. This template carries
 no tracking pixel, no promo block, no app banner and no social links. There is
 no grand total row: the ticket row and the payment row carry the same figure,
 and the amount is read from the payment row, because that is what was charged.
+
+Timing and reading: a ticket receipt arrives at purchase rather than at travel,
+so one day of padding around the travel window can miss it and the purchase
+date is the date to search on. The ticket row is a transit line, and the
+payment row names Apple Pay and prints no card digits, so the card fingerprint
+has nothing to match here.
 
 ## Stripe receipt
 
@@ -223,6 +296,11 @@ phone, the Powered by Stripe badge, and the hidden preheader spacer. The sender
 local part is `invoice+statements`, with the merchant's Stripe account id
 appended for small merchants and dropped when a large merchant self-hosts the
 same template on its own domain.
+
+Timing and reading: a hosted receipt is sent as the charge settles, within a
+day. The payment method row prints the brand as an image and the last four
+digits after a bare dash, which no default card shape reads, so this folder
+carries a last4_pattern of its own.
 
 ## Plain text confirmation
 
@@ -243,6 +321,11 @@ saying the folio is ready, so both patterns are null, the date comes from the
 message headers, and the amount comes from the folio PDF that the traveller
 uploads or the Gmail fallback fetches as an attachment.
 
+Timing and reading: the pointer follows checkout by a day or two, so this
+folder pads its second pass by two days. It names no tender and no charge line,
+and the missing facts are the date, the total, the currency and the charge
+itself, which is in the folio attachment rather than in the message.
+
 ## Hotel senders
 
 A search folder, not a rendering folder. It has no sample, strips nothing and
@@ -256,6 +339,10 @@ a text body from a domain not listed there still reaches the plaintext rules. A
 chain that needs real cleaning gets its own folder with its own sample, the way
 Marriott does.
 
+Timing and reading: a folio follows checkout by a day or two, so this folder
+pads its second pass by two days. It names no tender, no charge line and no gap
+of its own, because it has no sample to read them from.
+
 ## Airline senders
 
 The same idea for the carriers with no folder of their own: Delta, American,
@@ -266,6 +353,10 @@ no folder would otherwise be found only if the generic pass happened to match
 its subject. Its subject patterns name the carriers rather than the generic
 eTicket wording, so a United eTicket still resolves to the United folder, which
 is the one with a sample and real strip patterns.
+
+Timing and reading: a carrier receipt lands the day after the flight, so this
+folder pads its second pass by one day. It names no tender, no charge line and
+no gap of its own, because it has no sample to read them from.
 
 ## Generic vendor
 

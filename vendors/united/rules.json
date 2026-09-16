@@ -28,5 +28,66 @@
   "unwrap_links_matching": [
     "qualtrics\\."
   ],
-  "notes": "United sends both samples in this folder from Receipts@united.com and wraps both in the same HTML shell: sample.html is an eTicket itinerary and receipt, sample-wifi.html is an inflight Wi-Fi purchase. Removed from the eTicket: the MileagePlus accrual table and its earning notice, the wall of legal boilerplate, and the Travel Ready Center promo strip. Removed from the Wi-Fi receipt: the Share your Experience survey block, the Additional Information cross-sell, and the refund boilerplate. Removed from both: the Star Alliance footer banner, the privacy and legal footer links, and the hidden no-display rows. The baggage allowance table has a pattern here and the amount guard keeps the table: it prints 0.00 USD twice for the two free bags, and those are amounts, so the pattern is skipped and the table stays. Kept verbatim: the confirmation code, the passenger line, every flight leg with its date and times, the fare, tax, security fee and facility charge breakdown, the per passenger total and the ticket total, the eTicket number, the Wi-Fi reference number and charge, the method of payment line, and the previous ticket value line that settles who paid."
+  "arrival_lag_days": 1,
+  "messages": [
+    {
+      "subject_pattern": "^eTicket Itinerary and Receipt for Confirmation [A-Z0-9]{6}$",
+      "kind": "receipt",
+      "supersedes": "eTicket [Cc]onfirmation"
+    },
+    {
+      "subject_pattern": "eTicket [Cc]onfirmation",
+      "kind": "confirmation"
+    },
+    {
+      "subject_pattern": "^Thanks for your purchase with United$",
+      "kind": "confirmation"
+    },
+    {
+      "subject_pattern": "Wi-Fi",
+      "kind": "receipt"
+    },
+    {
+      "subject_pattern": "^Your receipt for",
+      "kind": "receipt"
+    }
+  ],
+  "tenders": [
+    {
+      "label_pattern": "Previous Ticket Balance",
+      "kind": "previous_ticket"
+    },
+    {
+      "label_pattern": "(?:Visa|Mastercard|Amex|American Express|Discover) ending in",
+      "kind": "card"
+    }
+  ],
+  "line_categories": [
+    {
+      "label_pattern": "Airfare:",
+      "category": "fare"
+    },
+    {
+      "label_pattern": "Transportation Tax",
+      "category": "tax"
+    },
+    {
+      "label_pattern": "Security Service Fee",
+      "category": "tax"
+    },
+    {
+      "label_pattern": "Passenger Facility Charge",
+      "category": "tax"
+    },
+    {
+      "label_pattern": "\\d(?:st|nd|rd|th) bag charge",
+      "category": "bag"
+    },
+    {
+      "label_pattern": "Inflight Wi-Fi",
+      "category": "wifi"
+    }
+  ],
+  "endpoints": false,
+  "notes": "United sends both samples in this folder from Receipts@united.com and wraps both in the same HTML shell: sample.html is an eTicket itinerary and receipt, sample-wifi.html is an inflight Wi-Fi purchase. Removed from the eTicket: the MileagePlus accrual table and its earning notice, the wall of legal boilerplate, and the Travel Ready Center promo strip. Removed from the Wi-Fi receipt: the Share your Experience survey block, the Additional Information cross-sell, and the refund boilerplate. Removed from both: the Star Alliance footer banner, the privacy and legal footer links, and the hidden no-display rows. The baggage allowance table has a pattern here and the amount guard keeps the table: it prints 0.00 USD twice for the two free bags, and those are amounts, so the pattern is skipped and the table stays. Kept verbatim: the confirmation code, the passenger line, every flight leg with its date and times, the fare, tax, security fee and facility charge breakdown, the per passenger total and the ticket total, the eTicket number, the Wi-Fi reference number and charge, the method of payment line, and the previous ticket value line that settles who paid. Timing and reading: a receipt lands within a day of the purchase or the flight. The eTicket itinerary and receipt supersedes the eTicket confirmation for the same trip, the Previous Ticket Balance row is the tender that settles who paid, and the Wi-Fi purchase is a separate receipt with a card row of its own."
 }

@@ -16,5 +16,25 @@
     "<table role=\"presentation\"[^>]*text-align:center[^>]*>[\\s\\S]*?NJ TRANSIT\\. ALL RIGHTS RESERVED\\.[\\s\\S]*?</table>"
   ],
   "unwrap_links_matching": [],
-  "notes": "Removed from an NJ TRANSIT MyTix purchase receipt: the refund policy notice, the in app feedback line, the sign off block, and the centred footer table carrying the copyright row. The inline year script and the Outlook conditional wrappers are removed by the shared cleaning pass, which drops every script and every comment before the vendor patterns run, so this folder does not repeat them. Kept verbatim: the purchase date and timestamp, the transaction sequence id, the ticket numbers, every ticket row with its product, tariff, zone count, quantity and amount, and the payment details table with its method, processor transaction id and charged amount. This template carries no tracking pixel, no promo block, no app banner and no social links. There is no separate grand total row: the ticket row amount and the payment row amount are the same figure, and the payment row is what was charged."
+  "arrival_lag_days": 1,
+  "messages": [
+    {
+      "subject_pattern": "^NJ TRANSIT - Receipt$",
+      "kind": "receipt"
+    }
+  ],
+  "tenders": [
+    {
+      "label_pattern": "Apple Pay",
+      "kind": "card"
+    }
+  ],
+  "line_categories": [
+    {
+      "label_pattern": "One Way|Round-Trip|Flex Pass",
+      "category": "transit"
+    }
+  ],
+  "endpoints": false,
+  "notes": "Removed from an NJ TRANSIT MyTix purchase receipt: the refund policy notice, the in app feedback line, the sign off block, and the centred footer table carrying the copyright row. The inline year script and the Outlook conditional wrappers are removed by the shared cleaning pass, which drops every script and every comment before the vendor patterns run, so this folder does not repeat them. Kept verbatim: the purchase date and timestamp, the transaction sequence id, the ticket numbers, every ticket row with its product, tariff, zone count, quantity and amount, and the payment details table with its method, processor transaction id and charged amount. This template carries no tracking pixel, no promo block, no app banner and no social links. There is no separate grand total row: the ticket row amount and the payment row amount are the same figure, and the payment row is what was charged. Timing and reading: a ticket receipt arrives at purchase rather than at travel, so one day of padding around the travel window can miss it and the purchase date is the date to search on. The payment row names Apple Pay and prints no card digits, so the card fingerprint has nothing to match on this receipt."
 }
