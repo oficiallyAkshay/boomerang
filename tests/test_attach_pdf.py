@@ -30,8 +30,20 @@ def packet(fixture_dir: Path, fixture_data: dict, tmp_path_factory) -> dict:
     out = tmp_path_factory.mktemp("attach")
     html = write_packet(out / "packet.html", fixture_data, fixture_dir / "receipts")
     pdf = out / "packet.pdf"
-    pages, _channel = render_pdf.render(html, pdf)
-    return {"dir": out, "html": html, "pdf": pdf, "pages": pages}
+    pages, _channel, page_map = render_pdf.render(html, pdf)
+    return {"dir": out, "html": html, "pdf": pdf, "pages": pages, "map": page_map}
+
+
+@pytest.fixture(scope="module")
+def unmapped_packet(packet: dict, tmp_path_factory) -> Path:
+    """The same packet PDF with no page map beside it.
+
+    A render always writes one. This is the older packet, or one someone moved
+    without its map, which is the case the splice has to fall back for.
+    """
+    out = tmp_path_factory.mktemp("unmapped") / "packet.pdf"
+    out.write_bytes(Path(packet["pdf"]).read_bytes())
+    return out
 
 
 def _pdf_receipt_indexes(data: dict, receipts_dir: Path) -> list[int]:
@@ -60,9 +72,13 @@ def test_splice_adds_the_folio_pages_right_after_its_card(
     final = attach_pdf.splice(packet["pdf"], fixture_data, receipts_dir, out)
     assert final == packet["pages"] + 2
 
-    summary_pages = packet["pages"] - len(fixture_data["receipts"])
-    assert summary_pages == 1
-    card_index = summary_pages + _pdf_receipt_indexes(fixture_data, receipts_dir)[0]
+    page_map = packet["map"]
+    assert page_map["summary_pages"] == 1
+    folio = _pdf_receipt_indexes(fixture_data, receipts_dir)[0]
+    # The first receipt in this packet runs to several pages, so the folio's
+    # card is nowhere near one page per receipt into the file.
+    assert page_map["pages"][0] > 1
+    card_index = page_map["summary_pages"] + sum(page_map["pages"][:folio]) + 1 - 1
 
     pages = attach_pdf.extract_text(out).split("\f")
     assert FOLIO_MARK_ONE in pages[card_index + 1]
@@ -123,13 +139,15 @@ def test_a_packet_with_no_title_splices_without_inventing_one(
     assert "/Author" not in metadata
 
 
-def test_a_receipt_pdf_that_will_not_open_names_the_receipt(packet: dict, tmp_path: Path) -> None:
+def test_a_receipt_pdf_that_will_not_open_names_the_receipt(
+    unmapped_packet: Path, tmp_path: Path
+) -> None:
     receipts_dir = tmp_path / "receipts"
     receipts_dir.mkdir()
     (receipts_dir / "torn.pdf").write_bytes(b"%PDF-1.4 and then nothing at all")
     data = {"receipts": [{"rid": "torn", "title": "A folio"}]}
     with pytest.raises(ValueError, match="receipt torn: pdf cannot be read"):
-        attach_pdf.splice(packet["pdf"], data, receipts_dir, tmp_path / "final.pdf")
+        attach_pdf.splice(unmapped_packet, data, receipts_dir, tmp_path / "final.pdf")
 
 
 def test_splice_keeps_two_attachments_in_place(tmp_path: Path) -> None:
@@ -150,7 +168,8 @@ def test_splice_keeps_two_attachments_in_place(tmp_path: Path) -> None:
     }
 
     html = write_packet(tmp_path / "packet.html", data, receipts_dir)
-    before, _channel = render_pdf.render(html, tmp_path / "packet.pdf")
+    before, _channel, page_map = render_pdf.render(html, tmp_path / "packet.pdf")
+    assert page_map["pages"] == [1, 1, 1]
     assert before == 4
 
     out = tmp_path / "final.pdf"
@@ -165,10 +184,67 @@ def test_splice_keeps_two_attachments_in_place(tmp_path: Path) -> None:
     assert "Omega folio single sheet" in pages[6]
 
 
-def test_splice_rejects_a_packet_with_no_summary_page(packet: dict, tmp_path: Path) -> None:
+def test_a_folio_behind_a_long_receipt_lands_after_its_last_page(tmp_path: Path) -> None:
+    """The arithmetic the splice used to do puts this folio a page early.
+
+    The receipt in front of the folio runs to more than one page, so counting
+    one page per receipt lands the insertion inside it. The page map says where
+    the receipt actually ended.
+    """
+    receipts_dir = tmp_path / "receipts"
+    receipts_dir.mkdir()
+    (receipts_dir / "long.html").write_text("<p>a long receipt</p>", encoding="utf-8")
+    (receipts_dir / "omega.pdf").write_bytes(pdf_bytes([["Omega folio single sheet"]]))
+    rows = "".join(f"<tr><td>Row {number} of the long receipt</td></tr>" for number in range(200))
+    (tmp_path / "packet.html").write_text(
+        "<html><head><title>Long</title><style>body{margin:0}"
+        ".rhead{font-size:15px;padding:12px 16px}.rc{padding:16px}"
+        "td{font-size:14px;padding:4px 8px}</style></head><body>"
+        '<div class="summary">Summary</div>'
+        '<section class="rsec"><div class="rhead">A long receipt</div>'
+        f'<div class="rc"><table>{rows}</table></div></section>'
+        '<section class="rsec"><div class="rhead">Folio omega</div>'
+        '<div class="rc"><p>The original attachment follows this page.</p></div></section>'
+        "</body></html>",
+        encoding="utf-8",
+    )
+    data = {
+        "receipts": [
+            {"rid": "long", "title": "A long receipt"},
+            {"rid": "omega", "title": "Folio omega"},
+        ]
+    }
+    packet_pdf = tmp_path / "packet.pdf"
+    before, _channel, page_map = render_pdf.render(tmp_path / "packet.html", packet_pdf)
+    assert page_map["pages"][0] > 1
+
+    out = tmp_path / "final.pdf"
+    assert attach_pdf.splice(packet_pdf, data, receipts_dir, out) == before + 1
+    pages = attach_pdf.extract_text(out).split("\f")
+    card = page_map["summary_pages"] + sum(page_map["pages"]) - 1
+    assert "Folio omega" in pages[card]
+    assert "Omega folio single sheet" in pages[card + 1]
+
+
+def test_splice_rejects_an_unmapped_packet_with_no_summary_page(
+    packet: dict, unmapped_packet: Path, tmp_path: Path
+) -> None:
+    """With no map to read, one page per receipt is all the splice can assume,
+    and a packet that cannot be read that way is refused rather than guessed
+    at."""
     crowded = {"receipts": [{"rid": f"r{n}"} for n in range(packet["pages"] + 3)]}
     with pytest.raises(ValueError, match="no summary page"):
-        attach_pdf.splice(packet["pdf"], crowded, tmp_path, tmp_path / "final.pdf")
+        attach_pdf.splice(unmapped_packet, crowded, tmp_path, tmp_path / "final.pdf")
+
+
+def test_splice_refuses_a_map_that_does_not_describe_the_packet(
+    packet: dict, tmp_path: Path
+) -> None:
+    """A map for eleven receipts and a claim naming one is not a mismatch to
+    guess a way through: every folio after the first would land early."""
+    data = {"receipts": [{"rid": "alpha", "title": "Folio alpha"}]}
+    with pytest.raises(ValueError, match="describes 11 receipts"):
+        attach_pdf.splice(packet["pdf"], data, tmp_path, tmp_path / "final.pdf")
 
 
 @pytest.mark.parametrize("rid", ["../x", "a/b", "", "x" * 65, "has space", 7, None])

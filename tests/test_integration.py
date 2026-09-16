@@ -146,18 +146,22 @@ def test_the_pipeline_runs_end_to_end(fixture_dir: Path, fixture_data: dict, tmp
     packet_html.write_text(build.render_packet(fixture_data, receipts), encoding="utf-8")
     assert check_prose.scan([packet_html], check_prose.load_denylist(DENYLIST)) == []
 
-    # One summary page, then one page per receipt.
+    # One summary page, then every receipt starting on a page of its own and
+    # running on to the next when it is too long for one.
     receipt_count = len(fixture_data["receipts"])
     packet_pdf = tmp_path / "packet.pdf"
-    pages, channel = render_pdf.render(packet_html, packet_pdf)
-    assert pages == 1 + receipt_count
+    pages, channel, page_map = render_pdf.render(packet_html, packet_pdf)
+    assert page_map["summary_pages"] == 1
+    assert len(page_map["pages"]) == receipt_count
+    assert pages == 1 + sum(page_map["pages"])
+    assert min(page_map["scales"]) >= render_pdf.MIN_SCALE
     assert channel in render_pdf.CHANNELS
     assert render_pdf.page_count(packet_pdf) == pages
 
-    # The folio's own pages land behind its card.
+    # The folio's own pages land behind the last page of its own receipt.
     final_pdf = tmp_path / "final.pdf"
     final_pages = attach_pdf.splice(packet_pdf, fixture_data, receipts, final_pdf)
-    assert final_pages == 1 + receipt_count + FOLIO_PAGES
+    assert final_pages == pages + FOLIO_PAGES
 
     text = attach_pdf.extract_text(final_pdf)
     for day in fixture_data["days"]:
@@ -171,8 +175,7 @@ def test_the_pipeline_runs_end_to_end(fixture_dir: Path, fixture_data: dict, tmp
         for index, receipt in enumerate(fixture_data["receipts"])
         if (receipts / f"{receipt['rid']}.pdf").is_file()
     )
-    summary_pages = pages - receipt_count
-    card_page = summary_pages + folio_index
+    card_page = page_map["summary_pages"] + sum(page_map["pages"][: folio_index + 1]) - 1
     assert "PDF attachment" in per_page[card_page]
     assert FOLIO_FIRST_PAGE_MARK in per_page[card_page + 1]
 
@@ -224,10 +227,14 @@ def test_the_documented_clis_run_the_same_pipeline(
 
     receipt_count = len(fixture_data["receipts"])
     packet_pdf = tmp_path / "packet.pdf"
-    rendered = run_script(
-        "render_pdf", str(packet_html), str(packet_pdf), "--expect", str(1 + receipt_count)
-    ).stdout
-    assert rendered.strip() == str(1 + receipt_count)
+    rendered = int(run_script("render_pdf", str(packet_html), str(packet_pdf)).stdout)
+    page_map = json.loads(
+        (tmp_path / "packet.pdf.pages.json").read_text(encoding="utf-8"),
+    )
+    assert len(page_map["pages"]) == receipt_count
+    assert rendered == page_map["summary_pages"] + sum(page_map["pages"])
+    # And the count the render printed is the count --expect takes.
+    run_script("render_pdf", str(packet_html), str(packet_pdf), "--expect", str(rendered))
 
     final_pdf = tmp_path / "final.pdf"
     spliced = run_script(
@@ -239,7 +246,7 @@ def test_the_documented_clis_run_the_same_pipeline(
         "--out",
         str(final_pdf),
     ).stdout
-    assert spliced.strip() == str(1 + receipt_count + FOLIO_PAGES)
+    assert spliced.strip() == str(rendered + FOLIO_PAGES)
 
     # The gate now flags data-rid in packet mode. build.py still stamps one on
     # every receipt section, and that attribute is on its way out of the
