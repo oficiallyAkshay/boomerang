@@ -126,16 +126,17 @@ The rules also carry a pattern for the standalone rate your trip row that the
 shorter Lime and cancelled ride templates use, which this sample does not
 have.
 
-One thing here is rewritten rather than removed. Uber's total row gives the
-word Total a cell at `width:100%`, which is fine at a mail client's width and
-leaves the amount beside it one character per line in a packet's narrower
-column. A `replace` pair turns that one cell's width into `auto` and adds the
-gap the width was holding open, so the total sits on a single line with the
-word and the figure apart; nothing else in the row is touched. The `replace` field
-is optional on any vendor, it holds `[regex, replacement]` pairs applied with
-`re.sub` after the strip patterns, and the amount guard covers a rewrite the
-same way it covers a removal: a pair that would leave the fragment printing
-fewer money strings is skipped and named on stderr.
+Nothing here is rewritten, so this folder carries no `replace` pairs. Uber's
+total row gives the word Total a cell at `width:100%`, and that cell once left
+the amount beside it printing a character a line. What fixed it was not a
+rewrite of the vendor's markup but the packet's own scoping: each receipt's
+stylesheet is scoped to its own card, so the row lays itself out inside that
+card and the total prints on one line with the vendor's markup untouched. The
+`replace` field is still there for a vendor that needs it. It is optional, it
+holds `[regex, replacement]` pairs applied with `re.sub` after the strip
+patterns, and the amount guard covers a rewrite the same way it covers a
+removal: a pair that would leave the fragment printing fewer money strings is
+skipped and named on stderr.
 
 ## Uber Eats
 
@@ -154,9 +155,9 @@ amount guard will not take an amount out of a receipt. Uber Eats and Uber ride
 mail share the sender domain uber.com, so the domain alone cannot name the
 folder: detection prefers the vendor whose subject patterns fit as well as its
 domain, which sends an order subject here and a trip subject to Uber. The
-order total sits in the same row shape as an Uber ride total, so this folder
-carries the same `replace` pair, turning the title cell's `width:100%` into
-`auto` and a gap so the amount stays on one line.
+order total sits in the same row shape as an Uber ride total, and it stays on
+one line for the same reason: the packet scopes each receipt's stylesheet to
+its own card, so no `replace` pair is needed here either.
 
 ## Marriott
 

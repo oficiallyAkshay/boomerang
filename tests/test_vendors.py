@@ -287,17 +287,18 @@ UBER_TOTALS = {"uber": "$34.86", "uber-eats": "$88.60"}
 
 
 @pytest.mark.parametrize("folder", sorted(UBER_TOTALS))
-def test_the_uber_total_row_gives_the_amount_room_to_sit_on_one_line(
+def test_the_uber_total_row_reaches_the_packet_as_the_vendor_wrote_it(
     folder: str, rules: dict
 ) -> None:
-    """The title cell at width:100% squeezed the amount to a character a line.
+    """The row the folders once rewrote is now carried through untouched.
 
     Uber lays the total out as two cells, and gives the word Total a cell at
-    ``width:100%``. A mail client is wide enough that the amount beside it
-    still fits; a packet's column is not, and the amount wrapped one character
-    per line. The folder's replace pair turns that one cell's width into
-    ``auto``. Nothing else in the row moves, and the amount is the amount the
-    vendor printed.
+    ``width:100%``. That cell once squeezed the amount beside it to a
+    character a line, and each folder carried a replace pair to widen it. What
+    actually fixed the wrap was scoping each receipt's stylesheet to its own
+    card, so the pairs are gone and the cell keeps the width the vendor wrote.
+    The rendered proof is in tests/test_integration.py, which measures both
+    amount cells in the committed packet.
     """
     fragment = clean.clean_html(samples_for(folder)["sample.html"], rules[folder])
     row = TOTAL_ROW_RE.search(fragment)
@@ -305,8 +306,8 @@ def test_the_uber_total_row_gives_the_amount_room_to_sit_on_one_line(
     title_cell, title_text, _, amount_text = row.groups()
     assert amount_text.strip() == UBER_TOTALS[folder]
     assert title_text.strip() == "Total"
-    assert "width:100%" not in title_cell
-    assert "width:auto" in title_cell
+    assert "width:100%" in title_cell
+    assert rules[folder].get("replace") in (None, [])
 
 
 @pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
