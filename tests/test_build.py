@@ -9,11 +9,13 @@ from __future__ import annotations
 import base64
 import copy
 import json
+import shutil
 from decimal import Decimal
 from pathlib import Path
 
 import build
 import check_prose
+import clean
 import pytest
 from check_prose import EM_DASH
 
@@ -31,7 +33,21 @@ def data(fixture_dir: Path) -> dict:
 
 @pytest.fixture
 def receipts(fixture_dir: Path) -> Path:
+    """The receipts as they arrive: raw vendor mail, straight off the fetch."""
     return fixture_dir / "receipts"
+
+
+@pytest.fixture(scope="session")
+def cleaned_receipts(fixture_dir: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The receipts as step 5 leaves them, which is what a packet is built from."""
+    target = tmp_path_factory.mktemp("cleaned")
+    for path in sorted((fixture_dir / "receipts").iterdir()):
+        if path.suffix.lower() == ".html":
+            fragment = clean.clean_html(path.read_text(encoding="utf-8"))
+            (target / path.name).write_text(fragment, encoding="utf-8")
+        else:
+            shutil.copy2(path, target / path.name)
+    return target
 
 
 @pytest.fixture(scope="session")
@@ -53,9 +69,9 @@ def first_item(payload: dict) -> dict:
 # ------------------------------------------------------------------ validate
 
 
-def test_the_fixture_validates_clean(data: dict, receipts: Path) -> None:
+def test_the_fixture_validates_clean(data: dict, cleaned_receipts: Path) -> None:
     assert build.validate(data) == []
-    assert build.validate(data, receipts) == []
+    assert build.validate(data, cleaned_receipts) == []
 
 
 def test_non_object_data_is_one_problem() -> None:
@@ -173,26 +189,260 @@ def test_desc_rules(data: dict) -> None:
     assert "days[0].items[0]: desc empty" in build.validate(blank)
 
 
+def test_refund_is_checked_when_it_is_there(data: dict) -> None:
+    good = copy.deepcopy(data)
+    first_item(good)["amt"] = 38.93
+    first_item(good)["refund"] = 10.00
+    assert build.validate(good) == []
+
+    text = copy.deepcopy(good)
+    first_item(text)["refund"] = "10.00"
+    assert "days[0].items[0]: refund expected a number" in build.validate(text)
+
+    fractional = copy.deepcopy(good)
+    first_item(fractional)["refund"] = 10.005
+    assert "days[0].items[0]: refund has more than 2 decimals" in build.validate(fractional)
+
+    negative = copy.deepcopy(good)
+    first_item(negative)["refund"] = -1.00
+    assert "days[0].items[0]: refund is less than zero" in build.validate(negative)
+
+    too_much = copy.deepcopy(good)
+    first_item(too_much)["refund"] = 39.00
+    assert "days[0].items[0]: refund is more than amt" in build.validate(too_much)
+
+    whole_refund = copy.deepcopy(good)
+    first_item(whole_refund)["refund"] = 38.93
+    assert build.validate(whole_refund) == []
+
+
+def test_a_refund_on_a_line_with_no_readable_amount_reports_the_amount_only(data: dict) -> None:
+    first_item(data)["amt"] = "38.93"
+    first_item(data)["refund"] = 10.00
+    problems = build.validate(data)
+    assert "days[0].items[0]: amt expected a number" in problems
+    assert not [problem for problem in problems if "refund" in problem]
+
+
+def test_a_local_amount_needs_its_currency_and_the_other_way_round(data: dict) -> None:
+    both = copy.deepcopy(data)
+    first_item(both)["local_amt"] = 45.00
+    first_item(both)["local_currency"] = "EUR"
+    assert build.validate(both) == []
+
+    amount_only = copy.deepcopy(data)
+    first_item(amount_only)["local_amt"] = 45.00
+    assert "days[0].items[0]: local_amt and local_currency go together" in build.validate(
+        amount_only
+    )
+
+    currency_only = copy.deepcopy(data)
+    first_item(currency_only)["local_currency"] = "EUR"
+    assert "days[0].items[0]: local_amt and local_currency go together" in build.validate(
+        currency_only
+    )
+
+    bad_amount = copy.deepcopy(both)
+    first_item(bad_amount)["local_amt"] = 45.005
+    assert "days[0].items[0]: local_amt has more than 2 decimals" in build.validate(bad_amount)
+
+    bad_currency = copy.deepcopy(both)
+    first_item(bad_currency)["local_currency"] = " "
+    assert "days[0].items[0]: local_currency empty" in build.validate(bad_currency)
+
+
+@pytest.mark.parametrize(
+    "at", ["2026-06-08T19:30:00", "2026-06-08T19:30:00+02:00", "2026-06-08 19:30:00"]
+)
+def test_an_iso_datetime_is_accepted(data: dict, at: str) -> None:
+    first_item(data)["at"] = at
+    assert build.validate(data) == []
+
+
+@pytest.mark.parametrize("at", ["June 8, 7:30 PM", "2026-13-01T00:00:00", 20260608, ""])
+def test_anything_that_is_not_an_iso_datetime_is_a_problem(data: dict, at: object) -> None:
+    first_item(data)["at"] = at
+    assert "days[0].items[0]: at expected an ISO 8601 datetime" in build.validate(data)
+
+
+def test_a_street_address_in_a_description_is_a_problem(data: dict) -> None:
+    first_item(data)["desc"] = "Ride, 1200 Cedar Street to airport"
+    problems = build.validate(data)
+    assert any("line descriptions say Hotel, Office, Airport, Home" in p for p in problems)
+
+    first_item(data)["desc"] = "Ride, home to airport"
+    assert build.validate(data) == []
+
+
+@pytest.mark.parametrize(
+    "desc",
+    [
+        "Ride, 22 Pine Ave to office",
+        "Ride to 1 Harbor Blvd",
+        "Ride, 4100 Alder Road to hotel",
+        "Ride, 9 Marsh Ln to home",
+    ],
+)
+def test_the_street_shapes_that_turn_up_in_ride_receipts(data: dict, desc: str) -> None:
+    first_item(data)["desc"] = desc
+    assert any("street address" in problem for problem in build.validate(data))
+
+
+@pytest.mark.parametrize("desc", ["Room and tax, 2 nights", "Dinner, 3 people", "Transit day pass"])
+def test_a_number_in_a_description_is_not_an_address(data: dict, desc: str) -> None:
+    first_item(data)["desc"] = desc
+    assert build.validate(data) == []
+
+
+def test_two_meals_within_an_hour_on_one_day_are_reported(data: dict) -> None:
+    day = data["days"][0]
+    rid = data["receipts"][0]["rid"]
+    day["items"] = [
+        {"desc": "Lunch, airport", "amt": 18.00, "rid": rid, "at": "2026-06-08T12:10:00"},
+        {"desc": "Lunch, terminal", "amt": 14.00, "rid": rid, "at": "2026-06-08T12:55:00"},
+    ]
+    problems = build.validate(data)
+    assert problems == [
+        'days[0]: two meal lines within an hour, "Lunch, airport" and "Lunch, terminal"'
+    ]
+
+
+def test_meals_more_than_an_hour_apart_are_left_alone(data: dict) -> None:
+    day = data["days"][0]
+    rid = data["receipts"][0]["rid"]
+    day["items"] = [
+        {"desc": "Coffee, airport", "amt": 4.00, "rid": rid, "at": "2026-06-08T08:00:00"},
+        {"desc": "Lunch, office", "amt": 14.00, "rid": rid, "at": "2026-06-08T12:00:00"},
+    ]
+    assert build.validate(data) == []
+
+
+def test_meals_with_no_times_are_never_guessed_at(data: dict) -> None:
+    day = data["days"][0]
+    rid = data["receipts"][0]["rid"]
+    day["items"] = [
+        {"desc": "Dinner, hotel", "amt": 24.00, "rid": rid},
+        {"desc": "Dinner, second order", "amt": 18.00, "rid": rid},
+        {"desc": "Ride, hotel to office", "amt": 12.00, "rid": rid, "at": "2026-06-08T09:00:00"},
+    ]
+    assert build.validate(data) == []
+
+
+def test_a_zoned_time_and_a_bare_one_are_still_compared(data: dict) -> None:
+    """A bare time is read as UTC, so a mixed pair reports rather than raises."""
+    day = data["days"][0]
+    rid = data["receipts"][0]["rid"]
+    day["items"] = [
+        {"desc": "Snack, gate", "amt": 6.00, "rid": rid, "at": "2026-06-08T12:10:00+00:00"},
+        {"desc": "Snack, lounge", "amt": 7.00, "rid": rid, "at": "2026-06-08T12:40:00"},
+    ]
+    assert any("two meal lines within an hour" in problem for problem in build.validate(data))
+
+
+def test_three_meals_in_one_hour_name_every_pair(data: dict) -> None:
+    day = data["days"][0]
+    rid = data["receipts"][0]["rid"]
+    day["items"] = [
+        {"desc": "Coffee, one", "amt": 4.00, "rid": rid, "at": "2026-06-08T08:00:00"},
+        {"desc": "Coffee, two", "amt": 4.00, "rid": rid, "at": "2026-06-08T08:20:00"},
+        {"desc": "Coffee, three", "amt": 4.00, "rid": rid, "at": "2026-06-08T08:40:00"},
+    ]
+    assert len(build.validate(data)) == 3
+
+
 def test_unknown_receipt_kind_is_a_problem(data: dict) -> None:
     data["receipts"][0]["kind"] = "spreadsheet"
     problems = build.validate(data)
     assert any("kind is not one of" in problem for problem in problems)
 
 
-def test_declared_kind_must_match_the_file_on_disk(data: dict, receipts: Path) -> None:
+def test_declared_kind_must_match_the_file_on_disk(data: dict, cleaned_receipts: Path) -> None:
     data["receipts"][0]["kind"] = "pdf"  # the fixture flight receipt is html
     assert build.validate(data) == []  # no directory, no file check
-    problems = build.validate(data, receipts)
+    problems = build.validate(data, cleaned_receipts)
     assert "receipts[0]: kind says pdf but the file on disk is html" in problems
 
 
-def test_matching_kind_and_absent_file_are_both_fine(data: dict, receipts: Path) -> None:
+def test_matching_kind_and_absent_file_are_both_fine(data: dict, cleaned_receipts: Path) -> None:
     data["receipts"][0]["kind"] = "html"
-    assert build.validate(data, receipts) == []
+    assert build.validate(data, cleaned_receipts) == []
 
     data["receipts"][0]["rid"] = "never_fetched"
     data["days"][0]["items"][1]["rid"] = "never_fetched"
-    assert build.validate(data, receipts) == []
+    assert build.validate(data, cleaned_receipts) == []
+
+
+def test_a_receipt_that_never_went_through_the_cleaner_is_a_problem(
+    data: dict, receipts: Path
+) -> None:
+    """The fixture receipts dir is raw vendor mail, and the packet says so."""
+    problems = build.validate(data, receipts)
+    html_receipts = sorted((receipts).glob("*.html"))
+    assert len(problems) == len(html_receipts)
+    assert all(problem.endswith("looks uncleaned, run clean.py first") for problem in problems)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "<script>track()</script><p>Total</p>",
+        "<html><body><p>Total</p></body></html>",
+        "<head><title>Receipt</title></head><p>Total</p>",
+        '<img src="x" onerror="alert(1)"><p>Total</p>',
+    ],
+)
+def test_every_uncleaned_marker_is_caught(data: dict, tmp_path: Path, body: str) -> None:
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rid = data["receipts"][0]["rid"]
+    (folder / f"{rid}.html").write_text(body, encoding="utf-8")
+    assert f"receipt {rid}: looks uncleaned, run clean.py first" in build.validate(data, folder)
+
+
+def test_a_cleaned_fragment_is_not_reported(data: dict, tmp_path: Path) -> None:
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rid = data["receipts"][0]["rid"]
+    (folder / f"{rid}.html").write_text(
+        "<style>.rc .a{color:red}</style>\n<table><tr><td>Total</td></tr></table>",
+        encoding="utf-8",
+    )
+    assert build.validate(data, folder) == []
+
+
+def test_two_files_for_one_rid_need_a_kind(data: dict, tmp_path: Path) -> None:
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rid = data["receipts"][0]["rid"]
+    (folder / f"{rid}.html").write_text("<p>Total</p>", encoding="utf-8")
+    (folder / f"{rid}.txt").write_text("Total", encoding="utf-8")
+
+    problems = build.validate(data, folder)
+    assert [problem for problem in problems if "more than one file on disk" in problem]
+
+    data["receipts"][0]["kind"] = "text"
+    assert build.validate(data, folder) == []
+
+
+def test_a_declared_kind_picks_its_own_file_over_the_suffix_order(
+    data: dict, tmp_path: Path
+) -> None:
+    """The suffix order prefers html. A receipt that says text means the text."""
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rid = data["receipts"][0]["rid"]
+    (folder / f"{rid}.html").write_text("<p>Total</p>", encoding="utf-8")
+    (folder / f"{rid}.txt").write_text("Total", encoding="utf-8")
+
+    assert build.find_receipt_file(folder, rid).suffix == ".html"
+    assert build.find_receipt_file(folder, rid, "text").suffix == ".txt"
+    assert build.find_receipt_file(folder, rid, "pdf").suffix == ".html"
+    assert build.find_receipt_file(folder, rid, "nonsense").suffix == ".html"
+
+    data["receipts"][0]["kind"] = "text"
+    data["receipts"] = [data["receipts"][0]]
+    data["days"] = []
+    assert '<pre class="plain">Total</pre>' in build.render_packet(data, folder)
 
 
 def test_empty_days_list_is_allowed_but_an_empty_label_is_not(data: dict) -> None:
@@ -275,6 +525,56 @@ def test_stipend_is_optional_but_checked_when_present(data: dict) -> None:
     banned = copy.deepcopy(data)
     banned["stipend"]["desc"] = "Meal stipend, balance Due"
     assert "stipend: desc contains a banned word" in build.validate(banned)
+
+
+def test_a_stipend_may_state_its_rate_and_days_instead_of_a_total(data: dict) -> None:
+    data["stipend"] = {"desc": "Meal stipend, 3 days worked", "rate": 25.00, "days": 3}
+    assert build.validate(data) == []
+    assert build.totals(data)["stipend"] == Decimal("75.00")
+
+
+def test_a_stated_stipend_total_has_to_agree_with_the_rate_and_days(data: dict) -> None:
+    agreeing = copy.deepcopy(data)
+    agreeing["stipend"] = {
+        "desc": "Meal stipend, 3 days worked",
+        "rate": 25.00,
+        "days": 3,
+        "amt": 75.00,
+    }
+    assert build.validate(agreeing) == []
+
+    disagreeing = copy.deepcopy(agreeing)
+    disagreeing["stipend"]["amt"] = 80.00
+    assert "stipend: amt is not rate times days" in build.validate(disagreeing)
+
+
+def test_a_stipend_rate_without_days_is_a_problem(data: dict) -> None:
+    rate_only = copy.deepcopy(data)
+    rate_only["stipend"] = {"desc": "Meal stipend", "rate": 25.00}
+    assert "stipend: rate and days go together" in build.validate(rate_only)
+
+    days_only = copy.deepcopy(data)
+    days_only["stipend"] = {"desc": "Meal stipend", "days": 3}
+    assert "stipend: rate and days go together" in build.validate(days_only)
+
+
+def test_a_stipend_rate_and_days_are_checked_like_any_other_number(data: dict) -> None:
+    text = copy.deepcopy(data)
+    text["stipend"] = {"desc": "Meal stipend", "rate": "25", "days": 3}
+    assert "stipend: rate expected a number" in build.validate(text)
+
+    fractional = copy.deepcopy(data)
+    fractional["stipend"] = {"desc": "Meal stipend", "rate": 25.005, "days": 3}
+    assert "stipend: rate has more than 2 decimals" in build.validate(fractional)
+
+    negative = copy.deepcopy(data)
+    negative["stipend"] = {"desc": "Meal stipend", "rate": 25.00, "days": -1}
+    assert any("neither is less than zero" in problem for problem in build.validate(negative))
+
+
+def test_a_stipend_with_neither_a_total_nor_a_rate_is_a_problem(data: dict) -> None:
+    data["stipend"] = {"desc": "Meal stipend"}
+    assert "stipend: amt expected a number" in build.validate(data)
 
 
 # ------------------------------------------------------------------- loading
@@ -366,6 +666,56 @@ def test_stipend_is_zero_when_absent(data: dict) -> None:
     assert figures["total"] == figures["expenses"]
 
 
+def test_a_refund_is_netted_before_anything_is_added_up(data: dict) -> None:
+    rid = data["receipts"][0]["rid"]
+    data["days"] = [
+        {
+            "label": "One day with a refund",
+            "items": [
+                {"desc": "Dinner", "amt": 38.93, "refund": 10.00, "rid": rid},
+                {"desc": "Ride, hotel to office", "amt": 12.00, "rid": rid},
+            ],
+        }
+    ]
+    del data["stipend"]
+
+    assert build.item_claim(data["days"][0]["items"][0]) == Decimal("28.93")
+    assert build.item_claim(data["days"][0]["items"][1]) == Decimal("12.00")
+    figures = build.totals(data)
+    assert figures["days"][0][1] == Decimal("40.93")
+    assert figures["total"] == Decimal("40.93")
+
+
+def test_a_netted_refund_is_rounded_to_cents_not_to_a_float(data: dict) -> None:
+    item = {"desc": "Dinner", "amt": 0.30, "refund": 0.10, "rid": data["receipts"][0]["rid"]}
+    assert 0.30 - 0.10 != 0.20  # the float subtraction this replaces
+    assert build.item_claim(item) == Decimal("0.20")
+
+
+def test_a_stipend_of_days_times_rate_is_rounded_to_cents(data: dict) -> None:
+    stipend = {"desc": "Meal stipend, 3 days worked", "rate": 25.10, "days": 3}
+    assert 25.10 * 3 != 75.30  # the float product this replaces
+    assert build.stipend_claim(stipend) == Decimal("75.30")
+
+
+def test_totals_says_what_is_wrong_rather_than_raising_a_key_error(data: dict) -> None:
+    no_amount = copy.deepcopy(data)
+    no_amount["stipend"] = {"desc": "Meal stipend"}
+    with pytest.raises(ValueError, match="stipend: amt expected a number"):
+        build.totals(no_amount)
+
+    bad_days = copy.deepcopy(data)
+    bad_days["days"] = {"Monday": []}
+    with pytest.raises(ValueError, match="days: expected a list"):
+        build.totals(bad_days)
+
+
+def test_render_packet_says_the_same_thing(data: dict, tmp_path: Path) -> None:
+    data["days"] = "Monday"
+    with pytest.raises(ValueError, match="days: expected a list"):
+        build.render_packet(data, tmp_path)
+
+
 def test_pennies_never_drift(data: dict) -> None:
     data["days"] = [
         {
@@ -433,6 +783,70 @@ def test_the_summary_table_rows_are_in_order(packet: str, data: dict) -> None:
     assert build.money(build.totals(data)["total"]) in region
 
 
+def test_a_refunded_line_shows_the_netted_amount_and_says_so(data: dict, receipts: Path) -> None:
+    item = first_item(data)
+    item["desc"] = "Dinner"
+    item["amt"] = 38.93
+    item["refund"] = 10.00
+    region = summary_region(build.render_packet(data, receipts))
+    assert "<td>Dinner ($38.93, $10.00 refund netted)</td>" in region
+    assert '<td class="amt">$28.93</td>' in region
+
+
+def test_a_line_paid_in_another_currency_notes_what_the_receipt_shows(
+    data: dict, receipts: Path
+) -> None:
+    item = first_item(data)
+    item["desc"] = "Ride, hotel to office"
+    item["amt"] = 48.10
+    item["local_amt"] = 45.00
+    item["local_currency"] = "EUR"
+    region = summary_region(build.render_packet(data, receipts))
+    assert "<td>Ride, hotel to office (receipt shows 45.00 EUR)</td>" in region
+    assert '<td class="amt">$48.10</td>' in region
+
+
+def test_a_line_can_carry_both_notes(data: dict, receipts: Path) -> None:
+    item = first_item(data)
+    item["desc"] = "Dinner"
+    item["amt"] = 38.93
+    item["refund"] = 10.00
+    item["local_amt"] = 36.00
+    item["local_currency"] = "EUR"
+    region = summary_region(build.render_packet(data, receipts))
+    assert ("<td>Dinner ($38.93, $10.00 refund netted) (receipt shows 36.00 EUR)</td>") in region
+
+
+def test_a_stipend_of_days_times_rate_shows_its_working(data: dict, receipts: Path) -> None:
+    data["stipend"] = {"desc": "Meal stipend", "rate": 25.00, "days": 3}
+    region = summary_region(build.render_packet(data, receipts))
+    assert "<td>Meal stipend (3 x $25.00)</td>" in region
+    assert '<td class="amt">$75.00</td>' in region
+
+
+def test_a_stipend_of_half_days_keeps_the_half(data: dict, receipts: Path) -> None:
+    data["stipend"] = {"desc": "Meal stipend", "rate": 25.00, "days": 2.5}
+    region = summary_region(build.render_packet(data, receipts))
+    assert "<td>Meal stipend (2.5 x $25.00)</td>" in region
+    assert '<td class="amt">$62.50</td>' in region
+
+
+def test_a_stipend_that_states_a_total_shows_no_working(data: dict, receipts: Path) -> None:
+    region = summary_region(build.render_packet(data, receipts))
+    assert f"<td>{data['stipend']['desc']}</td>" in region
+
+
+def test_the_notes_are_escaped_like_any_other_text(data: dict, receipts: Path) -> None:
+    item = first_item(data)
+    item["desc"] = "Dinner"
+    item["amt"] = 20.00
+    item["local_amt"] = 18.00
+    item["local_currency"] = "<b>EUR"
+    region = summary_region(build.render_packet(data, receipts))
+    assert "<b>EUR" not in region
+    assert "&lt;b&gt;EUR" in region
+
+
 def test_the_stipend_rows_vanish_without_a_stipend(data: dict, receipts: Path) -> None:
     del data["stipend"]
     region = summary_region(build.render_packet(data, receipts))
@@ -442,13 +856,19 @@ def test_the_stipend_rows_vanish_without_a_stipend(data: dict, receipts: Path) -
 
 def test_every_receipt_gets_a_section_in_order(packet: str, data: dict) -> None:
     order = [
-        line.split('data-rid="', 1)[1].split('"', 1)[0]
+        line.split('data-receipt="', 1)[1].split('"', 1)[0]
         for line in packet.split("\n")
         if line.startswith(RSEC_OPEN)
     ]
-    assert order == [receipt["rid"] for receipt in data["receipts"]]
+    assert order == [str(number) for number in range(1, len(data["receipts"]) + 1)]
     for number, receipt in enumerate(data["receipts"], start=1):
         assert f'<div class="rhead">Receipt {number}: {receipt["title"]}</div>' in packet
+
+
+def test_a_section_carries_an_ordinal_and_never_a_mailbox_id(packet: str, data: dict) -> None:
+    assert "data-rid" not in packet
+    for receipt in data["receipts"]:
+        assert receipt["rid"] not in packet
 
 
 def test_html_receipts_are_inserted_as_is(packet: str, data: dict, receipts: Path) -> None:
@@ -586,14 +1006,14 @@ def test_the_rendered_packet_passes_the_prose_gate(packet: str, tmp_path: Path) 
 
 
 def test_the_cli_writes_the_packet_and_prints_totals(
-    fixture_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    fixture_dir: Path, cleaned_receipts: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "nested" / "packet.html"
     code = build.main(
         [
             str(fixture_dir / "expense_data.json"),
             "--receipts",
-            str(fixture_dir / "receipts"),
+            str(cleaned_receipts),
             "--out",
             str(out),
         ]
@@ -603,13 +1023,108 @@ def test_the_cli_writes_the_packet_and_prints_totals(
 
     payload = json.loads((fixture_dir / "expense_data.json").read_text(encoding="utf-8"))
     figures = build.totals(payload)
-    printed = capsys.readouterr().out.strip()
-    assert printed == (
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert lines[0] == (
         f"expenses {build.money(figures['expenses'])}, "
         f"stipend {build.money(figures['stipend'])}, "
         f"total {build.money(figures['total'])}"
     )
+    assert lines[1].startswith(f"pages expected {1 + len(payload['receipts'])},")
     assert out.read_text(encoding="utf-8").startswith("<!doctype html>")
+
+
+def test_the_cli_names_a_claimed_amount_that_is_not_on_its_receipt(
+    data: dict, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rid = data["receipts"][0]["rid"]
+    (folder / f"{rid}.html").write_text(
+        "<table><tr><td>Total</td><td>$1,240.50</td></tr></table>", encoding="utf-8"
+    )
+    data["receipts"] = [data["receipts"][0]]
+    data["days"] = [
+        {
+            "label": "Monday, travel out",
+            "items": [
+                {"desc": "Base fare", "amt": 1240.50, "rid": rid},
+                {"desc": "Checked bag, outbound", "amt": 40.00, "rid": rid},
+            ],
+        }
+    ]
+    del data["stipend"]
+    path = tmp_path / "expense_data.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    code = build.main([str(path), "--receipts", str(folder), "--out", str(tmp_path / "p.html")])
+    assert code == 0
+    printed = capsys.readouterr()
+    assert "pages expected 2," in printed.out
+    assert printed.err.strip() == "amount not printed on receipt: Checked bag, outbound"
+
+
+def test_the_amount_reading_covers_every_kind_of_receipt(data: dict, tmp_path: Path) -> None:
+    """HTML loses its tags, text is read as it is, a pdf is read, an image is skipped."""
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rids = [receipt["rid"] for receipt in data["receipts"][:4]]
+    (folder / f"{rids[0]}.html").write_text("<p>Total <b>28.93</b></p>", encoding="utf-8")
+    (folder / f"{rids[1]}.txt").write_text("Folio total 402.11\n", encoding="utf-8")
+    (folder / f"{rids[2]}.png").write_bytes(b"\x89PNG")
+    data["receipts"] = data["receipts"][:3]
+    data["days"] = [
+        {
+            "label": "Monday, travel out",
+            "items": [
+                {"desc": "Dinner", "amt": 28.93, "rid": rids[0]},
+                {"desc": "Room and tax, 2 nights", "amt": 402.11, "rid": rids[1]},
+                {"desc": "Day pass, photo receipt", "amt": 6.50, "rid": rids[2]},
+            ],
+        }
+    ]
+    del data["stipend"]
+    assert build.unprinted_amounts(data, folder) == []
+
+
+def test_a_grouped_amount_on_a_receipt_still_counts(data: dict, tmp_path: Path) -> None:
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rid = data["receipts"][0]["rid"]
+    (folder / f"{rid}.txt").write_text("Total 1,240.50", encoding="utf-8")
+    data["receipts"] = [data["receipts"][0]]
+    data["days"] = [
+        {
+            "label": "Monday, travel out",
+            "items": [{"desc": "Base fare", "amt": 1240.50, "rid": rid}],
+        }
+    ]
+    del data["stipend"]
+    assert build.unprinted_amounts(data, folder) == []
+
+
+def test_the_amount_reading_reads_a_pdf_and_skips_one_it_cannot(
+    data: dict, fixture_dir: Path, tmp_path: Path
+) -> None:
+    folder = tmp_path / "receipts"
+    folder.mkdir()
+    rid = data["receipts"][0]["rid"]
+    folio = next((fixture_dir / "receipts").glob("*.pdf"))
+    shutil.copy2(folio, folder / f"{rid}.pdf")
+    data["receipts"] = [dict(data["receipts"][0], kind="pdf")]
+    data["days"] = [
+        {"label": "Monday", "items": [{"desc": "Room and tax", "amt": 99.99, "rid": rid}]}
+    ]
+    del data["stipend"]
+    assert build.unprinted_amounts(data, folder) == ["Room and tax"]
+
+    (folder / f"{rid}.pdf").write_bytes(b"not really a pdf")
+    assert build.unprinted_amounts(data, folder) == []
+
+
+def test_the_amount_reading_says_nothing_about_a_receipt_that_is_not_there(
+    data: dict, tmp_path: Path
+) -> None:
+    assert build.unprinted_amounts(data, tmp_path / "nothing_here") == []
 
 
 def test_the_cli_runs_the_disk_checks_on_the_receipts_it_was_given(

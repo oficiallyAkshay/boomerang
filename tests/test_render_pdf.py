@@ -160,7 +160,9 @@ def test_a_receipt_cannot_rewrite_the_summary_amounts(tmp_path: Path) -> None:
         ],
         "receipts": [{"rid": "tamper", "title": "A receipt", "vendor": "lyft"}],
     }
-    assert build.validate(data, receipts) == []
+    # The probe is raw markup on purpose, and the validator now says so. What
+    # this test is about is what the renderer does with it regardless.
+    assert build.validate(data, receipts) == ["receipt tamper: looks uncleaned, run clean.py first"]
 
     packet = tmp_path / "packet.html"
     packet.write_text(build.render_packet(data, receipts), encoding="utf-8")

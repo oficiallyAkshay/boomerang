@@ -11,11 +11,23 @@ Money is handled with Decimal throughout. ``totals`` returns Decimal values
 quantized to two places, so a packet's lines always add up to its total and
 pennies never drift. Callers that want floats convert at the edge.
 
+The packet owns its arithmetic. A refunded line carries ``amt`` and
+``refund`` and the packet claims the difference; a stipend carries ``rate``
+and ``days`` and the packet multiplies them; a line paid in another currency
+carries ``local_amt`` and ``local_currency`` and the packet notes what the
+receipt shows. Nothing upstream has to do the sum, so nothing upstream can do
+it differently from the total.
+
 Receipt files are optional at render time. A receipt whose file is not on disk
 renders a visible placeholder rather than failing, so a packet can be built
 before every receipt has been fetched. A pdf that cannot be opened says so on
 its card and is reported by ``validate``, so a damaged file is never quietly
 shown as an attachment of zero pages.
+
+The CLI ends with two readings rather than two more errors. It prints the page
+count to expect, and it names any line whose claimed value is not printed
+anywhere on its own receipt, which is how a hand typed amount and a netted
+refund get caught before a reviewer finds them.
 """
 
 from __future__ import annotations
@@ -26,6 +38,7 @@ import html
 import json
 import re
 import sys
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -44,11 +57,26 @@ SUFFIX_KIND = {
     ".pdf": "pdf",
     ".png": "image",
     ".jpg": "image",
+    ".jpeg": "image",
 }
 # The order receipt files are looked for, so inference is deterministic when a
-# rid somehow has more than one file on disk.
-SUFFIX_ORDER = (".html", ".txt", ".pdf", ".png", ".jpg")
-IMAGE_MEDIA = {".png": "image/png", ".jpg": "image/jpeg"}
+# rid somehow has more than one file on disk. A receipt that names its kind is
+# looked up by that kind first, and this order decides the rest.
+SUFFIX_ORDER = (".html", ".txt", ".pdf", ".png", ".jpg", ".jpeg")
+IMAGE_MEDIA = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+# A line description is a place in the packet, never a postal address: the
+# street is inside the receipt, where the vendor printed it.
+STREET_RE = re.compile(
+    r"\b\d{1,5}\s+[A-Z][a-z]+\.?\s+"
+    r"(St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road|Dr|Drive|Way|Ln|Lane"
+    r"|Ter|Terrace|Pl|Place)\b"
+)
+MEAL_WORDS = ("breakfast", "brunch", "lunch", "dinner", "coffee", "snack")
+MEAL_MINUTES = 60
+# What a receipt fragment looks like when it never went through clean.py.
+UNCLEANED_RE = re.compile(r"<script|<html|<head|on\w+=", re.I)
+TAG_RE = re.compile(r"<[^>]*>")
 
 CSS = """
 body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;margin:0;color:#111;
@@ -157,11 +185,95 @@ def _check_packet_text(
         problems.append(f"{prefix} contains a banned word")
 
 
-def _check_amount(problems: list[str], where: str, amt: object) -> None:
+def _check_amount(problems: list[str], where: str, amt: object, field: str = "amt") -> None:
     if not _is_number(amt):
-        problems.append(f"{where}: amt expected a number")
+        problems.append(f"{where}: {field} expected a number")
     elif _too_many_decimals(amt):
-        problems.append(f"{where}: amt has more than 2 decimals")
+        problems.append(f"{where}: {field} has more than 2 decimals")
+
+
+def _check_refund(problems: list[str], where: str, item: dict) -> None:
+    """A refund is money the vendor gave back, so the packet claims the rest."""
+    refund = item.get("refund")
+    if refund is None:
+        return
+    before = len(problems)
+    _check_amount(problems, where, refund, "refund")
+    if len(problems) != before:
+        return
+    if refund < 0:
+        problems.append(f"{where}: refund is less than zero")
+        return
+    amt = item.get("amt")
+    if _is_number(amt) and refund > amt:
+        problems.append(f"{where}: refund is more than amt")
+
+
+def _check_local(problems: list[str], where: str, item: dict) -> None:
+    """The amount the receipt printed, in the currency the receipt printed it in."""
+    amount, currency = item.get("local_amt"), item.get("local_currency")
+    if amount is None and currency is None:
+        return
+    if amount is None or currency is None:
+        problems.append(f"{where}: local_amt and local_currency go together")
+        return
+    _check_amount(problems, where, amount, "local_amt")
+    _check_packet_text(problems, where, "local_currency", currency)
+
+
+def _timestamp(value: object) -> datetime | None:
+    """One ``at`` value as a datetime, or None when it is not one.
+
+    A value with no zone is read as UTC, so two lines are always comparable
+    and a mixed pair never raises instead of reporting.
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        when = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=UTC)
+
+
+def _check_item_extras(problems: list[str], where: str, item: dict) -> None:
+    """The optional item fields, each checked only when it is there."""
+    _check_refund(problems, where, item)
+    _check_local(problems, where, item)
+    desc = item.get("desc")
+    if isinstance(desc, str) and STREET_RE.search(desc):
+        problems.append(
+            f"{where}: desc reads as a street address, "
+            "line descriptions say Hotel, Office, Airport, Home"
+        )
+    at = item.get("at")
+    if at is not None and _timestamp(at) is None:
+        problems.append(f"{where}: at expected an ISO 8601 datetime")
+
+
+def _meal_word(desc: object) -> bool:
+    return isinstance(desc, str) and desc.strip().lower().startswith(MEAL_WORDS)
+
+
+def _check_meal_duplicates(problems: list[str], where: str, items: list) -> None:
+    """Two meals an hour apart on one day are one meal claimed twice.
+
+    Only lines that carry a readable ``at`` are compared, so a day whose
+    meals have no times says nothing rather than guessing.
+    """
+    meals = [
+        (str(item.get("desc", "")), _timestamp(item.get("at")))
+        for item in items
+        if isinstance(item, dict) and _meal_word(item.get("desc"))
+    ]
+    timed = [(desc, when) for desc, when in meals if when is not None]
+    for index, (desc, when) in enumerate(timed):
+        for other_desc, other_when in timed[index + 1 :]:
+            apart = abs((other_when - when).total_seconds()) / 60
+            if apart <= MEAL_MINUTES:
+                problems.append(
+                    f"{where}: two meal lines within an hour, " f'"{desc}" and "{other_desc}"'
+                )
 
 
 def _check_days(problems: list[str], data: dict, receipt_rids: set[str]) -> None:
@@ -189,11 +301,13 @@ def _check_days(problems: list[str], data: dict, receipt_rids: set[str]) -> None
                 continue
             _check_packet_text(problems, spot, "desc", item.get("desc"))
             _check_amount(problems, spot, item.get("amt"))
+            _check_item_extras(problems, spot, item)
             rid = item.get("rid")
             if not isinstance(rid, str) or not RID_RE.match(rid):
                 problems.append(f"{spot}: rid is not a valid id")
             elif rid not in receipt_rids:
                 problems.append(f"{spot}: rid has no receipt")
+        _check_meal_duplicates(problems, where, items)
 
 
 def _check_receipts(problems: list[str], data: dict, receipts_dir: Path | None) -> set[str]:
@@ -226,13 +340,22 @@ def _check_receipts(problems: list[str], data: dict, receipts_dir: Path | None) 
         elif not vendor.strip():
             problems.append(f"{where}: vendor empty")
 
+        kind = receipt.get("kind")
         found = None
+        on_disk: list[Path] = []
         if receipts_dir is not None and isinstance(rid, str):
-            found = find_receipt_file(receipts_dir, rid)
+            on_disk = receipt_files(receipts_dir, rid)
+            found = _preferred_file(on_disk, kind)
+        if len(on_disk) > 1 and kind is None:
+            names = ", ".join(path.name for path in on_disk)
+            problems.append(f"receipt {rid}: more than one file on disk ({names}), name the kind")
         if found is not None and found.suffix.lower() == ".pdf" and _pdf_pages(found) == 0:
             problems.append(f"receipt {rid}: pdf cannot be read")
+        if found is not None and SUFFIX_KIND[found.suffix.lower()] == "html":
+            body = found.read_text(encoding="utf-8", errors="replace")
+            if UNCLEANED_RE.search(body):
+                problems.append(f"receipt {rid}: looks uncleaned, run clean.py first")
 
-        kind = receipt.get("kind")
         if kind is None:
             continue
         if kind not in KNOWN_KINDS:
@@ -247,6 +370,7 @@ def _check_receipts(problems: list[str], data: dict, receipts_dir: Path | None) 
 
 
 def _check_stipend(problems: list[str], data: dict) -> None:
+    """The stipend line, which may state its total or state what makes it up."""
     stipend = data.get("stipend")
     if stipend is None:
         return
@@ -254,17 +378,39 @@ def _check_stipend(problems: list[str], data: dict) -> None:
         problems.append("stipend: expected an object")
         return
     _check_packet_text(problems, "stipend", "desc", stipend.get("desc"))
-    _check_amount(problems, "stipend", stipend.get("amt"))
+
+    rate, days, amt = stipend.get("rate"), stipend.get("days"), stipend.get("amt")
+    if rate is None and days is None:
+        _check_amount(problems, "stipend", amt)
+        return
+    if rate is None or days is None:
+        problems.append("stipend: rate and days go together")
+        return
+
+    before = len(problems)
+    _check_amount(problems, "stipend", rate, "rate")
+    _check_amount(problems, "stipend", days, "days")
+    if len(problems) != before:
+        return
+    if rate < 0 or days < 0:
+        problems.append("stipend: rate and days are counts, so neither is less than zero")
+        return
+    if amt is None:
+        return
+    _check_amount(problems, "stipend", amt)
+    if _is_number(amt) and _decimal(amt) != (_decimal(rate) * _decimal(days)).quantize(CENTS):
+        problems.append("stipend: amt is not rate times days")
 
 
 def validate(data: dict, receipts_dir: Path | None = None) -> list[str]:
     """Check expense data against the schema. An empty list means valid.
 
-    ``receipts_dir`` is optional. When it is given, a receipt whose declared
-    kind disagrees with the file actually on disk is reported too, and so is a
-    pdf on disk that cannot be opened, which would otherwise reach the packet
-    as a card with no pages. A receipt with no file at all is never a problem:
-    packets render placeholders.
+    ``receipts_dir`` is optional. When it is given, four more problems are
+    reported: a declared kind that disagrees with the file on disk, a pdf that
+    cannot be opened, a rid with more than one file and no kind to choose
+    between them, and an html receipt that still reads as raw vendor mail. A
+    receipt with no file at all is never a problem: packets render
+    placeholders.
     """
     problems: list[str] = []
     if not isinstance(data, dict):
@@ -299,25 +445,59 @@ def load_expense_data(path: Path, receipts_dir: Path | None = None) -> dict:
 # -------------------------------------------------------------------- totals
 
 
+def day_list(data: dict) -> list:
+    """The days, or a validate shaped error rather than a surprise later.
+
+    ``validate`` reports a days list of the wrong shape and stops the build.
+    A caller that skipped it gets the same sentence here instead of an
+    AttributeError from the middle of a subtotal.
+    """
+    days = data.get("days", [])
+    if not isinstance(days, list):
+        raise ValueError("days: expected a list")
+    return days
+
+
+def item_claim(item: dict) -> Decimal:
+    """What the packet claims for one line: the amount, less any refund."""
+    amount = _decimal(item.get("amt", 0))
+    refund = item.get("refund")
+    if refund is None:
+        return amount
+    return (amount - _decimal(refund)).quantize(CENTS)
+
+
+def stipend_claim(stipend: dict) -> Decimal:
+    """What the packet claims for the stipend: the stated total, or days times rate."""
+    amt = stipend.get("amt")
+    if amt is not None:
+        return _decimal(amt)
+    rate, days = stipend.get("rate"), stipend.get("days")
+    if rate is None or days is None:
+        raise ValueError("stipend: amt expected a number")
+    return (_decimal(rate) * _decimal(days)).quantize(CENTS)
+
+
 def totals(data: dict) -> dict:
     """Per day subtotals plus the packet totals, all Decimal quantized to cents.
 
     Returns {"days": [(label, subtotal)], "expenses": x, "stipend": y,
-    "total": z}. Stipend is 0.00 when the data has none.
+    "total": z}. Stipend is 0.00 when the data has none. Every figure is the
+    claimed value, so a refunded line counts for what is left of it.
     """
     days: list[tuple[str, Decimal]] = []
     expenses = Decimal("0.00")
-    for day in data.get("days", []):
+    for day in day_list(data):
         subtotal = Decimal("0.00")
         for item in day.get("items", []):
-            subtotal += _decimal(item.get("amt", 0))
+            subtotal += item_claim(item)
         subtotal = subtotal.quantize(CENTS)
         days.append((day.get("label", ""), subtotal))
         expenses += subtotal
     expenses = expenses.quantize(CENTS)
 
     stipend_entry = data.get("stipend")
-    stipend = _decimal(stipend_entry["amt"]) if stipend_entry else Decimal("0.00")
+    stipend = stipend_claim(stipend_entry) if stipend_entry else Decimal("0.00")
     return {
         "days": days,
         "expenses": expenses,
@@ -329,28 +509,51 @@ def totals(data: dict) -> dict:
 # -------------------------------------------------------------------- render
 
 
-def find_receipt_file(receipts_dir: Path, rid: str) -> Path | None:
-    """The receipt file for a rid, or None when none is on disk.
+def receipt_files(receipts_dir: Path, rid: str) -> list[Path]:
+    """Every receipt file on disk for a rid, in the suffix order.
 
     A rid is a file name, never a path. It has to match ``RID_RE``, and the
     file it names has to resolve to somewhere inside the resolved receipts
     directory, so neither a traversal in the data nor a symlink on disk can
-    pull a file from outside the folder the caller named into a packet.
+    pull a file from outside the folder the caller named into a packet. Two
+    names that resolve to one file count once.
     """
     if not isinstance(rid, str) or not RID_RE.match(rid):
-        return None
+        return []
     try:
         root = Path(receipts_dir).resolve(strict=True)
     except OSError:
-        return None
+        return []
+    found: list[Path] = []
     for suffix in SUFFIX_ORDER:
         candidate = root / f"{rid}{suffix}"
         if not candidate.is_file():
             continue
         resolved = candidate.resolve()
-        if resolved.is_relative_to(root):
-            return resolved
-    return None
+        if resolved.is_relative_to(root) and resolved not in found:
+            found.append(resolved)
+    return found
+
+
+def _preferred_file(found: list[Path], kind: object) -> Path | None:
+    """The file a receipt means: the one its kind names, else the first found."""
+    if not found:
+        return None
+    if kind in KNOWN_KINDS:
+        for path in found:
+            if SUFFIX_KIND[path.suffix.lower()] == kind:
+                return path
+    return found[0]
+
+
+def find_receipt_file(receipts_dir: Path, rid: str, kind: object = None) -> Path | None:
+    """The receipt file for a rid, or None when none is on disk.
+
+    A receipt that declares its ``kind`` gets that kind's file, whatever else
+    shares the rid. Without a kind the suffix order decides, so inference
+    stays deterministic.
+    """
+    return _preferred_file(receipt_files(receipts_dir, rid), kind)
 
 
 def _pdf_pages(path: Path) -> int:
@@ -362,6 +565,29 @@ def _pdf_pages(path: Path) -> int:
         # A damaged or unreadable pdf reads as zero pages. Callers say so
         # rather than presenting the zero as a real count.
         return 0
+
+
+def _receipt_text(path: Path) -> str | None:
+    """What a receipt prints, as plain text, or None when it cannot be read.
+
+    Only for the amount reading at the end of the CLI. HTML loses its tags,
+    a pdf is read with pypdf, and an image is not read at all: a photo of a
+    receipt says nothing a substring test can use.
+    """
+    kind = SUFFIX_KIND[path.suffix.lower()]
+    if kind == "image":
+        return None
+    if kind == "pdf":
+        try:
+            from pypdf import PdfReader
+
+            return "\n".join(page.extract_text() or "" for page in PdfReader(str(path)).pages)
+        except Exception:
+            return None
+    body = path.read_text(encoding="utf-8", errors="replace")
+    if kind == "html":
+        body = TAG_RE.sub(" ", body)
+    return html.unescape(body)
 
 
 def _receipt_body(path: Path | None) -> str:
@@ -388,14 +614,49 @@ def _receipt_body(path: Path | None) -> str:
     return f'<img src="data:{media};base64,{encoded}" alt="Receipt image">'
 
 
+def _count(value: object) -> str:
+    """A whole count with no trailing zeros, for the stipend note."""
+    number = Decimal(str(value)).normalize()
+    whole = number.to_integral_value()
+    return str(whole) if number == whole else str(number)
+
+
+def _item_line(item: dict, currency: str) -> str:
+    """One line description, with whatever the arithmetic owes the reader.
+
+    A netted refund and a local currency each add a short note, so the amount
+    column stays the claimed value and the reader can still see where it came
+    from without opening the receipt.
+    """
+    parts = [str(item.get("desc", ""))]
+    refund = item.get("refund")
+    if refund is not None:
+        parts.append(
+            f" ({money(item.get('amt', 0), currency)}, {money(refund, currency)} refund netted)"
+        )
+    local, local_currency = item.get("local_amt"), item.get("local_currency")
+    if local is not None and local_currency is not None:
+        parts.append(f" (receipt shows {money(local, str(local_currency))})")
+    return html.escape("".join(parts))
+
+
+def _stipend_line(stipend: dict, currency: str) -> str:
+    """The stipend description, with days times rate when that is what it is."""
+    text = str(stipend.get("desc", ""))
+    rate, days = stipend.get("rate"), stipend.get("days")
+    if rate is not None and days is not None:
+        text += f" ({_count(days)} x {money(rate, currency)})"
+    return html.escape(text)
+
+
 def _summary_table(data: dict, currency: str) -> str:
     figures = totals(data)
     rows = ['<table class="sum">', '<tr><th>Item</th><th class="amt">Amount</th></tr>']
-    for day, (label, subtotal) in zip(data.get("days", []), figures["days"], strict=True):
+    for day, (label, subtotal) in zip(day_list(data), figures["days"], strict=True):
         rows.append(f'<tr class="day"><td colspan="2">{html.escape(label)}</td></tr>')
         for item in day.get("items", []):
-            desc = html.escape(str(item.get("desc", "")))
-            amount = money(item.get("amt", 0), currency)
+            desc = _item_line(item, currency)
+            amount = money(item_claim(item), currency)
             rows.append(f'<tr><td>{desc}</td><td class="amt">{amount}</td></tr>')
         rows.append(
             '<tr class="sub"><td>Day subtotal</td>'
@@ -409,8 +670,8 @@ def _summary_table(data: dict, currency: str) -> str:
     if stipend:
         rows.append('<tr class="day"><td colspan="2">Stipend</td></tr>')
         rows.append(
-            f'<tr><td>{html.escape(str(stipend.get("desc", "")))}</td>'
-            f'<td class="amt">{money(stipend.get("amt", 0), currency)}</td></tr>'
+            f"<tr><td>{_stipend_line(stipend, currency)}</td>"
+            f'<td class="amt">{money(stipend_claim(stipend), currency)}</td></tr>'
         )
     rows.append(
         '<tr class="total"><td>Total</td>'
@@ -423,6 +684,7 @@ def _summary_table(data: dict, currency: str) -> str:
 def render_packet(data: dict, receipts_dir: Path) -> str:
     """The whole packet as one self contained HTML string."""
     receipts_dir = Path(receipts_dir)
+    day_list(data)
     currency = data.get("currency") or "USD"
     company = html.escape(str(data.get("company", "")))
     title = f"Expense reimbursement packet, {company}"
@@ -448,9 +710,11 @@ def render_packet(data: dict, receipts_dir: Path) -> str:
     for number, receipt in enumerate(data.get("receipts", []), start=1):
         rid = str(receipt.get("rid", ""))
         heading = html.escape(f"Receipt {number}: {receipt.get('title', '')}")
-        body = _receipt_body(find_receipt_file(receipts_dir, rid))
+        body = _receipt_body(find_receipt_file(receipts_dir, rid, receipt.get("kind")))
+        # The section is numbered, not identified. A rid is a mailbox id and
+        # the packet shows no mailbox ids, in an attribute or anywhere else.
         out.append(
-            f'<section class="rsec" data-rid="{html.escape(rid)}">'
+            f'<section class="rsec" data-receipt="{number}">'
             f'<div class="rhead">{heading}</div>'
             f'<div class="rc">{body}</div></section>'
         )
@@ -460,6 +724,36 @@ def render_packet(data: dict, receipts_dir: Path) -> str:
 
 
 # ----------------------------------------------------------------------- cli
+
+
+def unprinted_amounts(data: dict, receipts_dir: Path) -> list[str]:
+    """The description of every line whose claimed value is not on its receipt.
+
+    A reading, not a rule. A value that is right and simply printed
+    differently, a receipt that is an image, and a receipt not fetched yet all
+    land here the same way, so the CLI names them and carries on.
+    """
+    kinds = {
+        receipt.get("rid"): receipt.get("kind")
+        for receipt in data.get("receipts", [])
+        if isinstance(receipt, dict)
+    }
+    texts: dict[object, str | None] = {}
+    unprinted: list[str] = []
+    for day in day_list(data):
+        for item in day.get("items", []):
+            rid = item.get("rid")
+            if rid not in texts:
+                path = find_receipt_file(receipts_dir, str(rid), kinds.get(rid))
+                texts[rid] = _receipt_text(path) if path is not None else None
+            body = texts[rid]
+            if body is None:
+                continue
+            claimed = item_claim(item)
+            if any(form in body for form in (f"{claimed:f}", f"{claimed:,f}")):
+                continue
+            unprinted.append(str(item.get("desc", "")))
+    return unprinted
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -480,6 +774,10 @@ def main(argv: list[str] | None = None) -> int:
         f"stipend {money(figures['stipend'], currency)}, "
         f"total {money(figures['total'], currency)}"
     )
+    pages = 1 + len(data.get("receipts", []))
+    print(f"pages expected {pages}, one more for every page the summary spills onto")
+    for desc in unprinted_amounts(data, args.receipts):
+        print(f"amount not printed on receipt: {desc}", file=sys.stderr)
     return 0
 
 
