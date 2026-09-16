@@ -1,0 +1,26 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.16.0
+    hooks:
+      - id: markdownlint-cli2
+
+  - repo: local
+    hooks:
+      - id: check-prose
+        name: prose and privacy gate
+        entry: uv run python scripts/check_prose.py
+        language: system
+        pass_filenames: false
+        always_run: true

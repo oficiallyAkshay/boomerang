@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --all-extras
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  prose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv run python scripts/check_prose.py
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DavidAnson/markdownlint-cli2-action@v18
+        with:
+          globs: "**/*.md"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --all-extras
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest --cov=scripts --cov-report=xml --cov-report=term
+      - name: diff coverage
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin main --depth=1
+          uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=90
+      - uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          fail_ci_if_error: false
