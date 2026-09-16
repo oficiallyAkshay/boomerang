@@ -272,7 +272,7 @@ def _check_meal_duplicates(problems: list[str], where: str, items: list) -> None
             apart = abs((other_when - when).total_seconds()) / 60
             if apart <= MEAL_MINUTES:
                 problems.append(
-                    f"{where}: two meal lines within an hour, " f'"{desc}" and "{other_desc}"'
+                    f'{where}: two meal lines within an hour, "{desc}" and "{other_desc}"'
                 )
 
 
@@ -606,9 +606,7 @@ def _receipt_body(path: Path | None) -> str:
         pages = _pdf_pages(path)
         if pages == 0:
             return '<div class="card">PDF attachment could not be read</div>'
-        return (
-            f'<div class="card">PDF attachment, {pages} pages, ' "embedded in the PDF packet</div>"
-        )
+        return f'<div class="card">PDF attachment, {pages} pages, embedded in the PDF packet</div>'
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     media = IMAGE_MEDIA[suffix]
     return f'<img src="data:{media};base64,{encoded}" alt="Receipt image">'
@@ -702,8 +700,8 @@ def render_packet(data: dict, receipts_dir: Path) -> str:
         '</head><body><div class="page">',
         '<div class="cover"><h1>Expense reimbursement packet</h1>',
         f'<div class="sub"><b>{company}</b><br>'
-        f'{html.escape(str(data.get("trip", "")))}<br>'
-        f'{html.escape(str(data.get("traveler", "")))}</div></div>',
+        f"{html.escape(str(data.get('trip', '')))}<br>"
+        f"{html.escape(str(data.get('traveler', '')))}</div></div>",
         _summary_table(data, currency),
     ]
 
