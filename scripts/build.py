@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a reimbursement packet from expense data.
 
-Reads an expense_data.json, checks it against the schema in docs/interfaces.md,
+Reads an expense_data.json, checks it against the schema in references/interfaces.md,
 and renders one self contained HTML file: a cover block, one summary table, and
 one section per receipt in the order the data lists them. The head carries a
 content security policy that allows no script and no remote fetch of any kind,
