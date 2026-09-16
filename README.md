@@ -66,21 +66,20 @@ Code does the mechanical work (search, fetch, clean, who paid, totals, render); 
 
 ## Quick start
 
-1. Copy or symlink this folder into a skills directory, such as
-   `~/.claude/skills/boomerang/`.
+1. `npx skills add oficiallyAkshay/boomerang`, which installs the skill into
+   Claude Code, Cursor, Codex and about seventy other agents. By hand instead:
+   clone this repo and copy the folder into `~/.claude/skills/boomerang/`. On
+   Claude.ai and Cowork there is no clone: zip the skill folder and upload it
+   under Customize, Skills, as [`references/hosts.md`](references/hosts.md)
+   sets out.
 
-2. Install the two dependencies:
+2. `pip install -r requirements.txt`, or `uv sync`. No browser download is
+   needed when Chrome or Edge is already on the machine.
 
-   ```sh
-   uv sync                          # or: pip install playwright pypdf
-   playwright install chromium
-   ```
+3. Ask your agent: "Build my reimbursement packet for the trip on June 11."
 
-3. Ask the host to build a packet for a trip, for example "build a
-   reimbursement packet for my Austin onsite in June".
-
-Per-host install paths, and the note about uploading a zip on Claude.ai, are in
-[`references/hosts.md`](references/hosts.md).
+`python scripts/doctor.py` prints what is present, what is missing, and the one
+command that fixes each thing.
 
 ## What you need
 

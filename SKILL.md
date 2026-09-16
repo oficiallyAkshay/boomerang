@@ -3,7 +3,7 @@ name: boomerang
 description: "Builds a reimbursement packet from a personal inbox: finds trip receipts, splits company-paid from self-paid, applies policy, outputs one PDF. Use for expense claims and travel reimbursement."
 license: MIT
 metadata: {icon: "🪃"}
-compatibility: "Python 3.11+ with playwright and a Chrome or Edge install (or a Playwright Chromium) for the PDF, pypdf; an email tool or the bundled Gmail fallback; a shell."
+compatibility: "Python 3.11+; pip install -r requirements.txt; Chrome or Edge on the machine for the PDF (else print the HTML); an email tool in the host or the bundled Gmail fallback."
 ---
 
 # Boomerang
@@ -40,6 +40,11 @@ script and read its output.
 
 ## Capability contract
 
+Before anything else, run `python scripts/doctor.py` (or `uv run python
+scripts/doctor.py`); if it reports something missing, run the command it
+prints, with the user's consent, then continue. Never install a browser
+download without asking.
+
 Boomerang needs five capabilities. Check which ones the host gives you before
 starting, and say plainly which are missing.
 
@@ -51,15 +56,13 @@ starting, and say plainly which are missing.
 | write-file | The host's file write tool | Shell redirection |
 | run-python | The host's shell or code tool | Required; there is no substitute |
 
-Commands below use the uv form, `uv run python scripts/<name>.py`. On a host
-without uv, run `python scripts/<name>.py` with `playwright` and `pypdf`
-installed; the behaviour is identical. The PDF render drives whichever of
-Google Chrome, Microsoft Edge or a Playwright Chromium the machine already
-has, in that order, and `uv run playwright install chromium` is only needed
-when there is no Chrome and no Edge. Claude.ai and Cowork have no browser at
-all, so there the deliverable is `packet.html`, printed to PDF by the user:
-skip the page-count and splice steps below, and list folio attachments as
-separate files.
+Commands below use the uv form, `uv run python scripts/<name>.py`. Without uv,
+run `python scripts/<name>.py` after `pip install -r requirements.txt`; the
+behaviour is identical. The render drives whichever of Google Chrome, Microsoft
+Edge or a Playwright Chromium the machine has, in that order. Claude.ai and
+Cowork have no browser at all, so there the deliverable is `packet.html`,
+printed to PDF by the user: skip the page-count and splice steps below, and
+list folio attachments as separate files.
 
 Notes on the fallback:
 
@@ -74,10 +77,9 @@ Notes on the fallback:
   `pip install google-api-python-client google-auth-oauthlib`.
 
 One host behavior matters more than the rest. An unapproved tool call can fail
-silently: the call is declined, nothing is returned, and the session carries on
-as if the step had run. If a search or calendar call comes back empty or
-malformed, retry it once. If it fails again, tell the user what you tried and
-ask them to approve it or paste the answer.
+silently: it is declined, nothing is returned, and the session carries on as if
+the step had run. If a search or calendar call comes back empty or malformed,
+retry it once, then tell the user what you tried and ask them to approve it.
 
 ## Workflow
 
