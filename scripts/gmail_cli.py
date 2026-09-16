@@ -81,11 +81,19 @@ def header_value(payload: dict, name: str) -> str:
 def walk_parts(payload: dict) -> dict:
     """Walk a message payload for the first html body, text body and attachments.
 
-    Returns {"html": str|None, "text": str|None, "attachments": [(filename, id)]}.
+    Returns ``{"html": str|None, "text": str|None, "attachments": [...]}``,
+    where each attachment is ``(filename, attachment_id, data)`` and exactly
+    one of the last two is set.
+
+    A part that carries a filename is an attachment however Gmail chose to
+    deliver it. A large one comes back as an ``attachmentId`` to fetch
+    separately, and a small one comes back inline as ``body.data``, which is
+    decoded here and needs no second call. Reading only the first shape lost
+    every small attachment, which is how short one page folios went missing.
     """
     html_body: str | None = None
     text_body: str | None = None
-    attachments: list[tuple[str, str]] = []
+    attachments: list[tuple[str, str | None, bytes | None]] = []
 
     queue = [payload or {}]
     while queue:
@@ -94,7 +102,10 @@ def walk_parts(payload: dict) -> dict:
         body = part.get("body") or {}
         filename = part.get("filename") or ""
         if filename and body.get("attachmentId"):
-            attachments.append((filename, body["attachmentId"]))
+            attachments.append((filename, body["attachmentId"], None))
+            continue
+        if filename and body.get("data"):
+            attachments.append((filename, None, decode_body(body["data"])))
             continue
         data = body.get("data")
         if not data:
@@ -175,7 +186,10 @@ class GmailSource:
         walked = walk_parts(payload)
 
         attachments: list[tuple[str, bytes]] = []
-        for filename, attachment_id in walked["attachments"]:
+        for filename, attachment_id, inline in walked["attachments"]:
+            if attachment_id is None:
+                attachments.append((filename, inline or b""))
+                continue
             blob = (
                 service.users()
                 .messages()
@@ -231,6 +245,9 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("That message id has characters a file name must not carry")
     args.out.mkdir(parents=True, exist_ok=True)
     meta = write_message(args.out, args.rid, GmailSource().get(args.rid))
+    if meta is None:
+        print("that message has no body and no attachment worth keeping, nothing written")
+        return 1
     print(json.dumps(meta, indent=2))
     return 0
 
