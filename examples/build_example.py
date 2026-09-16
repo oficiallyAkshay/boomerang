@@ -3,9 +3,9 @@
 
 Everything here is synthetic. The trip, the traveller, the day labels and every
 claimed amount are invented; the receipts are the scrubbed vendor samples that
-live under ``vendors/``, plus the two receipts the fixture generator makes: a
-two page hotel folio PDF and a photographed day pass. No real mailbox is read
-and no personal data is written.
+live under ``vendors/``, plus the two receipts this script writes itself: a two
+page hotel folio PDF and a photographed day pass. No real mailbox is read and
+no personal data is written.
 
 What this script is for is showing the pipeline in SKILL.md run once, on real
 vendor markup, with the output committed so a reader can open the packet
@@ -19,17 +19,22 @@ The claim is built the way the skill says to build it.
   bill, the claim is the card tender and the line says so.
 - Every day label is the date the receipts filed under it print. The samples
   were scrubbed one vendor at a time, so their dates do not fall into a tidy
-  three day trip, and the window here is the one the receipts describe rather
-  than a neater one invented over the top of them. Two claimed receipts print
-  no date anywhere, the DoorDash final receipt and the photographed day pass,
-  and each sits under the day its message header carries, which its line says.
+  three day trip, and the window here is the shortest one that holds every
+  claimed receipt rather than a neater one invented over the top of them. Two
+  claimed receipts print no date anywhere, the DoorDash final receipt and the
+  photographed day pass, and each sits under the day its message header
+  carries, which its line says.
+- The folio is the one receipt the script writes rather than borrows, because
+  no vendor sample is a folio. It is a two page PDF for the Harborview Hotel,
+  it prints a room line and a tax line for each night of the stay, and its
+  nights are the nights the other receipts put the traveller in town. The room
+  charge is claimed on the check-out day, which is the day the folio is issued
+  and the last day of the window.
 - Four receipts are in the packet with no line beside them, because they show a
   charge nobody can claim: the United eTicket was paid with the value of a
   previous ticket, the Lufthansa receipt is a baggage drop-off with no amount
   on it, the Marriott confirmation is a points redemption with no cash figure,
-  and the citizenM mail is a pointer to a folio rather than the folio. The
-  folio itself is the two page PDF, and that is where the room charge is
-  claimed from.
+  and the citizenM mail is a pointer to an invoice rather than the invoice.
 
 Running it
 ----------
@@ -66,9 +71,11 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
+import zlib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -90,7 +97,28 @@ MAX_CACHE_BYTES = 1_500 * 1024
 
 COMPANY = "Northwind Labs, Inc."
 TRAVELER = "Jordan Rivera"
-TRIP = "AUS to SEA onsite, June 8 to 16, 2026"
+TRIP = "AUS to SEA onsite, June 11 to 16, 2026"
+
+# The folio the script writes. The nights are the nights the other receipts
+# put the traveller in town, the first being the evening the ride to the
+# airport is dated and the last the night before the flight home, so the stay
+# is the shortest one that covers the trip the rest of the packet describes.
+HOTEL = "Harborview Hotel"
+FOLIO_CONF = "HV-2048841"
+FOLIO_CARD_LAST4 = "4321"
+FOLIO_NIGHTS = [
+    "Thursday June 11, 2026",
+    "Friday June 12, 2026",
+    "Saturday June 13, 2026",
+    "Sunday June 14, 2026",
+    "Monday June 15, 2026",
+]
+FOLIO_CHECKOUT = "Tuesday June 16, 2026"
+FOLIO_RATE = 154.00
+FOLIO_NIGHTLY_TAX = 23.10
+FOLIO_ROOM = round(FOLIO_RATE * len(FOLIO_NIGHTS), 2)
+FOLIO_TAX = round(FOLIO_NIGHTLY_TAX * len(FOLIO_NIGHTS), 2)
+FOLIO_TOTAL = round(FOLIO_ROOM + FOLIO_TAX, 2)
 
 # Receipt ids, one per receipt. Generated once with secrets.token_hex(8) and
 # frozen here, so a rebuild writes the same file names and the same packet.
@@ -161,8 +189,8 @@ SOURCES = [
         "folio",
         None,
         "Front desk <folio@an-unlisted-inn.example>",
-        "Your folio for confirmation 51882037",
-        "Wed, 10 Jun 2026 11:20:00 -0500",
+        f"Your {HOTEL} folio for confirmation {FOLIO_CONF}",
+        "Tue, 16 Jun 2026 11:20:00 -0500",
     ),
     (
         "uber_eats",
@@ -217,7 +245,7 @@ TITLES = {
     "doordash": "Groceries delivered to the hotel",
     "marriott": "Stay confirmation, points redemption",
     "citizenm": "Invoice notice from the property",
-    "folio": "Folio, 2 nights",
+    "folio": f"Folio, {len(FOLIO_NIGHTS)} nights",
     "uber_eats": "Team lunch order",
     "njtransit": "Bus fare, one way",
     "transit": "Day pass, photo receipt",
@@ -233,7 +261,7 @@ VENDOR_LABELS = {
     "doordash": "DoorDash",
     "marriott": "Marriott",
     "citizenm": "citizenM",
-    "folio": "Austin Congress Avenue",
+    "folio": HOTEL,
     "uber_eats": "Uber Eats",
     "njtransit": "NJ TRANSIT",
     "transit": "City transit",
@@ -258,15 +286,10 @@ VENDOR_LABELS = {
 #   lyft         22.27  40.67 charged, less 18.40 of Lyft Cash, card tender
 #                                                  Jun 15, date_regex
 #   united_wifi  10.99  the charged total          Jun 16, date_regex
-#   folio       500.95  room and tax for two nights, from the folio total
-#                                                  Jun 8, printed on page 1
+#   folio       885.50  room and tax for five nights, from the folio total
+#                                                  Jun 16, the check-out day
+#                                                  printed on page 2
 DAYS = [
-    {
-        "label": "Monday, June 8, hotel nights billed",
-        "items": [
-            ("Room and tax, 2 nights", 500.95, "folio"),
-        ],
-    },
     {
         "label": "Thursday, June 11, travel out",
         "items": [
@@ -290,8 +313,9 @@ DAYS = [
         ],
     },
     {
-        "label": "Tuesday, June 16, personal day, flight home kept",
+        "label": "Tuesday, June 16, check out, personal day, flight home kept",
         "items": [
+            (f"Room and tax, {len(FOLIO_NIGHTS)} nights", FOLIO_TOTAL, "folio"),
             ("Inflight Wi-Fi", 10.99, "united_wifi"),
         ],
     },
@@ -299,10 +323,11 @@ DAYS = [
 
 STIPEND = {"desc": "Meal stipend, 2 days worked", "amt": 75.00}
 
-# The summary table runs to two pages. Five days of claim lines, the stipend
-# and the total no longer fit on one Letter page, and the receipts that follow
-# are still one per page, which is the count render_pdf is asked to hold to.
-SUMMARY_PAGES = 2
+# The summary table fits on one Letter page, and the receipts that follow are
+# one per page, which is the count render_pdf is asked to hold to. The number
+# is read back off a render rather than guessed: build the example and the
+# page count it prints is SUMMARY_PAGES plus one page per receipt.
+SUMMARY_PAGES = 1
 
 TEXT_SUFFIXES = {".html", ".txt"}
 
@@ -310,28 +335,113 @@ TEXT_SUFFIXES = {".html", ".txt"}
 # ------------------------------------------------------------------- receipts
 
 
-def fixture_receipts(target: Path) -> dict[str, Path]:
-    """The folio PDF and the photographed pass, from the fixture generator."""
-    sys.path.insert(0, str(REPO_ROOT / "tests"))
-    from fixtures import make_fixture
+def money(value: float) -> str:
+    sign = "-" if value < 0 else ""
+    return f"{sign}${abs(value):,.2f}"
 
-    with tempfile.TemporaryDirectory() as raw:
-        made = Path(raw)
-        make_fixture.make(made)
-        source = made / "receipts"
-        out = {}
-        for key, suffix in (("folio", ".pdf"), ("transit", ".png")):
-            found = source / f"{make_fixture.RIDS[key]}{suffix}"
-            landing = target / f"{RIDS[key]}{suffix}"
-            shutil.copyfile(found, landing)
-            out[key] = landing
-        return out
+
+def png_bytes(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
+    """A solid colour PNG, built without an image library."""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(tag + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+    row = b"\x00" + bytes(rgb) * width
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(row * height, 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def pdf_bytes(pages: list[list[str]]) -> bytes:
+    """A minimal multi page PDF with one Helvetica text block per page."""
+    objects: dict[int, bytes] = {}
+    kids = " ".join(f"{5 + 2 * i} 0 R" for i in range(len(pages)))
+    objects[1] = b"<< /Type /Catalog /Pages 2 0 R >>"
+    objects[2] = f"<< /Type /Pages /Count {len(pages)} /Kids [{kids}] >>".encode()
+    objects[3] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+    for index, lines in enumerate(pages):
+        body = ["BT", "/F1 12 Tf", "72 720 Td", "16 TL"]
+        for line in lines:
+            safe = line.replace("\\", "").replace("(", "").replace(")", "")
+            body.append(f"({safe}) Tj T*")
+        body.append("ET")
+        stream = "\n".join(body).encode()
+        content_num = 4 + 2 * index
+        page_num = content_num + 1
+        objects[content_num] = (
+            f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream"
+        )
+        objects[page_num] = (
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            "/Resources << /Font << /F1 3 0 R >> >> "
+            f"/Contents {content_num} 0 R >>"
+        ).encode()
+
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: dict[int, int] = {}
+    for num in sorted(objects):
+        offsets[num] = len(out)
+        out += f"{num} 0 obj\n".encode() + objects[num] + b"\nendobj\n"
+    start = len(out)
+    size = max(objects) + 1
+    out += f"xref\n0 {size}\n".encode() + b"0000000000 65535 f \n"
+    for num in range(1, size):
+        out += f"{offsets[num]:010d} 00000 n \n".encode()
+    out += f"trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{start}\n%%EOF\n".encode()
+    return bytes(out)
+
+
+def folio_pages() -> list[list[str]]:
+    """The two pages of the folio, a room line and a tax line per night.
+
+    Three nights on page 1 and the rest on page 2, so the stay is split the
+    way a front desk splits it and the totals land under the nights they add
+    up. The total on the last page is the figure the packet claims.
+    """
+    head = [
+        f"{HOTEL} folio page 1 of 2",
+        f"Guest {TRAVELER}",
+        f"Confirmation {FOLIO_CONF}",
+    ]
+    tail = [f"{HOTEL} folio page 2 of 2", f"Guest {TRAVELER}"]
+    for number, night in enumerate(FOLIO_NIGHTS, start=1):
+        target = head if number <= 3 else tail
+        target.append(f"Night {number}, {night}")
+        target.append(f"  Room {money(FOLIO_RATE)}")
+        target.append(f"  Room tax {money(FOLIO_NIGHTLY_TAX)}")
+    tail += [
+        f"Check out {FOLIO_CHECKOUT}",
+        f"Room, {len(FOLIO_NIGHTS)} nights {money(FOLIO_ROOM)}",
+        f"Room tax {money(FOLIO_TAX)}",
+        f"Room and tax total {money(FOLIO_TOTAL)}",
+        f"Charged to Visa ending {FOLIO_CARD_LAST4}",
+    ]
+    return [head, tail]
+
+
+def written_receipts(target: Path) -> dict[str, Path]:
+    """The two receipts no vendor sample supplies, written here.
+
+    The folio is a two page PDF built the way the fixture generator builds
+    one, and the day pass is a solid colour PNG standing in for a photograph.
+    Neither writer needs an image or a PDF library.
+    """
+    folio = target / f"{RIDS['folio']}.pdf"
+    folio.write_bytes(pdf_bytes(folio_pages()))
+    transit = target / f"{RIDS['transit']}.png"
+    transit.write_bytes(png_bytes(200, 80, (28, 92, 148)))
+    return {"folio": folio, "transit": transit}
 
 
 def write_receipts(target: Path) -> dict[str, Path]:
     """Copy every receipt into target, with a meta file beside each one."""
     target.mkdir(parents=True, exist_ok=True)
-    made = fixture_receipts(target)
+    made = written_receipts(target)
     paths: dict[str, Path] = {}
     for key, source, sender, subject, when in SOURCES:
         if source is None:
@@ -354,7 +464,7 @@ def write_receipts(target: Path) -> dict[str, Path]:
 
 
 def expense_data() -> dict:
-    """The packet input, in the schema docs/interfaces.md sets out."""
+    """The packet input, in the schema references/interfaces.md sets out."""
     return {
         "company": COMPANY,
         "trip": TRIP,
