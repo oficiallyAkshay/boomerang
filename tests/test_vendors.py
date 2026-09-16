@@ -369,10 +369,26 @@ def test_no_folder_carries_a_field_nothing_reads(rules: dict) -> None:
 def test_the_reference_page_carries_the_same_keys() -> None:
     """The schema line names every key a rules.json is allowed to hold."""
     page = (VENDORS_DIR.parent / "references" / "interfaces.md").read_text(encoding="utf-8")
-    for key in ("strip_regex", "unwrap_links_matching", "replace", "notes"):
+    for key in (*clean.REQUIRED_KEYS, "replace"):
         assert f'"{key}"' in page, f"references/interfaces.md never names {key}"
     for gone in ("amount_regex", "date_regex"):
         assert gone not in page, f"references/interfaces.md still names {gone}"
+
+
+def test_the_contributing_page_names_the_same_fields() -> None:
+    """Adding a vendor is written down twice, and both lists are the schema.
+
+    CONTRIBUTING tells a contributor what to put in a new rules.json, and
+    clean.REQUIRED_KEYS is what the loader will insist on. A field that fell
+    off one list and not the other is a rules.json that passes review and
+    fails to load, so the two are checked against each other here.
+    """
+    page = (VENDORS_DIR.parent / ".github" / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    section = page.split("**Adding a vendor.**")[1].split("**Adding a policy rule.**")[0]
+    for key in (*clean.REQUIRED_KEYS, "replace"):
+        assert f"`{key}`" in section, f".github/CONTRIBUTING.md never names {key}"
+    for gone in ("amount_regex", "date_regex"):
+        assert gone not in section, f".github/CONTRIBUTING.md still names {gone}"
 
 
 # -------------------------------------------------------------------- cleaning

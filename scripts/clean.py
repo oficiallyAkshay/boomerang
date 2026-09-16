@@ -65,12 +65,13 @@ know what was done to the page in front of them.
    (``line-height:1.25rem``) and none of them is an amount.
 5. Rewrites. A vendor may also carry an optional ``replace`` list of
    ``[regex, replacement]`` pairs, applied with ``re.sub`` behind the same
-   amount guard. It is for markup a vendor laid out for a mail client's width
-   that a packet's narrower column squeezes: an Uber total row gives the word
-   Total a cell at ``width:100%``, which leaves the amount beside it one
-   character per line. The pairs run first, ahead of every pass that
-   sanitises, so a replacement can put a script or an iframe into the fragment
-   and the fragment still comes out with nothing in it that can act.
+   amount guard. It is for markup a vendor laid out for a mail client that a
+   packet's narrower column cannot show, and which no strip pattern can fix
+   because the markup has to stay. No vendor in this repo needs one today: the
+   Uber total row that motivated the field is held on one line by the CSS
+   scoping instead. The pairs run first, ahead of every pass that sanitises,
+   so a replacement can put a script or an iframe into the fragment and the
+   fragment still comes out with nothing in it that can act.
 
 ``clean_dir`` cleans a whole directory, one receipt after another in filename
 order. It is the stage the workflow runs beside ``cards.py`` and the folio
@@ -450,7 +451,16 @@ def _scope_selectors(prelude: str, scope: str = SCOPE) -> str:
 
 
 def _scope_css(css: str, scope: str = SCOPE) -> str:
-    """Scope every rule in a stylesheet to the receipt container."""
+    """Scope every rule in a stylesheet to the receipt container.
+
+    The brace scanning here is not string aware: a literal ``}`` written inside
+    a quoted value, as in ``content: "}"``, would close a block early and
+    desync the rest of the sheet. That is acceptable because the sheet reaching
+    this point has already been through ``sanitize_css``, which is where
+    anything that could act has gone, so the worst a desync can do is leave a
+    receipt looking wrong. Comments are skipped, because they are common in
+    vendor mail; a quoted brace in a receipt stylesheet is not.
+    """
     out: list[str] = []
     index = 0
     length = len(css)
@@ -530,7 +540,7 @@ def _is_cached(cache_dir: Path, url: str) -> bool:
     return target.is_file() and target.stat().st_size > 0
 
 
-def _looks_like_an_image(blob: bytes) -> bool:
+def looks_like_an_image(blob: bytes) -> bool:
     """True when these first bytes open a PNG, JPEG, GIF or WEBP file."""
     if blob.startswith(IMAGE_SIGNATURES):
         return True
@@ -704,7 +714,7 @@ def fetch_images(html: str, cache_dir: Path) -> int:
         if len(blob) > MAX_IMAGE_BYTES:
             print("clean: image not fetched (over the size cap)", file=sys.stderr)
             continue
-        if not _looks_like_an_image(blob):
+        if not looks_like_an_image(blob):
             print("clean: image not fetched (the answer was not an image)", file=sys.stderr)
             failed.add(url)
             continue
