@@ -109,7 +109,7 @@ def test_the_pipeline_runs_end_to_end(fixture_dir: Path, fixture_data: dict, tmp
     packet_pdf = tmp_path / "packet.pdf"
     pages = render_pdf.render(packet_html, packet_pdf)
     assert pages == 1 + receipt_count
-    assert render_pdf.verify_pages(packet_pdf, pages) is True
+    assert render_pdf.page_count(packet_pdf) == pages
 
     # The folio's own pages land behind its card.
     final_pdf = tmp_path / "final.pdf"

@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+# The two prose rules, defined once for the whole repo. build.py imports them
+# so a packet and the gate can never disagree about what they forbid.
 EM_DASH = "\u2014"  # the character itself never appears in this repo
 DENYLIST_PATH = Path("tests/pii_denylist.sha256")
 SKIP_NAMES = {"uv.lock", "pii_denylist.sha256"}

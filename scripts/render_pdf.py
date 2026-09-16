@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """Render a packet HTML file to a Letter PDF, one receipt per page.
 
-Headless Chromium under print media. Before printing, a small script walks every
-``.rsec`` in the packet, forces a page break either side of it, and scales the
-receipt body down when it is taller than the space one Letter page leaves. The
-result is a PDF with the summary on page one and exactly one receipt per page
-after it.
+Headless Chromium under print media, with page script switched off. Before
+printing, a small script walks every ``.rsec`` in the packet, forces a page
+break either side of it, and scales the receipt body down when it is taller
+than the space one Letter page leaves. The result is a PDF with the summary on
+page one and exactly one receipt per page after it.
+
+The context is created with ``java_script_enabled=False``. That stops anything
+the page itself carries: a handler the cleaner somehow missed cannot fire, and
+markup smuggled through a vendor receipt cannot rewrite an amount on the way to
+the PDF. The fit pass still runs, because ``page.evaluate`` is driven from
+outside the page and is not affected by the flag.
 """
 
 from __future__ import annotations
@@ -73,11 +79,6 @@ def page_count(pdf_path: Path) -> int:
     return len(PdfReader(str(pdf_path)).pages)
 
 
-def verify_pages(pdf_path: Path, expected: int) -> bool:
-    """True when the PDF has exactly the expected number of pages."""
-    return page_count(Path(pdf_path)) == expected
-
-
 def _stamp_title(pdf_path: Path, title: str) -> None:
     """Rewrite the PDF with the given title and no author."""
     raw = Path(pdf_path).read_bytes()
@@ -92,10 +93,16 @@ def _stamp_title(pdf_path: Path, title: str) -> None:
 
 
 def _print_to_pdf(play, url: str, pdf_path: Path) -> None:
-    """Open the packet under print media, fit each receipt, and print to PDF."""
+    """Open the packet under print media, fit each receipt, and print to PDF.
+
+    The context runs with page script off, so nothing the packet carries can
+    execute. The fit pass below is a ``page.evaluate``, which the driver runs
+    regardless, so the layout work is unaffected.
+    """
     browser = play.chromium.launch()
     try:
-        page = browser.new_page(viewport=VIEWPORT)
+        context = browser.new_context(viewport=VIEWPORT, java_script_enabled=False)
+        page = context.new_page()
         page.goto(url, wait_until="load")
         page.emulate_media(media="print")
         page.evaluate(FIT_JS)

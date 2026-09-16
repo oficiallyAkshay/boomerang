@@ -5,6 +5,12 @@ The packet renders one page per receipt. A receipt that arrived as a PDF, such
 as a hotel folio, renders as a short card saying the attachment follows. This
 script inserts the attachment's own pages right after that card page, so the
 folio reads in place instead of living outside the packet.
+
+Every rid is checked against ``build.RID_RE`` and the file it names has to
+resolve to somewhere inside the resolved receipts directory. A rid arrives here
+from a JSON file, which is the same trust as any other input, so a traversal or
+a symlink out of the folder raises rather than splicing a stranger's PDF into
+someone's packet.
 """
 
 from __future__ import annotations
@@ -14,7 +20,19 @@ import json
 import sys
 from pathlib import Path
 
+from build import RID_RE
 from pypdf import PdfReader, PdfWriter
+
+
+def _receipt_pdf(receipts_dir: Path, rid: object) -> Path:
+    """The PDF path for a rid, checked for shape and for containment."""
+    if not isinstance(rid, str) or not RID_RE.match(rid):
+        raise ValueError(f"receipt id is not a valid id: {rid!r}")
+    root = Path(receipts_dir).resolve()
+    resolved = (root / f"{rid}.pdf").resolve()
+    if not resolved.is_relative_to(root):
+        raise ValueError(f"receipt {rid} resolves outside the receipts directory")
+    return resolved
 
 
 def extract_text(pdf_path: Path) -> str:
@@ -41,7 +59,7 @@ def splice(packet_pdf: Path, data: dict, receipts_dir: Path, out_pdf: Path) -> i
 
     offset = 0
     for index, receipt in enumerate(receipts):
-        source = receipts_dir / f"{receipt['rid']}.pdf"
+        source = _receipt_pdf(receipts_dir, receipt.get("rid"))
         if not source.exists():
             continue
         attachment = PdfReader(str(source))
