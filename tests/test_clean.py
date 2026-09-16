@@ -1814,3 +1814,10 @@ def test_the_dir_cli_refuses_to_fetch_without_a_cache(
     code = clean.main(["--dir", str(tmp_path), "--out", str(tmp_path), "--fetch-images"])
     assert code == 2
     assert "needs --images" in capsys.readouterr().err
+
+
+def test_thousands_separators_are_not_money() -> None:
+    """A points balance like 60,000 must not stop a promo block from being stripped."""
+    assert clean.MONEY_RE.findall("earn 60,000 bonus points") == []
+    assert clean.MONEY_RE.findall("Total 214,90 EUR") == ["214,90"]
+    assert clean.MONEY_RE.findall("$1,234.50 charged") == ["1,234.50"]
