@@ -51,13 +51,24 @@ starting, and say plainly which are missing.
 | write-file | The host's file write tool | Shell redirection |
 | run-python | The host's shell or code tool | Required; there is no substitute |
 
+Commands below use the uv form, `uv run python scripts/<name>.py`. On a host
+without uv, run `python scripts/<name>.py` with `playwright` and `pypdf`
+installed; the behaviour is identical. Claude.ai and Cowork cannot download a
+Chromium browser, so there the deliverable is `packet.html`, printed to PDF by
+the user: skip the page-count and splice steps below, and list folio
+attachments as separate files.
+
 Notes on the fallback:
 
 - `gmail_cli.py auth --client-secret PATH` runs the OAuth flow once. The token
   lands at `~/.config/boomerang/token.json` with mode 600.
 - The fallback is the only path that can download attachments. Hotel folios
   usually arrive as PDF attachments, and email connectors cannot fetch them.
-- Install the optional extra first: `uv sync --extra gmail`.
+- The fallback needs a host with a local browser and a loopback port for the
+  OAuth flow: Claude Code, Cursor, or a local OpenClaw or Hermes. Anywhere
+  else, use the host's email connector and ask for the folios as uploads.
+- Prerequisite, done before the run: `uv sync --extra gmail`, or without uv
+  `pip install google-api-python-client google-auth-oauthlib`.
 
 One host behavior matters more than the rest. An unapproved tool call can fail
 silently: the call is declined, nothing is returned, and the session carries on
@@ -87,8 +98,7 @@ Delta, hotel chains, Hotels.com, citizenM, Lime.
 Pad the window one day on each side. Ride receipts arrive six to twenty hours
 after the ride, and the airport legs get missed otherwise.
 
-`fetch.py` builds both passes from the vendor rules and does the padding for
-you:
+`fetch.py` builds both passes from the vendor rules and does the padding:
 
 ```bash
 uv run python scripts/fetch.py --start 2026-03-02 --end 2026-03-06 \
@@ -129,8 +139,9 @@ paid.
 
 Read `policy.md`. Then read `policy.local.md` if it exists, and let its lines
 override the shipped defaults. The local file is gitignored, so it is where a
-user keeps their own or their company's wording. If the two disagree, the local
-file wins, silently.
+user keeps their own or their company's wording. If the two disagree, the
+local file wins; mark the line as a local override in the candidate list. Copy
+`references/policy.local.example.md` to `policy.local.md` at the skill root.
 
 Build the candidate line-item list with the defaults applied. Clean each
 receipt as you go:
@@ -178,8 +189,7 @@ else was in the markup, and building from it puts all of that in the packet.
 The schema is in `references/interfaces.md`. `build.py` validates before it writes,
 and every problem it finds is a real problem. Fix the data, not the validator.
 
-Render the PDF from the HTML. The HTML is the master; the PDF is re-rendered on
-every change.
+The HTML is the master; re-render the PDF from it after every change.
 
 ```bash
 uv run python scripts/render_pdf.py packet.html packet.pdf --expect 12
@@ -187,9 +197,9 @@ uv run python scripts/render_pdf.py packet.html packet.pdf --expect 12
 
 `build.py` prints `pages expected N`, the number to pass to `--expect`, and
 names on stderr any line whose claimed value is not printed on its own
-receipt. Read both, and explain every name in the candidate list: a value
-typed by hand, a netted refund, and a receipt still to come are three
-different answers. `render_pdf.py` exits 2 when `--expect` differs.
+receipt. Read both, and explain every name: a value typed by hand, a netted
+refund, and a receipt still to come are three different answers.
+`render_pdf.py` exits 2 when `--expect` differs.
 
 If any receipt is a PDF attachment, splice its pages in afterwards, so the
 attachment sits behind its card page. The folio is `receipts/<rid>.pdf`:
@@ -213,8 +223,7 @@ new, rebuild, and restate the totals.
 
 ## Questions
 
-Ask nothing up front. Reconstruct the trip, apply the defaults, and show the
-list.
+Ask nothing up front. Reconstruct the trip, apply the defaults, show the list.
 
 **Inferred silently**, with no question asked: who booked the flight and the
 hotel; the trip window; personal days, meaning any day in the window with no
@@ -238,7 +247,8 @@ It catches app-only receipts, a second mailbox, cash tolls, and parking.
 2. A change fee whose cause is unclear.
 3. A stipend the user mentioned that no email confirms.
 
-Anything else, apply the default and show it.
+Raise any of these in the same message as the standing question at step 6,
+never before the list is shown. Anything else, apply the default and show it.
 
 ## Receipt rendering and what gets stripped
 
@@ -269,7 +279,6 @@ monospace block with From, Date and Subject headers above the body.
 On a connector host, you cannot fetch attachments. Ask the user to upload the
 folio, and say why. With the Gmail fallback, `fetch.py` writes attachments
 beside the message as `<rid>.<n>.<ext>`.
-
 Either way, list the receipt in `expense_data.json` with `"kind": "pdf"`.
 `build.py` renders a card saying the attachment is embedded, and `attach_pdf.py`
 splices the real pages in behind it.
