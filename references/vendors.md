@@ -15,6 +15,24 @@ scripts.
 addresses printed inside the receipt, and the vendor's own logos and fonts. No
 value in a receipt is ever recomputed, rounded, or reworded.
 
+## What the cleaner always removes
+
+The list above is about marketing. This one is about capability, and it holds
+whatever the vendor rules say, because a packet must not be able to act. Every
+`<script>` block and stray script tag goes. Every inline handler attribute goes,
+on every tag, anything shaped like `on<word>=`. A `javascript:` or
+`data:text/html` value goes from `href`, `src`, `action`, `data`, `poster`,
+`background` and `formaction`, and `srcset` goes wherever it appears. These
+elements go with everything inside them: iframe, frame, frameset, object,
+embed, applet, form, input, button, textarea, select, base, link, meta, svg,
+math, video, audio, source, track, noscript and template. Inside `<style>`
+blocks and `style=""` attributes, every `@import` rule goes, so does every
+declaration holding `expression(`, `-moz-binding` or `behavior:`, and every
+`url(...)` that is not a data URI becomes `none`. An image keeps its `src` only
+when the scheme is http, https or `data:image/`. The cleaner's docstring in
+`scripts/clean.py` carries the same list, and `tests/test_clean.py` proves each
+line of it with the exact markup a vendor would have to send.
+
 Two mechanical notes. Images are inlined as base64, so a packet renders the
 same offline and in the PDF, with no request going back to the vendor. Vendor
 CSS is scoped to the receipt container, so two vendors sitting on one page do
