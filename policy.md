@@ -31,10 +31,10 @@ else, that basis is named in brackets at the end of it.
 
 ## Flight
 
-- Company paid: base fare out; only necessary charges on the user's card in (checked bag; seat if no free option) (necessary to attend)
+- Company paid: base fare out; only necessary charges on the user's card in (checked bag; seat if no free option) (necessary to attend) (default; override in policy.local.md)
 - User paid: original economy fare in (necessary to attend)
 - Change fees: in when the change served the interview, out when it served the user. Ambiguous cases asked (necessary to attend)
-- Upgrades, cabin changes, Economy Plus, priority boarding: out by default (personal benefit)
+- Upgrades, cabin changes, Economy Plus, priority boarding: out by default (personal benefit) (default; override in policy.local.md)
 
 ## Hotel
 
@@ -57,7 +57,7 @@ else, that basis is named in brackets at the end of it.
 - In on travel days and working days, one per meal slot (necessary to attend)
 - Out when the company provided the meal (recruiter emails mentioning lunch, catering links) (the company did not cause the cost)
 - Duplicates within an hour: keep the first, flag the second (default; override in policy.local.md)
-- Alcohol and groceries flagged, not claimed (personal benefit)
+- Alcohol and groceries flagged, not claimed (personal benefit) (default; override in policy.local.md)
 
 ## Stipend
 
@@ -69,4 +69,4 @@ else, that basis is named in brackets at the end of it.
 
 ## Currency
 
-- Claim the card's posted home-currency amount; the receipt shows the local total. Note the conversion once per line
+- Claim the card's posted home-currency amount; the receipt shows the local total. Note the conversion once per line (default; override in policy.local.md)
