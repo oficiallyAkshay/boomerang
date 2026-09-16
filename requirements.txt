@@ -1,0 +1,9 @@
+# The two runtime dependencies, for hosts that install with pip rather than uv.
+# The Agent Skills specification has no dependency field, so a skill declares
+# its runtime here and says so in SKILL.md: https://agentskills.io/specification
+#
+# These pins are the same two lines as the `dependencies` list in
+# pyproject.toml, and tests/test_doctor.py fails if the two files ever drift.
+# The optional extras, gmail and dev, stay in pyproject.toml.
+playwright==1.49.1
+pypdf==5.1.0

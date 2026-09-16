@@ -29,13 +29,15 @@ It is gitignored, it is read after `policy.md`, and its lines win.
 
 ```bash
 uv sync --all-extras
+uv run python scripts/doctor.py
 uv run playwright install chromium
 uv run pre-commit install
 uv run pytest
 ```
 
-Chrome or Edge on the machine renders the PDF; line two is only for a machine
-with neither. Coverage bar: changed lines at 90 percent or above, CI enforces it.
+Chrome or Edge on the machine renders the PDF; line three is only for a machine
+with neither, and line two says whether this is one of them. Coverage bar:
+changed lines at 90 percent or above, CI enforces it.
 
 ## For agents
 

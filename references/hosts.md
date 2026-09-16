@@ -5,12 +5,32 @@ there. Every row below was checked against the linked page on 2026-09-16. If a
 detail is not on this page, it was not verified, and the "Not verified" list at
 the bottom says so.
 
+## Install in one line
+
+`npx skills add oficiallyAkshay/boomerang` installs this skill into Claude
+Code, Cursor, Codex and about seventy other agents. It is the cross-agent
+installer from Vercel Labs, and it reads a repository whose `SKILL.md` sits at
+the root, which is where boomerang keeps it. `-a claude-code` installs into one
+named agent, `-g` installs for every project rather than the current one, and
+`-y` takes the defaults. Anthropic's documented manual path is the same install
+done by hand: clone the repository, then copy the folder into
+`~/.claude/skills/boomerang/`, or into `.claude/skills/boomerang/` to scope it
+to one project. Either way the runtime is the same afterwards,
+`pip install -r requirements.txt` or `uv sync`, and
+`python scripts/doctor.py` says what is still missing.
+
+The per-host paths below are for the manual path, and for the hosts the
+installer does not reach.
+
+Sources: <https://github.com/vercel-labs/skills> and
+<https://code.claude.com/docs/en/skills>
+
 ## Install locations
 
 | Host | Where the skill folder goes | Scripts | Email and calendar |
 | --- | --- | --- | --- |
 | Claude Code | `~/.claude/skills/boomerang/`, or `.claude/skills/boomerang/` inside a project | Runs them through its shell | Whatever MCP servers the user has configured |
-| Claude.ai and the Claude desktop app | Upload the folder as a zip under Customize, Skills | Anthropic's sandbox, PyPI installs but no browser binary | The account's Gmail connector, if enabled |
+| Claude.ai and the Claude desktop app | A zip of `SKILL.md`, `policy.md`, `requirements.txt`, `LICENSE`, `scripts/`, `references/` and `vendors/`, uploaded under Customize, Skills | Anthropic's sandbox, PyPI installs but no browser binary | The account's Gmail connector, if enabled |
 | Cowork | Not independently confirmed | Not independently confirmed | Not independently confirmed |
 | Codex | `.agents/skills/` from the cwd up to the repo root, plus `$HOME/.agents/skills` and `/etc/codex/skills` | Its exec tool | MCP declared in config only |
 | OpenClaw | `<workspace>/skills`, `.agents/skills`, or `~/.agents/skills` | Its exec tool runs Python | A user-configured MCP server or CLI |
@@ -31,10 +51,11 @@ Sources: <https://code.claude.com/docs/en/agent-sdk/skills> and
 
 ### Claude.ai and the Claude desktop app
 
-Zip the skill folder and upload it under Customize, Skills. The zip must have
-the skill folder itself as its root, and it should contain only what the host
-needs to run: `SKILL.md`, `policy.md`, `scripts/`, `references/`, `vendors/`
-and `LICENSE`. Leave out the tests, the CI workflows, the examples and
+The one-line installer does not reach this host, so zip the skill folder and
+upload it under Customize, Skills. The zip must have the skill folder itself as
+its root, and it should contain only what the host needs to run: `SKILL.md`,
+`policy.md`, `requirements.txt`, `LICENSE`, `scripts/`, `references/` and
+`vendors/`. Leave out the tests, the CI workflows, the examples and
 `pyproject.toml`. The description field is limited to 200 characters, which is
 why boomerang keeps its description under that everywhere.
 
