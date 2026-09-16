@@ -143,10 +143,18 @@ breakdown, the per passenger total and the ticket total, the eTicket number,
 the Wi-Fi reference number and its charge, the method of payment line, and the
 previous ticket value line, which is what settles who paid. Removed from the
 eTicket: the MileagePlus accrual table and its earning notice, the wall of
-legal boilerplate, and the Travel Ready Center promo strip. Removed from the Wi-Fi receipt: the survey block, the additional
-information cross-sell, and the refund boilerplate. Removed from both: the Star
-Alliance footer banner, the privacy and legal footer links, and the hidden
-rows. The baggage allowance table has a pattern here too, and the table stays:
+legal boilerplate, and the Travel Ready Center promo strip. That wall takes two
+patterns. United writes every notice as a heading row and a body row, and the
+pattern that named the headings took only the headings, so the earning
+paragraphs, the international eTicket reminders, the data protection notice,
+the customer care line, the hazardous materials notice, the twenty four hour
+refund rule, the disinsection notice and the changes and cancellations wall
+were all left printed under nothing. The second pattern takes those body rows,
+each anchored on the words it opens with. Removed from the Wi-Fi receipt: the
+survey block, the additional information cross-sell, and the refund
+boilerplate. Removed from both: the Star Alliance footer banner, the privacy
+and legal footer links, the copyright and all rights reserved row, and the
+hidden rows. The baggage allowance table has a pattern here too, and the table stays:
 it prints 0.00 USD twice for the two free bags, those are amounts, and a
 pattern that would take an amount with it is skipped and named on stderr.
 
@@ -166,15 +174,20 @@ buttons; the static map image, whose query string carries the pickup and
 dropoff coordinates; the social link row; the corporate address footer and the
 account and terms link cluster; and the support panels, which are matched at
 the wrapper that holds them, so the need help and forgot something headings and
-their messages go with the buttons instead of being left behind them. Two
+their messages go with the buttons instead of being left behind them. Two more
+rows go with their buttons for the same reason. Defusing the app and PDF links
+left the words switch your payment method and download the receipt in a PDF
+format sitting on a printed page that can do neither, so each of those
+disclaimer rows is now taken whole, and so are the insurance notice and the
+review your trip history row, each at the info table that carries its label and
+its link. Two
 patterns are written and then skipped, so both of their blocks stay. The
 Uber One cashback strip prints the $1.18 it credited, which is a figure on a
 real receipt. The rate and tip module prints the driver's 4.92 rating, which
 is not money but has the shape of money, and the amount guard does not gamble
 on the difference; the module's controls are defused like every other link.
-The rules also carry a pattern for the standalone rate your trip row that the
-shorter Lime and cancelled ride templates use, which this sample does not
-have.
+Every pattern in this folder is proven against the sample sitting beside it,
+so the folder describes markup this repo holds a copy of and nothing else.
 
 Nothing here is rewritten, so this folder carries no `replace` pairs. Uber's
 total row gives the word Total a cell at `width:100%`, and that cell once left
@@ -202,7 +215,11 @@ its quantity and options, the subtotal, the delivery and service fees, the tax,
 every discount and credit row, the order total, the order date and the order
 completed timestamp, both tender rows when a voucher and a card split the bill,
 and the card last four. Removed: the rate and tip block for the courier; the
-app download and Download PDF buttons; the merchant and dish photography, whose
+app download and Download PDF buttons together with the two disclaimer rows
+they sat in, because a defused link leaves its words on a page that cannot act
+on them; the review your order history row, taken at the info table that holds
+its label and its link, while the order completed row beside it stays, since
+that one carries the delivery time; the merchant and dish photography, whose
 paths identify the real merchant; the social link row; the corporate address
 footer and the account and terms link cluster; and the support panel, taken at
 the wrapper that holds it so its heading and its message go with the button.
@@ -230,9 +247,17 @@ points offer and the app download banner, each taken as the whole banner table,
 so the check-in on the go, unlock your room and message the front desk lines go
 with the banner rather than being left behind it; the loyalty tier and points
 balance strip, the Epsilon and Adobe tracking pixels, the hidden preheader, the
-Manage Stay and Go Now buttons, the footer link row, the unsubscribe and programme
-terms block, the copyright and proprietary notice, and the confirmation
-authenticity boilerplate. Known gap: this sample is a points redemption stay,
+Manage Stay and Go Now buttons, the footer link row, and the grey footer table,
+taken whole at the element that holds it. Stripping that footer a line at a
+time used to leave the app cross sell, the Contact Us heading and the auto
+generated message notice standing on a grey block of their own, so the three
+patterns that named the unsubscribe and programme terms block, the copyright
+and proprietary notice and the confirmation authenticity boilerplate are now
+one pattern anchored on the footer's own background colour. The authorization
+hold wall and the redemption information wall go too, each as its heading row
+and the bulleted row beneath it. The rate details and cancellation policy above
+them stays, because it carries the date this booking can still be cancelled by,
+and so does the one line rate guarantee about taxes and fees. Known gap: this sample is a points redemption stay,
 so its total is a points figure and there is no cash amount and no card last
 four anywhere in it. The amount pattern is written so it also reads the
 currency amount a cash rate confirmation puts in the same cells, and the cash
@@ -251,8 +276,12 @@ baggage tag number and its status, the drop off date, the itinerary block with
 its flight number, departure and arrival codes, cities and dates, and the
 passenger line. Removed: the app download banner, the rate this email feedback
 widget, the assistance and report damaged baggage call to action, the preheader
-lines, the service and contact link row, and the corporate footer with the
-registered office, the executive board and the court registration. Known gap:
+lines, and the whole service and contact footer, taken at the one table that
+holds it. The footer used to go a piece at a time, its four links by one
+pattern and its corporate row by another, and what that left behind was a navy
+block carrying a heading over four empty cells. One pattern anchored on the
+footer component now takes the registered office, the executive board, the
+court registration, the link row and the block they sat on. Known gap:
 the sample is a baggage receipt, which is receipt shaped but carries no
 monetary amount at all, so the folder has no amount pattern. Treat it as the
 Lufthansa layout reference; a Lufthansa document that does carry a price puts
