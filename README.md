@@ -1,10 +1,39 @@
-# 🪃 boomerang
+<h1 align="center">🪃 boomerang</h1>
 
-**Your money went out. Bring it back.**
+<p align="center">
+  <b>Your money went out. Bring it back.</b>
+  <br>
+  Turn your inbox into a reimbursement claim.
+</p>
+
+<p align="center">
+  <a href=".github/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/oficiallyAkshay/boomerang/ci.yml?branch=main&logo=githubactions&logoColor=white&label=CI"></a>
+  <img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/license-MIT-2f6f4e?logo=opensourceinitiative&logoColor=white"></a>
+</p>
+
+<p align="center">
+  <sub>Runs on</sub>
+  <br>
+  <a href="references/hosts.md#claude-code"><img alt="Claude Code" src="https://img.shields.io/badge/Claude%20Code-3f3f46?logo=anthropic&logoColor=white"></a>
+  <a href="references/hosts.md#claudeai-and-the-claude-desktop-app"><img alt="Claude.ai" src="https://img.shields.io/badge/Claude.ai-3f3f46?logo=claude&logoColor=white"></a>
+  <a href="references/hosts.md#cursor"><img alt="Cursor" src="https://img.shields.io/badge/Cursor-3f3f46?logo=cursor&logoColor=white"></a>
+  <a href="references/hosts.md#codex"><img alt="Codex" src="https://img.shields.io/badge/Codex-3f3f46"></a>
+  <a href="references/hosts.md#openclaw"><img alt="OpenClaw" src="https://img.shields.io/badge/OpenClaw-3f3f46"></a>
+  <a href="references/hosts.md#hermes"><img alt="Hermes" src="https://img.shields.io/badge/Hermes-3f3f46"></a>
+</p>
 
 You spent your own money on someone else's behalf. An onsite interview, a client trip, a contract gig. Now the receipts are scattered across your personal inbox and a company is waiting on a claim you haven't had time to build.
 
 Boomerang builds it. Every receipt, the right total, one PDF.
+
+| Summary page | Vendor receipt |
+| --- | --- |
+| <img alt="Packet summary table: days, subtotals, stipend and total" src="assets/readme/packet-summary.png"> | <img alt="A Lyft ride receipt as it appears in the packet" src="assets/readme/packet-receipt.png"> |
+
+<p align="center">
+  <sub>The first page and one receipt from the synthetic example in <a href="examples/packet.pdf"><code>examples/packet.pdf</code></a>.</sub>
+</p>
 
 ## What you get
 
@@ -26,6 +55,38 @@ Boomerang builds it. Every receipt, the right total, one PDF.
 
 Full ruleset in [`policy.md`](policy.md).
 
+## How it works
+
+```mermaid
+flowchart TD
+  A["Inbox and calendar"] --> B["Two-pass search"]
+  B --> C["Receipts to disk"]
+  C --> D["Clean: vendor markup, tracking out"]
+  D --> E["Who paid: card fingerprint, eTicket chain"]
+  E --> F["policy.md and policy.local.md"]
+  F --> G["Candidate list, one question"]
+  G --> H["packet.html"]
+  H --> I["packet.pdf"]
+```
+
+## Quick start
+
+1. Copy or symlink this folder into a skills directory, such as
+   `~/.claude/skills/boomerang/`.
+
+2. Install the two dependencies:
+
+   ```sh
+   uv sync                          # or: pip install playwright pypdf
+   playwright install chromium
+   ```
+
+3. Ask the host to build a packet for a trip, for example "build a
+   reimbursement packet for my Austin onsite in June".
+
+Per-host install paths, and the note about uploading a zip on Claude.ai, are in
+[`references/hosts.md`](references/hosts.md).
+
 ## What you need
 
 - Your email connected
@@ -34,5 +95,21 @@ Full ruleset in [`policy.md`](policy.md).
 ## Where it runs
 
 Claude desktop app, Claude.ai, Claude Code, Cowork, Codex, OpenClaw, Hermes. Anywhere that reads a skill folder.
+
+What each host can and cannot run is in [`references/hosts.md`](references/hosts.md).
+
+## Example
+
+[`examples/packet.pdf`](examples/packet.pdf) is a finished packet, and
+[`examples/packet.html`](examples/packet.html) is the page it was printed from.
+Every name, address, card and amount in it is synthetic.
+
+## Contributing
+
+Bug reports, vendor samples and fixes are welcome, and
+[`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md) says what the project takes
+and how to run the checks first.
+
+## License
 
 MIT
