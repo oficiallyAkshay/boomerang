@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-labelledby="flow-title">
+  <title id="flow-title">Inbox and calendar feed receipts of every kind into one PDF packet with the receipts behind the summary</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d97706"></path>
+    </marker>
+    <style>
+      .card { fill: #f8fafc; stroke: #94a3b8; stroke-width: 2; }
+      .glyph { fill: none; stroke: #475569; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+      .title { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #0f172a; font-weight: 600; }
+      .muted { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; fill: #7f8ea3; font-weight: 500; }
+      .flow { fill: none; stroke: #d97706; stroke-width: 2; }
+      .bar { fill: #cbd5e1; }
+    </style>
+  </defs>
+
+  <g>
+    <rect class="card" x="24" y="56" width="180" height="118" rx="14"></rect>
+    <g class="glyph" transform="translate(86, 82)">
+      <rect x="0" y="0" width="56" height="38" rx="5"></rect>
+      <path d="M0,5 L28,24 L56,5"></path>
+    </g>
+    <text class="title" x="114" y="152" font-size="20" text-anchor="middle">Inbox</text>
+  </g>
+
+  <g>
+    <rect class="card" x="24" y="246" width="180" height="118" rx="14"></rect>
+    <g class="glyph" transform="translate(88, 272)">
+      <rect x="0" y="6" width="52" height="38" rx="5"></rect>
+      <path d="M0,18 L52,18"></path>
+      <path d="M14,0 L14,12"></path>
+      <path d="M38,0 L38,12"></path>
+      <path d="M14,28 L14,30"></path>
+      <path d="M26,28 L26,30"></path>
+      <path d="M38,28 L38,30"></path>
+    </g>
+    <text class="title" x="114" y="342" font-size="20" text-anchor="middle">Calendar</text>
+  </g>
+
+  <path class="flow" d="M210,115 C 262,115 300,148 336,190" marker-end="url(#arrow)"></path>
+  <path class="flow" d="M210,305 C 262,305 300,262 336,220" marker-end="url(#arrow)"></path>
+  <text class="muted" x="276" y="100" font-size="16" text-anchor="middle">receipts</text>
+  <text class="muted" x="276" y="338" font-size="16" text-anchor="middle">trip dates</text>
+  <circle cx="352" cy="205" r="6" fill="#d97706"></circle>
+
+  <g>
+    <path class="flow" d="M358,205 C 412,205 430,42 486,42" marker-end="url(#arrow)"></path>
+    <path class="flow" d="M358,205 C 412,205 420,96 472,96" marker-end="url(#arrow)"></path>
+    <path class="flow" d="M358,205 C 404,205 412,150 458,150" marker-end="url(#arrow)"></path>
+    <path class="flow" d="M358,205 C 392,205 400,204 444,204" marker-end="url(#arrow)"></path>
+    <path class="flow" d="M358,205 C 404,205 412,258 458,258" marker-end="url(#arrow)"></path>
+    <path class="flow" d="M358,205 C 412,205 420,312 472,312" marker-end="url(#arrow)"></path>
+    <path class="flow" d="M358,205 C 412,205 430,366 486,366" marker-end="url(#arrow)"></path>
+  </g>
+
+  <g>
+    <g transform="translate(492, 22)">
+      <rect class="card" x="0" y="0" width="210" height="40" rx="10"></rect>
+      <g class="glyph" transform="translate(16, 10)"><rect x="0" y="0" width="16" height="20" rx="3"></rect><path d="M4,7 L12,7"></path><path d="M4,13 L12,13"></path></g>
+      <text class="title" x="48" y="26" font-size="17">Rides</text>
+    </g>
+    <g transform="translate(478, 76)">
+      <rect class="card" x="0" y="0" width="210" height="40" rx="10"></rect>
+      <g class="glyph" transform="translate(16, 10)"><rect x="0" y="0" width="16" height="20" rx="3"></rect><path d="M4,7 L12,7"></path><path d="M4,13 L12,13"></path></g>
+      <text class="title" x="48" y="26" font-size="17">Meals</text>
+    </g>
+    <g transform="translate(464, 130)">
+      <rect class="card" x="0" y="0" width="210" height="40" rx="10"></rect>
+      <g class="glyph" transform="translate(16, 10)"><rect x="0" y="0" width="16" height="20" rx="3"></rect><path d="M4,7 L12,7"></path><path d="M4,13 L12,13"></path></g>
+      <text class="title" x="48" y="26" font-size="17">Flights</text>
+    </g>
+    <g transform="translate(450, 184)">
+      <rect class="card" x="0" y="0" width="210" height="40" rx="10"></rect>
+      <g class="glyph" transform="translate(16, 10)"><rect x="0" y="0" width="16" height="20" rx="3"></rect><path d="M4,7 L12,7"></path><path d="M4,13 L12,13"></path></g>
+      <text class="title" x="48" y="26" font-size="17">Hotels</text>
+    </g>
+    <g transform="translate(464, 238)">
+      <rect class="card" x="0" y="0" width="210" height="40" rx="10"></rect>
+      <g class="glyph" transform="translate(16, 10)"><rect x="0" y="0" width="16" height="20" rx="3"></rect><path d="M4,7 L12,7"></path><path d="M4,13 L12,13"></path></g>
+      <text class="title" x="48" y="26" font-size="17">Transit</text>
+    </g>
+    <g transform="translate(478, 292)">
+      <rect class="card" x="0" y="0" width="210" height="40" rx="10"></rect>
+      <g class="glyph" transform="translate(16, 10)"><rect x="0" y="0" width="16" height="20" rx="3"></rect><path d="M4,7 L12,7"></path><path d="M4,13 L12,13"></path></g>
+      <text class="title" x="48" y="26" font-size="17">Wi-Fi</text>
+    </g>
+    <g transform="translate(492, 346)">
+      <rect class="card" x="0" y="0" width="210" height="40" rx="10"></rect>
+      <g class="glyph" transform="translate(16, 10)"><rect x="0" y="0" width="16" height="20" rx="3"></rect><path d="M4,7 L12,7"></path><path d="M4,13 L12,13"></path></g>
+      <text class="title" x="48" y="26" font-size="17">Folio PDF</text>
+    </g>
+  </g>
+
+  <g>
+    <path class="flow" d="M708,42 C 764,42 782,205 844,205"></path>
+    <path class="flow" d="M694,96 C 758,96 776,205 844,205"></path>
+    <path class="flow" d="M680,150 C 752,150 770,205 844,205"></path>
+    <path class="flow" d="M666,204 C 744,204 766,205 844,205"></path>
+    <path class="flow" d="M680,258 C 752,258 770,205 844,205"></path>
+    <path class="flow" d="M694,312 C 758,312 776,205 844,205"></path>
+    <path class="flow" d="M708,366 C 764,366 782,205 844,205"></path>
+    <circle cx="850" cy="205" r="6" fill="#d97706"></circle>
+    <path class="flow" d="M856,205 L888,205" marker-end="url(#arrow)"></path>
+  </g>
+
+  <g>
+    <rect x="928" y="98" width="212" height="274" rx="10" fill="#eef2f7" stroke="#94a3b8" stroke-width="2"></rect>
+    <rect x="914" y="84" width="212" height="274" rx="10" fill="#f4f7fa" stroke="#94a3b8" stroke-width="2"></rect>
+    <rect x="900" y="70" width="212" height="274" rx="10" fill="#ffffff" stroke="#64748b" stroke-width="2"></rect>
+    <text class="title" x="922" y="112" font-size="20">Summary</text>
+    <path d="M922,126 L1090,126" stroke="#cbd5e1" stroke-width="2"></path>
+    <g class="bar">
+      <rect x="922" y="146" width="96" height="8" rx="4"></rect><rect x="1050" y="146" width="40" height="8" rx="4"></rect>
+      <rect x="922" y="172" width="80" height="8" rx="4"></rect><rect x="1050" y="172" width="40" height="8" rx="4"></rect>
+      <rect x="922" y="198" width="104" height="8" rx="4"></rect><rect x="1050" y="198" width="40" height="8" rx="4"></rect>
+      <rect x="922" y="224" width="72" height="8" rx="4"></rect><rect x="1050" y="224" width="40" height="8" rx="4"></rect>
+      <rect x="922" y="250" width="92" height="8" rx="4"></rect><rect x="1050" y="250" width="40" height="8" rx="4"></rect>
+    </g>
+    <path d="M922,284 L1090,284" stroke="#94a3b8" stroke-width="2"></path>
+    <rect x="922" y="300" width="64" height="10" rx="5" fill="#334155"></rect>
+    <rect x="1042" y="300" width="48" height="10" rx="5" fill="#334155"></rect>
+    <text class="muted" x="1020" y="400" font-size="16" text-anchor="middle">one PDF</text>
+  </g>
+</svg>

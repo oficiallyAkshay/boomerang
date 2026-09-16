@@ -22,37 +22,41 @@
   <a href="references/hosts.md#codex"><img alt="Codex" src="https://img.shields.io/badge/Codex-3f3f46"></a>
   <a href="references/hosts.md#openclaw"><img alt="OpenClaw" src="https://img.shields.io/badge/OpenClaw-3f3f46"></a>
   <a href="references/hosts.md#hermes"><img alt="Hermes" src="https://img.shields.io/badge/Hermes-3f3f46"></a>
+  <br>
+  <sub>Install paths and limits per host: <a href="references/hosts.md">references/hosts.md</a></sub>
+</p>
+
+<p align="center"><img alt="Inbox and calendar feed receipts of every kind into one PDF packet with the receipts behind the summary" src="assets/readme/flow.svg" width="900"></p>
+
+<p align="center">
+  <b><a href="examples/packet.pdf">See the example packet (PDF)</a></b> <b><a href="examples/packet.html">or the HTML master</a></b>
+  <br>
+  <sub>Every name, address, card and amount in it is fully synthetic.</sub>
 </p>
 
 You spent your own money on someone else's behalf. An onsite interview, a client trip, a contract gig. Now the receipts are scattered across your personal inbox and a company is waiting on a claim you haven't had time to build.
 
 Boomerang builds it. Every receipt, the right total, one PDF.
 
-| Summary page | Vendor receipts |
+| Summary page | Receipt pages |
 | --- | --- |
-| <img alt="Packet summary table: the first day and its items, the day subtotal, and the Expenses, Stipend and Total rows" src="assets/readme/packet-summary.png" width="276"> | <img alt="Eight receipts from the packet: Lyft, Uber, Uber Eats, DoorDash, United, Marriott, NJ Transit and Stripe" src="assets/readme/receipts-grid.png" width="520"> |
+| <img alt="Page one of the packet: the trip header, the days with their items and subtotals, and the Expenses, Stipend and Total rows" src="assets/readme/packet-page-1.png" width="232"> | <img alt="Eight receipt pages from the packet: two rides, a meal order, a grocery delivery, a flight eticket, a hotel stay, a bus fare and a software licence, one per page" src="assets/readme/packet-receipt-pages.png" width="465"> |
 
 <p align="center">
-  <sub>A crop of the summary page, and the receipts, from the synthetic example in <a href="examples/packet.pdf"><code>examples/packet.pdf</code></a>.</sub>
+  <sub>Page one and eight receipt pages from the synthetic example in <a href="examples/packet.pdf"><code>examples/packet.pdf</code></a>, each receipt fitted to a Letter page.</sub>
 </p>
 
-## What you get
+## Features
 
-- **Every receipt, found.** Rides that landed in your inbox a day late, airport Wi-Fi, the scooter to the office, the resort fee at checkout. Boomerang searches your whole trip window so nothing gets missed
-- **The right split.** Some things they paid, some things you paid. Boomerang spots the company card, drops the flight and room they covered, and claims the rest
-- **Real receipts, one per page.** Rendered from the vendor's own email, amounts untouched. Lyft looks like Lyft, United looks like United. Nobody has to ask what a line means
-- **One PDF, one table, one number.** Days, subtotals, total. Send it and move on
-
-## What it covers
-
-- Flights, and who paid for them
-- Hotels, resort fees, and desk charges
-- Rides, scooters, transit, tolls, parking
-- Meals on travel and working days
-- Change fees and cancelled trips
-- Personal days added to the trip
-- Stipends and per diems
-- Foreign currency
+- **Every dollar captured.** Flights, hotel nights and resort fees, rides, scooters, transit, tolls and parking, meals on travel and working days. Rides that landed in your inbox a day late, airport Wi-Fi, the scooter to the office, the resort fee at checkout. Boomerang searches your whole trip window so nothing gets missed
+- **The right split, mixed payees.** Some things they paid, some things you paid. Boomerang spots the company card, follows the eTicket chain, counts the flight credit in and the points out, drops the flight and room they covered, and claims the rest
+- **Real receipts.** Rendered from the vendor's own email, markup and amounts untouched, one per page. Lyft looks like Lyft, United looks like United. Nobody has to ask what a line means
+- **Multi-currency.** The claim carries the posted home-currency amount, and the line notes what it was in the local one
+- **Multi-company per trip.** Two onsites inside one trip, with the shared flight and the shared nights split between them
+- **Change fees and cancelled trips.** The fee you ate and the trip that never happened both land in the claim, labelled for the reviewer
+- **Personal days handled.** The days you added for yourself come out, and the airport legs at either end stay in
+- **Stipends and per diems.** Counted by the days you actually worked, and shown as their own rows above the total
+- **Time saved.** One ask, one question back, one PDF. Days, subtotals, total. Send it and move on
 
 Full ruleset in [`policy.md`](policy.md).
 
@@ -86,24 +90,10 @@ command that fixes each thing.
 - Your email connected
 - Your calendar connected (optional, helps find the dates)
 
-## Where it runs
-
-Claude desktop app, Claude.ai, Claude Code, Cowork, Codex, OpenClaw, Hermes. Anywhere that reads a skill folder.
-
-What each host can and cannot run is in [`references/hosts.md`](references/hosts.md).
-
-## Example
-
-[`examples/packet.pdf`](examples/packet.pdf) is a finished packet, and
-[`examples/packet.html`](examples/packet.html) is the page it was printed from.
-Every name, address, card and amount in it is synthetic.
-
-## Contributing
+## Contributing and license
 
 Bug reports, vendor samples and fixes are welcome, and
 [`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md) says what the project takes
 and how to run the checks first.
 
-## License
-
-MIT
+MIT, see [`LICENSE`](LICENSE).
