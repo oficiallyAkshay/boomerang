@@ -32,7 +32,11 @@ def test_a_different_seed_changes_the_amounts(tmp_path: Path) -> None:
 def test_the_fixture_validates_against_the_real_validator(fixture_dir: Path) -> None:
     """One check, and it is the one the builder runs, not a copy of it."""
     data = json.loads((fixture_dir / "expense_data.json").read_text())
-    assert build.validate(data, fixture_dir / "receipts") == []
+    problems = build.validate(data, fixture_dir / "receipts")
+    # These receipts are raw vendor mail, which is what clean.py takes, so the
+    # validator says exactly that, once per HTML receipt, and nothing else.
+    assert all(p.endswith("looks uncleaned, run clean.py first") for p in problems)
+    assert len(problems) == len(list((fixture_dir / "receipts").glob("*.html")))
 
 
 def test_receipt_files_cover_every_kind(fixture_dir: Path) -> None:

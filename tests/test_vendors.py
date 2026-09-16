@@ -36,20 +36,10 @@ FOLDERS = sorted(path.name for path in VENDORS_DIR.iterdir() if (path / "rules.j
 MONEY_RE = re.compile(r"(?:[$£€₹]\s?\d[\d,]*\.\d{2})|(?:\b\d[\d,]*\.\d{2}\s?(?:USD|EUR|GBP|CHF))")
 HANDLER_RE = re.compile(r"\son\w+\s*=", re.I)
 
-# The only amounts any vendor's rules are allowed to take out of a sample, with
-# the module each one sits in. Both are figures the reader does not claim: a
-# loyalty credit inside a promo strip, and the two zero charges in United's
-# free baggage allowance table.
-REMOVED_AMOUNTS = {
-    ("uber", "sample.html"): {"$1.18": 1},  # Uber One credits earned, promo strip
-    ("uber-eats", "sample.html"): {"$14.55": 1},  # Uber One savings, promo strip
-    ("united", "sample.html"): {"0.00 USD": 2},  # baggage allowance table, free bags
-}
-
 # A From header and a subject line per folder, in the shape that vendor sends.
-# The expected name is the folder, except where two folders honestly share a
-# sender domain: Uber Eats mail comes from uber.com like Uber ride mail, so the
-# domain pass resolves it to uber and only the subject separates the two.
+# Every one of them resolves to its own folder, including the two that share a
+# sender domain: Uber Eats mail comes from uber.com like Uber ride mail, and
+# the subject line is what tells the detection which of the two it is.
 SENDERS = {
     "airlines": ("Delta <receipts@delta.com>", "Your flight receipt", "airlines"),
     "doordash": (
@@ -79,7 +69,7 @@ SENDERS = {
     "uber-eats": (
         "Uber Eats <noreply@uber.com>",
         "Your Friday evening order with Uber Eats",
-        "uber",
+        "uber-eats",
     ),
     "united": (
         "United Airlines <Receipts@united.com>",
@@ -211,11 +201,18 @@ def test_the_two_search_folders_read_no_values(rules: dict) -> None:
 
 @pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
 def test_cleaning_the_sample_keeps_the_money(folder: str, rules: dict) -> None:
+    """Every money string in a sample is still there after the clean.
+
+    No vendor gets an allowance. Where a module a rules.json would rather
+    remove prints an amount of its own, the amount guard skips that pattern
+    and the module stays: Uber's Uber One credit, Uber Eats' Uber One saving
+    and United's two free bags at 0.00 USD are all still in the fragment,
+    and each folder's notes say so.
+    """
     for name, raw in samples_for(folder).items():
-        expected = collections.Counter(REMOVED_AMOUNTS.get((folder, name), {}))
         before = collections.Counter(MONEY_RE.findall(raw))
         after = collections.Counter(MONEY_RE.findall(clean.clean_html(raw, rules[folder])))
-        assert before - after == expected, f"{folder}/{name} lost {before - after}"
+        assert not before - after, f"{folder}/{name} lost {before - after}"
         assert not after - before
 
 
@@ -253,6 +250,18 @@ def test_uber_eats_is_told_from_an_uber_ride_by_its_subject(rules: dict) -> None
     ride = SENDERS["uber"][1]
     assert clean.detect_vendor("someone@example.org", eats, rules) == "uber-eats"
     assert clean.detect_vendor("someone@example.org", ride, rules) == "uber"
+
+
+def test_the_shared_uber_domain_is_split_by_the_subject(rules: dict) -> None:
+    """A vendor the domain and the subject both name beats one named by domain alone."""
+    sender = "Uber <noreply@uber.com>"
+    assert clean.detect_vendor(sender, SENDERS["uber-eats"][1], rules) == "uber-eats"
+    assert clean.detect_vendor(sender, SENDERS["uber"][1], rules) == "uber"
+
+
+def test_a_shared_domain_with_a_subject_neither_claims_falls_to_the_first(rules: dict) -> None:
+    """With nothing in the subject to go on, the domain still answers."""
+    assert clean.detect_vendor("noreply@uber.com", "A message about nothing", rules) == "uber"
 
 
 def test_the_plaintext_catch_all_wins_for_a_domainless_hotel_text(rules: dict) -> None:

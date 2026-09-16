@@ -59,7 +59,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shutil
 import subprocess
 import sys
@@ -393,31 +392,21 @@ def run(name: str, *args: str) -> str:
     return done.stdout
 
 
-def subject_fits(rule: dict, subject: str) -> bool:
-    return any(re.search(pattern, subject, re.I) for pattern in rule["subject_patterns"])
+def detect(receipts: Path, key: str) -> str | None:
+    """The vendor a receipt's own headers resolve to.
 
-
-def detect(receipts: Path, key: str) -> tuple[str | None, str]:
-    """The vendor a receipt's own headers resolve to, and how.
-
-    ``detect_vendor`` answers by sender domain first, which is right almost
-    always and wrong in one honest case: Uber and Uber Eats send from the same
-    domain, so an Eats order resolves to the ride rules. When the domain
-    answer's own subject patterns do not fit the subject and another folder's
-    do, this takes the subject answer and says so, which is the judgment call
-    step 5 of SKILL.md leaves to the reader.
+    Nothing is overridden here. ``detect_vendor`` reads the saved From and
+    Subject the same way the cleaner does when it is given no ``--vendor``,
+    including the one case that used to need a hand: Uber and Uber Eats send
+    from the same domain, and the detection prefers the folder whose subject
+    patterns fit as well as its domain.
     """
     sys.path.insert(0, str(SCRIPTS))
     import clean
 
     rules = clean.load_vendor_rules(VENDORS)
     meta = json.loads((receipts / f"{RIDS[key]}.meta.json").read_text(encoding="utf-8"))
-    subject = meta["subject"]
-    found = clean.detect_vendor(meta["from"], subject, rules)
-    by_subject = clean.detect_vendor("", subject, rules)
-    if found and by_subject and by_subject != found and not subject_fits(rules[found], subject):
-        return by_subject, f"{found} by domain, {by_subject} by subject"
-    return found, str(found)
+    return clean.detect_vendor(meta["from"], meta["subject"], rules)
 
 
 def clean_receipts(receipts: Path, cleaned: Path, cache: Path, fetch: bool) -> list[str]:
@@ -435,7 +424,7 @@ def clean_receipts(receipts: Path, cleaned: Path, cache: Path, fetch: bool) -> l
         if source.suffix != ".html":
             shutil.copyfile(source, cleaned / source.name)
             continue
-        vendor, how = detect(receipts, key)
+        vendor = detect(receipts, key)
         args = [
             str(source),
             "--out",
@@ -450,7 +439,7 @@ def clean_receipts(receipts: Path, cleaned: Path, cache: Path, fetch: bool) -> l
         if fetch:
             args.append("--fetch-images")
         run("clean", *args)
-        lines.append(f"{key} -> {how}")
+        lines.append(f"{key} -> {vendor}")
     return lines
 
 

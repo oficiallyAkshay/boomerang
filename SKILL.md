@@ -96,8 +96,12 @@ uv run python scripts/fetch.py --start 2026-06-11 --end 2026-06-16 \
 
 ### 3. Fetch one receipt at a time, to disk
 
-`fetch.py` writes each message as `<rid>.html`, `<rid>.txt` and
-`<rid>.meta.json`, one message at a time, and skips anything already on disk.
+`fetch.py` writes each message as `<rid>.html`, `<rid>.txt`, `<rid>.meta.json`
+and, for the first PDF attachment, `<rid>.pdf`, one message at a time, and
+skips anything already on disk. `fetch_all` returns four lists: written,
+rejected, skipped and failed. Say the failed list out loud: those messages
+were never fetched, and a packet built without them is short a receipt nobody
+has been told about.
 
 Read values from the plaintext body. Open one full HTML per vendor, to learn
 that vendor's layout, and no more. A single vendor email is 60 to 125 KB of
@@ -140,6 +144,15 @@ the cleaned fragment, so the tracking pixels the cleaner just removed are never
 requested. `.image-cache` is the gitignored name; the cache is a working
 directory, not part of the packet.
 
+The cleaner reads the vendor from the `<rid>.meta.json` saved beside the
+message and prints the one it chose, so `--vendor` is for correcting it, and
+`--vendor generic` forces the generic clean.
+
+Put the arithmetic in the data, not in your head. A refunded line carries
+`amt` and `refund`, a stipend carries `rate` and `days`, a line paid abroad
+carries `local_amt` and `local_currency`, and `build.py` does the sum. Give
+every meal line an `at`, so two meals from one slot are caught.
+
 ### 6. Show the candidate list, then correct it
 
 Print the full candidate list before you build anything: every day, every line,
@@ -171,11 +184,14 @@ every change.
 uv run python scripts/render_pdf.py packet.html packet.pdf --expect 12
 ```
 
-It prints the page count. `--expect N` is the page count check: one summary
-page plus one page per receipt. It exits 2 when the count differs.
+`build.py` prints `pages expected N`, the number to pass to `--expect`, and
+names on stderr any line whose claimed value is not printed on its own
+receipt. Read both, and explain every name in the candidate list: a value
+typed by hand, a netted refund, and a receipt still to come are three
+different answers. `render_pdf.py` exits 2 when `--expect` differs.
 
 If any receipt is a PDF attachment, splice its pages in afterwards, so the
-attachment sits right behind its card page:
+attachment sits behind its card page. The folio is `receipts/<rid>.pdf`:
 
 ```bash
 uv run python scripts/attach_pdf.py packet.pdf expense_data.json \

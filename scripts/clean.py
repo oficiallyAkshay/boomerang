@@ -17,8 +17,12 @@ What ``clean_html`` always removes, whatever the vendor rules say:
   math, video, audio, source, track, noscript and template.
 - In ``<style>`` blocks and in ``style=""`` attributes: every ``@import`` rule,
   every declaration holding ``expression(``, ``-moz-binding`` or ``behavior:``,
-  and every ``url(...)`` whose scheme is not ``data:``, which becomes ``none``.
+  every ``page-break-*`` and ``break-*`` declaration, and every ``url(...)``
+  whose scheme is not ``data:``, which becomes ``none``.
 - An image ``src`` that is not http, https or ``data:image/``.
+- Any ``<style`` or ``</style`` token left over once the complete style blocks
+  have been taken out, so a message truncated in the middle of a stylesheet
+  cannot swallow the text that follows it.
 
 Three choices are worth stating plainly, because whoever reads a packet should
 know what was done to the page in front of them.
@@ -38,7 +42,16 @@ know what was done to the page in front of them.
 3. CSS. Style blocks are kept, not dropped, so the receipt still looks like the
    receipt. Every rule is sanitised, then scoped to the ``.rc`` receipt
    container, so one vendor's stylesheet cannot reach another vendor's receipt
-   on the same page.
+   on the same page. Page break declarations are the one exception: a receipt
+   that split across two pages would break the packet's one page per receipt
+   arithmetic, so they go.
+4. Amounts. A vendor ``strip_regex`` is applied on its own and kept only when
+   the fragment still prints as many money strings as before. A pattern that
+   would take an amount with it is skipped and named on stderr, because a
+   promo row that shares a table row with the total is a bad reason to lose
+   the total. The count reads the text a reader would see and not the markup
+   around it, because a style attribute is full of decimals
+   (``line-height:1.25rem``) and none of them is an amount.
 
 Stdlib only. Regex over the markup, deliberately: these are email tables, the
 input is one saved message at a time, and a parser dependency buys nothing here.
@@ -56,12 +69,15 @@ import mimetypes
 import re
 import socket
 import sys
+from email.utils import parseaddr
 from pathlib import Path
 from urllib.error import URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
 SCOPE = ".rc"
+# The name for no vendor rules at all, on the CLI and in what it prints.
+GENERIC = "generic"
 FETCH_TIMEOUT = 10
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
@@ -92,6 +108,10 @@ COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 SCRIPT_RE = re.compile(r"<script\b.*?</script\s*>", re.S | re.I)
 LONE_SCRIPT_RE = re.compile(r"</?script\b[^>]*>", re.I)
 STYLE_RE = re.compile(r"<style\b[^>]*>(.*?)</style\s*>", re.S | re.I)
+# What is left once the complete blocks are out: an opener with no closer
+# takes the CSS that follows it, up to the next tag, and the bare tokens go.
+ORPHAN_STYLE_RE = re.compile(r"<style\b[^>]*>([^<]*)", re.I)
+LONE_STYLE_RE = re.compile(r"</?style\b[^>]*>?", re.I)
 HEAD_RE = re.compile(r"<head\b[^>]*>.*?</head\s*>", re.S | re.I)
 BODY_RE = re.compile(r"<body\b[^>]*>(.*)</body\s*>", re.S | re.I)
 DOCTYPE_RE = re.compile(r"<!doctype[^>]*>", re.I)
@@ -161,6 +181,16 @@ CSS_BANNED_DECL_RE = re.compile(
     r"[^;{}]*(?:expression\s*\(|-moz-binding|behavior\s*:)[^;{}]*;?", re.I
 )
 CSS_URL_RE = re.compile(r"""url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)""", re.I)
+# page-break-before and friends, and the modern break-before spelling. The
+# lookbehind keeps word-break and line-break out of it.
+CSS_BREAK_DECL_RE = re.compile(r"[^;{}]*(?<![-\w])(?:page-)?break-[-\w]+\s*:[^;{}]*;?", re.I)
+
+# A money string as a receipt prints one. Counted before and after each
+# vendor strip pattern, never parsed.
+MONEY_RE = re.compile(r"\d+\.\d{2}")
+# Everything between angle brackets, taken out before the counting so that the
+# decimals CSS is made of are never mistaken for money.
+MARKUP_RE = re.compile(r"<[^>]*>")
 
 
 # ------------------------------------------------------------------ attributes
@@ -300,14 +330,17 @@ def _defuse_tags(html: str) -> str:
 def sanitize_css(css: str) -> str:
     """Drop what CSS can use to fetch or run, keep what makes a receipt look right.
 
-    Three removals and one rewrite. ``@import`` rules go, because they pull a
+    Four removals and one rewrite. ``@import`` rules go, because they pull a
     second stylesheet. Declarations holding ``expression(``, ``-moz-binding``
-    or ``behavior:`` go, because each of those runs code in some browser. Every
-    other ``url(...)`` becomes ``none`` unless it is a data URI, so no rule can
-    reach the network. Everything else is left exactly as the vendor wrote it.
+    or ``behavior:`` go, because each of those runs code in some browser. Page
+    break declarations go, because the packet gives each receipt one page and
+    counts on getting it. Every other ``url(...)`` becomes ``none`` unless it
+    is a data URI, so no rule can reach the network. Everything else is left
+    exactly as the vendor wrote it.
     """
     css = CSS_IMPORT_RE.sub("", css)
     css = CSS_BANNED_DECL_RE.sub("", css)
+    css = CSS_BREAK_DECL_RE.sub("", css)
 
     def rewrite(found: re.Match[str]) -> str:
         value = next(group for group in found.groups() if group is not None)
@@ -542,11 +575,36 @@ def load_vendor_rules(vendors_dir: Path) -> dict[str, dict]:
 
 
 def _sender_domain(from_addr: str) -> str:
-    """The domain part of a From header, however it is wrapped."""
-    text = (from_addr or "").strip().rstrip(">")
-    if "@" not in text:
+    """The domain part of a From header, however it is wrapped.
+
+    ``parseaddr`` does the unwrapping, so a display name, angle brackets and a
+    trailing comment all fall away. A header carrying two addresses parses as
+    nothing at all, so the first one is then read on its own: the vendor is
+    whoever sent the message, never whoever was added after the comma.
+    """
+    header = from_addr or ""
+    address = parseaddr(header)[1]
+    if "@" not in address:
+        address = parseaddr(header.split(",")[0])[1]
+    if "@" not in address:
         return ""
-    return text.rsplit("@", 1)[1].strip().strip("<>\"' ").lower()
+    return address.rsplit("@", 1)[1].strip().lower()
+
+
+def _domain_fits(rule: dict, domain: str) -> bool:
+    """True when a vendor claims this sender domain, or a parent of it."""
+    for raw in rule.get("sender_domains") or []:
+        candidate = raw.strip().lower().lstrip("@")
+        if candidate and (domain == candidate or domain.endswith("." + candidate)):
+            return True
+    return False
+
+
+def _subject_fits(rule: dict, subject: str) -> bool:
+    """True when any of a vendor's subject patterns matches this subject."""
+    return any(
+        re.search(pattern, subject or "", re.I) for pattern in rule.get("subject_patterns") or []
+    )
 
 
 def detect_vendor(from_addr: str, subject: str, rules: dict) -> str | None:
@@ -554,23 +612,111 @@ def detect_vendor(from_addr: str, subject: str, rules: dict) -> str | None:
 
     Vendors with sender domains are tried first and catch alls last, then by
     name, so a subject that two vendors both claim goes to the specific one.
+
+    Among the vendors that claim the sender domain, one whose subject patterns
+    also fit wins over one that matches by domain alone. Uber rides and Uber
+    Eats both send from uber.com and the subject line is the only thing that
+    tells an order from a trip, so the domain cannot be the last word.
     """
     domain = _sender_domain(from_addr)
     order = sorted(rules, key=lambda name: (not (rules[name].get("sender_domains") or []), name))
-    if domain:
-        for name in order:
-            for raw in rules[name].get("sender_domains") or []:
-                candidate = raw.strip().lower().lstrip("@")
-                if candidate and (domain == candidate or domain.endswith("." + candidate)):
-                    return name
+    claimed = [name for name in order if domain and _domain_fits(rules[name], domain)]
+    for name in claimed:
+        if _subject_fits(rules[name], subject):
+            return name
+    if claimed:
+        return claimed[0]
     for name in order:
-        for pattern in rules[name].get("subject_patterns") or []:
-            if re.search(pattern, subject or "", re.I):
-                return name
+        if _subject_fits(rules[name], subject):
+            return name
     return None
 
 
+def read_meta(source: Path) -> dict:
+    """The From and Subject fetch saved beside a receipt, or an empty dict.
+
+    ``fetch.py`` writes ``<rid>.meta.json`` next to ``<rid>.html``. A file that
+    is missing, unreadable or not an object leaves the cleaner where it would
+    have been without it, on the generic rules.
+    """
+    path = Path(source).with_suffix(".meta.json")
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def detect_from_meta(source: Path, vendors_dir: Path) -> tuple[str, dict | None]:
+    """The vendor named by a receipt's saved headers, and its rules.
+
+    Returns ``("generic", None)`` when there are no headers to read, when the
+    headers name nobody the rules know, or when there are no rules at all.
+    """
+    meta = read_meta(source)
+    if not meta:
+        return GENERIC, None
+    available = load_vendor_rules(vendors_dir)
+    name = detect_vendor(str(meta.get("from") or ""), str(meta.get("subject") or ""), available)
+    if name is None:
+        return GENERIC, None
+    return name, available[name]
+
+
 # ---------------------------------------------------------------------- clean
+
+
+def _printed_amounts(fragment: str) -> int:
+    """How many money strings a fragment prints, reading its text only.
+
+    The tags come out before the counting. A receipt's markup carries decimals
+    that are not money and never were: ``line-height:1.25rem``,
+    ``letter-spacing:0.15px``, ``width:33.33%``. Counting those would make the
+    guard refuse to strip a promo module over a font size, so the count reads
+    what a reader would see printed on the page and nothing else.
+    """
+    return len(MONEY_RE.findall(MARKUP_RE.sub(" ", fragment)))
+
+
+def _apply_strip_patterns(body: str, rules: dict) -> str:
+    """Apply a vendor's strip patterns, one at a time, keeping every amount.
+
+    A pattern is kept only when the fragment still prints as many money
+    strings as it did before. Vendor rows are written by the vendor, and a
+    promo that shares a table row with the total is common enough that a
+    pattern which takes the total with it has to lose rather than the total.
+    """
+    patterns = rules.get("strip_regex") or []
+    vendor = str(rules.get("name") or "generic")
+    kept = _printed_amounts(body)
+    for index, pattern in enumerate(patterns):
+        candidate = re.sub(pattern, "", body, flags=re.S | re.I)
+        found = _printed_amounts(candidate)
+        if found < kept:
+            print(
+                f"clean: {vendor} strip pattern {index} skipped, "
+                "it would have taken an amount with it",
+                file=sys.stderr,
+            )
+            continue
+        body = candidate
+        kept = found
+    return body
+
+
+def _take_styles(body: str) -> tuple[str, str]:
+    """The fragment with every style block out of it, and the CSS that was in them.
+
+    Complete blocks first. What is left is an opener with no closer, which a
+    browser reads as a stylesheet running to the end of the document: the CSS
+    up to the next tag is taken as CSS, the tokens themselves go, and the
+    markup after them stays in the receipt instead of vanishing into a style.
+    """
+    styles = "".join(STYLE_RE.findall(body))
+    body = STYLE_RE.sub("", body)
+    styles += "".join(ORPHAN_STYLE_RE.findall(body))
+    body = ORPHAN_STYLE_RE.sub("", body)
+    return LONE_STYLE_RE.sub("", body), styles
 
 
 def clean_html(raw: str, rules: dict | None = None, image_cache: Path | None = None) -> str:
@@ -579,8 +725,7 @@ def clean_html(raw: str, rules: dict | None = None, image_cache: Path | None = N
     body = raw or ""
 
     body = COMMENT_RE.sub("", body)
-    styles = "".join(STYLE_RE.findall(body))
-    body = STYLE_RE.sub("", body)
+    body, styles = _take_styles(body)
     body = SCRIPT_RE.sub("", body)
     body = LONE_SCRIPT_RE.sub("", body)
     body = HEAD_RE.sub("", body)
@@ -593,8 +738,7 @@ def clean_html(raw: str, rules: dict | None = None, image_cache: Path | None = N
     body = _strip_elements(body)
     body = IMG_RE.sub(lambda m: "" if _is_tracking_pixel(m.group(0)) else m.group(0), body)
 
-    for pattern in rules.get("strip_regex") or []:
-        body = re.sub(pattern, "", body, flags=re.S)
+    body = _apply_strip_patterns(body, rules)
 
     unwrap = rules.get("unwrap_links_matching") or []
     if unwrap:
@@ -618,7 +762,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Clean a vendor receipt email for a packet.")
     parser.add_argument("source", type=Path, help="the saved receipt HTML")
     parser.add_argument("--out", type=Path, required=True, help="where to write the fragment")
-    parser.add_argument("--vendor", help="vendor name, for vendor specific rules")
+    parser.add_argument(
+        "--vendor",
+        help="vendor name, or generic to force the generic clean; "
+        "read from the saved headers when it is not given",
+    )
     parser.add_argument("--vendors", type=Path, default=Path("vendors"), help="rules directory")
     parser.add_argument("--images", type=Path, help="image cache directory")
     parser.add_argument(
@@ -629,12 +777,17 @@ def main(argv: list[str] | None = None) -> int:
     raw = args.source.read_text(encoding="utf-8", errors="replace")
 
     rules = None
-    if args.vendor:
+    if args.vendor == GENERIC:
+        print(f"clean: vendor {GENERIC}", file=sys.stderr)
+    elif args.vendor:
         available = load_vendor_rules(args.vendors)
         if args.vendor not in available:
             print(f"clean: no rules for vendor {args.vendor}", file=sys.stderr)
             return 2
         rules = available[args.vendor]
+    else:
+        name, rules = detect_from_meta(args.source, args.vendors)
+        print(f"clean: vendor {name}", file=sys.stderr)
 
     if args.fetch_images and args.images is None:
         print("clean: --fetch-images needs --images DIR", file=sys.stderr)
