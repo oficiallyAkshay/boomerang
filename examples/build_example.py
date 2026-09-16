@@ -30,19 +30,24 @@ The claim is built the way the skill says to build it.
   nights are the nights the other receipts put the traveller in town. The room
   charge is claimed on the check-out day, which is the day the folio is issued
   and the last day of the window.
-- Four receipts are in the packet with no line beside them, because they show a
-  charge nobody can claim: the United eTicket was paid with the value of a
-  previous ticket, the Lufthansa receipt is a baggage drop-off with no amount
-  on it, the Marriott confirmation is a points redemption with no cash figure,
-  and the citizenM mail is a pointer to an invoice rather than the invoice.
+- Five receipts are in the packet with no line beside them. Four show a charge
+  nobody can claim: the United eTicket was paid with the value of a previous
+  ticket, the Lufthansa receipt is a baggage drop-off with no amount on it, the
+  Marriott confirmation is a points redemption with no cash figure, and the
+  citizenM mail is a pointer to an invoice rather than the invoice. The fifth
+  is the DoorDash order, which is groceries, and policy.md flags groceries
+  rather than claiming them. It stays in the packet because a flagged line
+  still has to be shown: the reviewer sees what was bought and sees that the
+  packet is not asking to be paid for it.
 
 Running it
 ----------
 
 ``python examples/build_example.py`` rebuilds the example in place: it copies
 the receipts, writes the expense data, downloads any vendor images the cache is
-missing, prunes the cache back under its size cap, and then runs clean, cards,
-build, render_pdf and attach_pdf exactly as SKILL.md documents them.
+missing, prunes the cache back under its size cap, cleans the whole directory
+through ``clean_dir``, and then runs cards, build, render_pdf and attach_pdf
+exactly as SKILL.md documents them.
 
 ``python examples/build_example.py --check`` rebuilds into a temporary
 directory with the network switched off, inlining only what the committed cache
@@ -259,7 +264,7 @@ TITLES = {
     "united_eticket": "eTicket, AUS to SEA, paid with previous ticket value",
     "uber_ride": "Ride, home to airport",
     "united_wifi": "Inflight Wi-Fi",
-    "doordash": "Groceries delivered to the hotel",
+    "doordash": "Groceries delivered to the hotel, flagged not claimed",
     "marriott": "Stay confirmation, points redemption",
     "citizenm": "Invoice notice from the property",
     "folio": f"Folio, {len(FOLIO_NIGHTS)} nights",
@@ -293,8 +298,6 @@ VENDOR_LABELS = {
 # pattern, or the message header for the two that print no date at all.
 #   uber_ride    34.86  the charged total          Jun 11, date_regex
 #   stripe       54.11  the amount paid            Jun 11, date_regex
-#   doordash     50.91  54.91 charged, less the 4.00 Dasher tip, tips out
-#                                                  Jun 11, message header
 #   uber_eats    73.60  88.60 ordered, less the 15.00 voucher, card tender
 #                                                  Jun 12, date_regex
 #   transit       6.71  the figure on the photographed pass
@@ -312,7 +315,6 @@ DAYS = [
         "items": [
             ("Ride, home to airport", 34.86, "uber_ride"),
             ("Software licence for the onsite", 54.11, "stripe"),
-            ("Groceries to the hotel, tip out, dated by the message header", 50.91, "doordash"),
         ],
     },
     {

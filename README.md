@@ -30,10 +30,10 @@ Boomerang builds it. Every receipt, the right total, one PDF.
 
 | Summary page | Vendor receipts |
 | --- | --- |
-| <img alt="Packet summary table: days, subtotals, stipend and total" src="assets/readme/packet-summary.png" width="252"> | <img alt="Eight receipts from the packet: Lyft, Uber, Uber Eats, DoorDash, United, Marriott, NJ Transit and Stripe" src="assets/readme/receipts-grid.png" width="520"> |
+| <img alt="Packet summary table: the first day and its items, the day subtotal, and the Expenses, Stipend and Total rows" src="assets/readme/packet-summary.png" width="276"> | <img alt="Eight receipts from the packet: Lyft, Uber, Uber Eats, DoorDash, United, Marriott, NJ Transit and Stripe" src="assets/readme/receipts-grid.png" width="520"> |
 
 <p align="center">
-  <sub>The first page and the receipts from the synthetic example in <a href="examples/packet.pdf"><code>examples/packet.pdf</code></a>.</sub>
+  <sub>A crop of the summary page, and the receipts, from the synthetic example in <a href="examples/packet.pdf"><code>examples/packet.pdf</code></a>.</sub>
 </p>
 
 ## What you get
