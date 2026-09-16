@@ -29,10 +29,6 @@
     {
       "subject_pattern": "^(?:\\[Personal\\]\\s*)?Your .*(?:day (?:morning|afternoon|evening|night) )?order with Uber Eats",
       "kind": "receipt"
-    },
-    {
-      "subject_pattern": "^Your Uber Eats (?:receipt|order)",
-      "kind": "receipt"
     }
   ],
   "tenders": [

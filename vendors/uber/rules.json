@@ -31,18 +31,6 @@
     {
       "subject_pattern": "^(?:\\[Personal\\]\\s*)?Your .*(?:day (?:morning|afternoon|evening|night) )?trip with Uber",
       "kind": "receipt"
-    },
-    {
-      "subject_pattern": "^Your Uber (?:receipt|trip)",
-      "kind": "receipt"
-    },
-    {
-      "subject_pattern": "^Uber: Your receipt$",
-      "kind": "receipt"
-    },
-    {
-      "subject_pattern": "^Here'?s your (?:trip|ride) receipt",
-      "kind": "receipt"
     }
   ],
   "tenders": [

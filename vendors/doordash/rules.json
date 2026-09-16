@@ -28,18 +28,6 @@
       "subject_pattern": "^Final receipt for .+ from ",
       "kind": "update",
       "supersedes": "^Your .* order(?: confirmation)?$"
-    },
-    {
-      "subject_pattern": "^Your .* order(?: confirmation)?$",
-      "kind": "confirmation"
-    },
-    {
-      "subject_pattern": "^Order (?:receipt|confirmation)",
-      "kind": "confirmation"
-    },
-    {
-      "subject_pattern": "^Thanks for your order",
-      "kind": "confirmation"
     }
   ],
   "tenders": [

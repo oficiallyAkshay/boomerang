@@ -33,14 +33,6 @@
     {
       "subject_pattern": "^Your ride with ",
       "kind": "receipt"
-    },
-    {
-      "subject_pattern": "^Receipt for your cancelled ride$",
-      "kind": "receipt"
-    },
-    {
-      "subject_pattern": "^Your Lyft ride receipt",
-      "kind": "receipt"
     }
   ],
   "tenders": [

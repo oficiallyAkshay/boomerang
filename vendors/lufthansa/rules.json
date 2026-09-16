@@ -26,10 +26,6 @@
     {
       "subject_pattern": "^Your baggage receipt \\d{10} for ",
       "kind": "receipt"
-    },
-    {
-      "subject_pattern": "^Your (?:booking|ticket) confirmation",
-      "kind": "confirmation"
     }
   ],
   "missing": [
