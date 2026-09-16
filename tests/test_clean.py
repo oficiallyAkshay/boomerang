@@ -19,7 +19,7 @@ import json
 import re
 import shutil
 from pathlib import Path
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import clean
 import pytest
@@ -28,6 +28,11 @@ VENDORS_DIR = Path(__file__).resolve().parents[1] / "vendors"
 # The folders this file reaches into. Every folder, sample or no sample, is
 # covered by tests/test_vendors.py.
 VENDOR_NAMES = ["doordash", "lyft", "plaintext", "uber", "united"]
+
+# The eight bytes that open a PNG, and a body behind them. A fetch keeps what
+# it downloads only when the answer starts like a picture, so the tests that
+# download something hand it one of these rather than a line of prose.
+PNG = b"\x89PNG\r\n\x1a\npretend pixels"
 
 
 def sample_path(vendor: str) -> Path:
@@ -606,12 +611,12 @@ def test_every_strip_pattern_compiles(vendor: str, rules: dict) -> None:
 def test_strip_patterns_run_case_insensitively(rules: dict) -> None:
     """Vendors shout their markup sometimes, and the pattern is written lower case.
 
-    The Lyft rules name the footer help buttons in the case Lyft normally
-    sends them. This is the same row in capitals, which has to go the same way.
+    The Lyft rules name the tip line in the case Lyft normally sends it. This
+    is the same line in capitals, which has to go the same way.
     """
-    raw = "<TABLE><TR><TD><A>TIP DRIVER</A></TD></TR><TR><TD>Fare</TD></TR></TABLE>"
+    raw = "<TABLE><TR><TD>100% OF TIPS GO TO DRIVERS.</TD></TR><TR><TD>Fare</TD></TR></TABLE>"
     out = clean.clean_html(raw, rules["lyft"])
-    assert "TIP DRIVER" not in out
+    assert "TIPS GO TO DRIVERS" not in out
     assert "Fare" in out
 
 
@@ -781,15 +786,130 @@ def test_fetch_images_downloads_into_the_cache(
         assert timeout == clean.FETCH_TIMEOUT
         if url == broken:
             raise OSError("no route")
-        return _FakeResponse(b"" if url == blank else b"new bytes")
+        return _FakeResponse(b"" if url == blank else PNG)
 
     monkeypatch.setattr(clean, "urlopen", fake_urlopen)
     html = "".join(f'<img src="{url}">' for url in (wanted, wanted, already, blank, broken))
     assert clean.fetch_images(html, cache) == 1
     assert calls == [wanted, blank, broken]
-    assert (cache / clean.cache_name(wanted)).read_bytes() == b"new bytes"
+    assert (cache / clean.cache_name(wanted)).read_bytes() == PNG
     assert (cache / clean.cache_name(already)).read_bytes() == b"old"
     assert not (cache / clean.cache_name(blank)).exists()
+
+
+# ------------------------------------------------------- images that never came
+
+
+def _answer_with(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:
+    """Make every fetch return these bytes, or raise this error."""
+
+    def fake_urlopen(url: str, timeout: int = 0) -> _FakeResponse:
+        if isinstance(answer, Exception):
+            raise answer
+        return _FakeResponse(answer)
+
+    monkeypatch.setattr(clean, "urlopen", fake_urlopen)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        HTTPError("https://cdn.example.com/logo.png", 403, "Forbidden", {}, None),
+        HTTPError("https://cdn.example.com/logo.png", 404, "Not Found", {}, None),
+        b'<?xml version="1.0"?><Error><Code>AccessDenied</Code></Error>',
+        b"",
+    ],
+)
+def test_an_answer_that_is_not_an_image_is_recorded_as_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, public_dns: None, answer: object
+) -> None:
+    """A status that is not 200, and a 200 carrying anything but a picture."""
+    url = "https://cdn.example.com/logo.png"
+    _answer_with(monkeypatch, answer)
+    assert clean.fetch_images(f'<img src="{url}">', tmp_path) == 0
+    assert clean.failed_images(tmp_path) == {url}
+    assert not (tmp_path / clean.cache_name(url)).exists()
+
+
+def test_a_fetch_that_never_got_an_answer_records_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, public_dns: None
+) -> None:
+    """Offline is a fact about this machine, not about the vendor's image."""
+    _answer_with(monkeypatch, URLError("no route to host"))
+    assert clean.fetch_images('<img src="https://cdn.example.com/logo.png">', tmp_path) == 0
+    assert clean.failed_images(tmp_path) == set()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_the_failure_record_merges_across_fetches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, public_dns: None
+) -> None:
+    """Each receipt is fetched on its own, into one cache they all share."""
+    first = "https://cdn.example.com/one.png"
+    second = "https://cdn.example.com/two.png"
+    _answer_with(monkeypatch, HTTPError(first, 403, "Forbidden", {}, None))
+    clean.fetch_images(f'<img src="{first}">', tmp_path)
+    clean.fetch_images(f'<img src="{second}">', tmp_path)
+    assert clean.failed_images(tmp_path) == {first, second}
+
+
+def test_a_url_that_answers_later_leaves_the_failure_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, public_dns: None
+) -> None:
+    url = "https://cdn.example.com/logo.png"
+    _answer_with(monkeypatch, HTTPError(url, 503, "Unavailable", {}, None))
+    clean.fetch_images(f'<img src="{url}">', tmp_path)
+    assert clean.failed_images(tmp_path) == {url}
+    _answer_with(monkeypatch, PNG)
+    assert clean.fetch_images(f'<img src="{url}">', tmp_path) == 1
+    assert clean.failed_images(tmp_path) == set()
+    assert not (tmp_path / clean.FAILED_RECORD).exists()
+
+
+def test_a_record_that_cannot_be_read_names_no_failures(tmp_path: Path) -> None:
+    (tmp_path / clean.FAILED_RECORD).write_text("{not json", encoding="utf-8")
+    assert clean.failed_images(tmp_path) == set()
+
+
+def test_a_failed_image_becomes_its_alt_text(tmp_path: Path, no_network: None) -> None:
+    url = "https://cdn.example.com/logo.png"
+    (tmp_path / clean.FAILED_RECORD).write_text(json.dumps([url]), encoding="utf-8")
+    html = f'<td><a><img height="35" src="{url}" alt="lyft" border="0"></a></td>'
+    out = clean.inline_images(html, tmp_path)
+    assert out == '<td><a><span class="img-alt">lyft</span></a></td>'
+
+
+def test_a_failed_image_with_no_alt_leaves_an_empty_span(tmp_path: Path, no_network: None) -> None:
+    url = "https://cdn.example.com/spacer.png"
+    (tmp_path / clean.FAILED_RECORD).write_text(json.dumps([url]), encoding="utf-8")
+    assert clean.inline_images(f'<img src="{url}">', tmp_path) == '<span class="img-alt"></span>'
+
+
+def test_alt_text_reaches_the_packet_as_text_and_not_as_markup(
+    tmp_path: Path, no_network: None
+) -> None:
+    url = "https://cdn.example.com/logo.png"
+    (tmp_path / clean.FAILED_RECORD).write_text(json.dumps([url]), encoding="utf-8")
+    out = clean.inline_images(f'<img src="{url}" alt="Ride &amp; roll < Lyft">', tmp_path)
+    assert out == '<span class="img-alt">Ride &amp; roll &lt; Lyft</span>'
+
+
+def test_an_image_no_fetch_ever_tried_is_left_exactly_as_it_is(
+    tmp_path: Path, no_network: None
+) -> None:
+    """The offline path decides nothing: no record, no opinion."""
+    failed = "https://cdn.example.com/gone.png"
+    untried = "https://cdn.example.com/other.png"
+    (tmp_path / clean.FAILED_RECORD).write_text(json.dumps([failed]), encoding="utf-8")
+    html = f'<img src="{untried}" alt="other">'
+    assert clean.inline_images(html, tmp_path) == html
+
+
+def test_clean_html_prints_the_alt_text_of_a_failed_image(tmp_path: Path, no_network: None) -> None:
+    url = "https://cdn.example.com/logo.png"
+    (tmp_path / clean.FAILED_RECORD).write_text(json.dumps([url]), encoding="utf-8")
+    out = clean.clean_html(f'<body><img src="{url}" alt="Lyft"></body>', None, tmp_path)
+    assert out == '<span class="img-alt">Lyft</span>'
 
 
 @pytest.mark.parametrize(
@@ -1158,7 +1278,7 @@ def test_cli_fetches_then_inlines(
     url = "https://cdn.example.com/logo.png"
     source = tmp_path / "in.html"
     source.write_text(f'<body><img src="{url}" width="34"></body>', encoding="utf-8")
-    monkeypatch.setattr(clean, "urlopen", lambda *a, **k: _FakeResponse(b"bytes"))
+    monkeypatch.setattr(clean, "urlopen", lambda *a, **k: _FakeResponse(PNG))
     out = tmp_path / "o.html"
     code = clean.main(
         [
@@ -1171,7 +1291,8 @@ def test_cli_fetches_then_inlines(
         ]
     )
     assert code == 0
-    assert "data:image/png;base64,Ynl0ZXM=" in out.read_text(encoding="utf-8")
+    written = out.read_text(encoding="utf-8")
+    assert "data:image/png;base64,iVBORw0KGgpwcmV0ZW5kIHBpeGVscw==" in written
 
 
 def test_cli_fetches_from_the_cleaned_fragment_not_the_raw_message(
@@ -1190,7 +1311,7 @@ def test_cli_fetches_from_the_cleaned_fragment_not_the_raw_message(
 
     def fake_urlopen(url: str, timeout: int = 0) -> _FakeResponse:
         asked.append(url)
-        return _FakeResponse(b"bytes")
+        return _FakeResponse(PNG)
 
     monkeypatch.setattr(clean, "urlopen", fake_urlopen)
     out = tmp_path / "o.html"
@@ -1207,7 +1328,7 @@ def test_cli_fetches_from_the_cleaned_fragment_not_the_raw_message(
     assert code == 0
     assert asked == [logo]
     written = out.read_text(encoding="utf-8")
-    assert "data:image/png;base64,Ynl0ZXM=" in written
+    assert "data:image/png;base64,iVBORw0KGgpwcmV0ZW5kIHBpeGVscw==" in written
     assert "open?id=9" not in written
 
 
