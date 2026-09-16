@@ -191,61 +191,17 @@
       ]
     },
     {
-      "id": "expense",
-      "type": "database",
-      "label": "expense_data.json",
-      "sublabel": "what goes in",
-      "pos": [
-        32,
-        446
-      ],
-      "size": [
-        164,
-        62
-      ]
-    },
-    {
-      "id": "build",
+      "id": "packet_build",
       "type": "backend",
-      "label": "Build packet.html",
-      "sublabel": "build.py",
+      "label": "Build the packet",
+      "sublabel": "HTML and PDF, receipts behind the summary",
       "tag": "code",
       "pos": [
-        276,
+        600,
         446
       ],
       "size": [
-        164,
-        62
-      ]
-    },
-    {
-      "id": "render",
-      "type": "backend",
-      "label": "Render packet.pdf",
-      "sublabel": "render_pdf.py, Chrome",
-      "tag": "code",
-      "pos": [
-        519,
-        446
-      ],
-      "size": [
-        164,
-        62
-      ]
-    },
-    {
-      "id": "splice",
-      "type": "backend",
-      "label": "Splice folios",
-      "sublabel": "attach_pdf.py",
-      "tag": "code",
-      "pos": [
-        762,
-        446
-      ],
-      "size": [
-        164,
+        280,
         62
       ]
     },
@@ -352,9 +308,9 @@
       "toSide": "top"
     },
     {
-      "id": "candidates-expense",
+      "id": "candidates-packet_build",
       "from": "candidates",
-      "to": "expense",
+      "to": "packet_build",
       "label": "you answer",
       "variant": "emphasis",
       "fromSide": "bottom",
@@ -365,35 +321,18 @@
           402
         ],
         [
-          114,
+          740,
           402
         ]
       ],
       "labelAt": [
-        600,
+        910,
         388
       ]
     },
     {
-      "id": "expense-build",
-      "from": "expense",
-      "to": "build"
-    },
-    {
-      "id": "build-render",
-      "from": "build",
-      "to": "render",
-      "label": "HTML"
-    },
-    {
-      "id": "render-splice",
-      "from": "render",
-      "to": "splice",
-      "label": "PDF"
-    },
-    {
-      "id": "splice-packet",
-      "from": "splice",
+      "id": "packet_build-packet",
+      "from": "packet_build",
       "to": "packet",
       "variant": "emphasis"
     }
