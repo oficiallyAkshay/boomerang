@@ -17,19 +17,10 @@
     "<p class=\"p4\"[^>]*>This email confirms revisions made to your original DoorDash order[\\s\\S]*?</p>",
     "<p class=\"p2\"[^>]*><a class=\"Red200\"[^>]*>Get Order Help</a></p>",
     "<table[^>]*\\bid=\"Footer\"[^>]*>(?:[\\s\\S]*?</table>){3}",
-    "<a[^>]*>\\s*(?:Privacy Policy|Help Center)\\s*</a>",
-    "<tr[^>]*>(?:(?!</tr>).)*?<a\\b[^>]*>\\s*Track [Yy]our [Oo]rder\\s*</a>(?:(?!</tr>).)*?</tr>",
-    "(?:<div[^>]*class=\"button\"[^>]*>\\s*)?<a\\b[^>]*>\\s*Track [Yy]our [Oo]rder\\s*</a>(?:\\s*</div>)?",
-    "<tr[^>]*>(?:(?!</tr>).)*?<img[^>]*src=\"[^\"]*hero[^\"]*\"[^>]*>(?:(?!</tr>).)*?</tr>"
+    "<a[^>]*>\\s*(?:Privacy Policy|Help Center)\\s*</a>"
   ],
   "unwrap_links_matching": [
-    "click\\.",
-    "/track",
-    "utm_",
-    "email\\.",
     "tracksg\\."
   ],
-  "amount_regex": ">\\s*Final total charged\\s*</p>[\\s\\S]{0,600}?>\\s*(\\$[\\d,]+\\.\\d{2})\\s*</p>",
-  "date_regex": null,
-  "notes": "Removed from a DoorDash final order receipt: the open pixel on tracksg.doordash.com, the marketing hero illustration, the hidden preheader spacer, the adjustment policy boilerplate, the Get Order Help button, the footer table carrying the corporate address and its privacy and help centre links. The last three patterns cover the track order button in its two shapes and the hero image row of the older template; no module of that shape is present in this sample, and they are kept because DoorDash still sends the confirmation variant that carries them. Kept verbatim: every line item with its quantity, the weighted item unit prices, both halves of each substitution pair, the subtotal, the delivery and service fees, the tax, the Dasher tip row, the discount, the header total and the final total charged, the payment line with its card last four, and the store name. The Dasher tip is a fee row in the receipt, not a tip button, so it stays visible and policy removes it from the claim instead. date_regex is null: this template prints no order date anywhere, not in the body and not in the footer, so the date has to come from the message headers."
+  "notes": "Removed from a DoorDash final order receipt: the open pixel on tracksg.doordash.com, the marketing hero illustration, the hidden preheader spacer, the adjustment policy boilerplate, the Get Order Help button, the footer table carrying the corporate address and its privacy and help centre links. Kept verbatim: every line item with its quantity, the weighted item unit prices, both halves of each substitution pair, the subtotal, the delivery and service fees, the tax, the Dasher tip row, the discount, the header total and the final total charged, the payment line with its card last four, and the store name. The Dasher tip is a fee row in the receipt, not a tip button, so it stays visible and policy removes it from the claim instead. This template prints no order date anywhere, not in the body and not in the footer, so the date has to come from the message headers."
 }

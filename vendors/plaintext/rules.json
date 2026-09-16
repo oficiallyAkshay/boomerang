@@ -15,17 +15,10 @@
     "the world, at your fingertips[\\s\\S]*?open the app \\( \\S+ \\)",
     "This is an essential service email related to your hotel booking[\\s\\S]*?preferences\\.",
     "This email is sent by another star, which uses citizenM trademarks[\\s\\S]*?Inc\\.",
-    "contact Marriott \\( \\S+ \\)\\s*privacy policy \\( \\S+ \\)",
-    "(?m)^\\s*(?:To unsubscribe|Unsubscribe|This message was sent to|This email was sent to)\\b.*$"
+    "contact Marriott \\( \\S+ \\)\\s*privacy policy \\( \\S+ \\)"
   ],
   "unwrap_links_matching": [
-    "click\\.",
-    "/track",
-    "utm_",
-    "email\\.",
     "sendgrid\\.net"
   ],
-  "amount_regex": null,
-  "date_regex": null,
-  "notes": "The catch all for hotel and other confirmations that arrive as a text body. It has no sender domains, so it is reached only when no vendor matched by domain and no other subject pattern matched, which is what keeps it from stealing mail from a vendor that has its own folder. The sample is a citizenM invoice notice, and the packet renders it as a monospace block under its From, Date and Subject headers. Removed: the bare logo link at the top, which a text part renders as a naked URL in parentheses; the app cross sell block; the marketing consent disclaimer; the licensing footer; the footer link row; and an unsubscribe line when the message has one. Kept verbatim: the property name and address, the phone number, the confirmation number, the invoice pointer, the line structure and the blank line spacing. Known gap: this message carries no amount and no stay date at all. It is a pointer that says the folio is ready, so amount_regex and date_regex are both null, the date has to come from the message headers, and the amount has to come from the folio PDF, which the traveller uploads or the Gmail fallback fetches as an attachment. The last strip pattern is the generic unsubscribe footer of other plain text confirmations; no line of that shape is present in this sample."
+  "notes": "The catch all for hotel and other confirmations that arrive as a text body. It has no sender domains, so it is reached only when no vendor matched by domain and no other subject pattern matched, which is what keeps it from stealing mail from a vendor that has its own folder. The sample is a citizenM invoice notice, and the packet renders it as a monospace block under its From, Date and Subject headers. Removed: the bare logo link at the top, which a text part renders as a naked URL in parentheses; the app cross sell block; the marketing consent disclaimer; the licensing footer; and the footer link row. Kept verbatim: the property name and address, the phone number, the confirmation number, the invoice pointer, the line structure and the blank line spacing. Known gap: this message carries no amount and no stay date at all. It is a pointer that says the folio is ready, so the date has to come from the message headers, and the amount has to come from the folio PDF, which the traveller uploads or the Gmail fallback fetches as an attachment."
 }
