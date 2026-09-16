@@ -1,0 +1,19 @@
+{
+  "name": "plaintext",
+  "display": "Plain text confirmation",
+  "sender_domains": [],
+  "subject_patterns": [
+    "confirmation",
+    "reservation",
+    "booking",
+    "itinerary",
+    "stay is confirmed"
+  ],
+  "strip_regex": [
+    "(?m)^\\s*(?:To unsubscribe|Unsubscribe|This message was sent to|This email was sent to)\\b.*$"
+  ],
+  "unwrap_links_matching": ["click\\.", "/track", "utm_", "email\\."],
+  "amount_regex": "(?m)^\\s*(?:Total(?: charged)?|Amount(?: charged)?|Facility fee|Resort fee)\\s*:?\\s*(\\$[\\d,]+\\.\\d{2})",
+  "date_regex": "((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,\\s*\\d{1,2}\\s+[A-Z][a-z]+\\s+\\d{4}|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,\\s*[A-Z][a-z]+\\s+\\d{1,2},\\s+\\d{4})",
+  "notes": "The catch all for hotel and other confirmations that arrive as a text body. It has no sender domains, so it is only reached when no vendor matched by domain and no other subject pattern matched. Removed: an unsubscribe footer line, if the message has one. Kept verbatim: everything else, including the From, Date and Subject headers, which the packet renders as a monospace block. The amount pattern reads the mandatory fee that the guest settles at the desk, not the room rate, because a room booked by the company is not the claim."
+}

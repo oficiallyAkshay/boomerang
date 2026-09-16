@@ -1,0 +1,19 @@
+{
+  "name": "uber",
+  "display": "Uber",
+  "sender_domains": ["uber.com"],
+  "subject_patterns": [
+    "^Your .*trip with Uber",
+    "^Your Uber (?:receipt|trip)",
+    "^Here'?s your (?:trip|ride) receipt",
+    "Lime"
+  ],
+  "strip_regex": [
+    "<tr[^>]*>(?:(?!</tr>).)*?(?:Rate your (?:trip|driver|ride)|How was your (?:trip|ride)|Rate or tip)(?:(?!</tr>).)*?</tr>",
+    "<tr[^>]*>(?:(?!</tr>).)*?(?:Invite (?:friends|a friend)|Refer a friend|Try Uber (?:Eats|One)|Get \\$[\\d.]+ off|Save on your next (?:ride|trip))(?:(?!</tr>).)*?</tr>"
+  ],
+  "unwrap_links_matching": ["click\\.", "/track", "utm_", "email\\."],
+  "amount_regex": "(?:Charged|Total charged|Amount charged)</td>\\s*<td[^>]*>\\s*(-?\\$[\\d,]+\\.\\d{2})",
+  "date_regex": "((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,\\s*[A-Z][a-z]+\\s+\\d{1,2},\\s+\\d{4})",
+  "notes": "Removed from an Uber or Lime receipt: the rate your trip module, which is a live control rather than a record, and the referral and upsell rows. Kept verbatim: the charge breakdown, the total, the trip date, the payment line and the start and end of the trip. These two patterns find nothing in the synthetic sample, which carries neither module."
+}
