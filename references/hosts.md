@@ -39,16 +39,17 @@ and `LICENSE`. Leave out the tests, the CI workflows, the examples and
 why boomerang keeps its description under that everywhere.
 
 Scripts run in Anthropic's sandbox. PyPI packages can be installed while the
-skill is loading, but a Chromium browser binary cannot be downloaded, so
-`render_pdf.py` does not work here: the deliverable is `packet.html`, which
-the user prints to PDF. Email is available through the account's Gmail
-connector when that connector is enabled.
+skill is loading, but there is no Chrome or Edge to drive and a Chromium
+browser binary cannot be downloaded, so `render_pdf.py` does not work here:
+the deliverable is `packet.html`, which the user prints to PDF. Email is
+available through the account's Gmail connector when that connector is
+enabled.
 
 Source: <https://support.claude.com/en/articles/12512198-how-to-create-custom-skills>
 
 ### Cowork
 
-Cowork shares the Claude.ai sandbox, so the same Chromium limit is expected to
+Cowork shares the Claude.ai sandbox, so the same browser limit is expected to
 apply and the deliverable there is `packet.html` rather than a PDF. That is a
 carried-over expectation, not a checked fact. No first-party page found so far
 gives a Cowork-specific path for uploading a custom skill folder: the plugins

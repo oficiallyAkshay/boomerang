@@ -3,7 +3,7 @@ name: boomerang
 description: "Builds a reimbursement packet from a personal inbox: finds trip receipts, splits company-paid from self-paid, applies policy, outputs one PDF. Use for expense claims and travel reimbursement."
 license: MIT
 metadata: {icon: "🪃"}
-compatibility: "Python 3.11+ with playwright and a Chromium download for the PDF, pypdf; an email tool or the bundled Gmail fallback; a shell."
+compatibility: "Python 3.11+ with playwright and a Chrome or Edge install (or a Playwright Chromium) for the PDF, pypdf; an email tool or the bundled Gmail fallback; a shell."
 ---
 
 # Boomerang
@@ -53,10 +53,13 @@ starting, and say plainly which are missing.
 
 Commands below use the uv form, `uv run python scripts/<name>.py`. On a host
 without uv, run `python scripts/<name>.py` with `playwright` and `pypdf`
-installed; the behaviour is identical. Claude.ai and Cowork cannot download a
-Chromium browser, so there the deliverable is `packet.html`, printed to PDF by
-the user: skip the page-count and splice steps below, and list folio
-attachments as separate files.
+installed; the behaviour is identical. The PDF render drives whichever of
+Google Chrome, Microsoft Edge or a Playwright Chromium the machine already
+has, in that order, and `uv run playwright install chromium` is only needed
+when there is no Chrome and no Edge. Claude.ai and Cowork have no browser at
+all, so there the deliverable is `packet.html`, printed to PDF by the user:
+skip the page-count and splice steps below, and list folio attachments as
+separate files.
 
 Notes on the fallback:
 

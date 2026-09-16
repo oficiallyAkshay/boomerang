@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Render a packet HTML file to a Letter PDF, one receipt per page.
 
-Headless Chromium under print media, with page script switched off. Before
+A headless Chrome, Edge or Chromium under print media, with page script
+switched off. The renderer asks Playwright for the Google Chrome already on
+the machine first, then Microsoft Edge, and only then a Chromium someone
+downloaded through ``playwright install``. Nothing here needs that download:
+either browser most people already have will do. ``BOOMERANG_BROWSER`` forces
+one of the three when a run has to be pinned to a particular browser. Before
 printing, a small script walks every ``.rsec`` in the packet, forces a page
 break either side of it, and scales the receipt body down when it is taller or
 wider than the space one Letter page leaves. The result is a PDF with the
@@ -24,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
 import re
 import sys
 from pathlib import Path
@@ -34,8 +40,15 @@ from playwright.sync_api import sync_playwright
 from pypdf import PdfReader, PdfWriter
 
 MISSING_BROWSER = (
-    "Chromium is not installed for playwright. Run: uv run playwright install chromium"
+    "No Chrome, Edge or Chromium found. Install Google Chrome or Microsoft Edge, "
+    "or run: uv run playwright install chromium"
 )
+
+# Tried in this order. The first two are browsers the machine already has;
+# the third is the Playwright download, which is now the last resort rather
+# than the requirement.
+CHANNELS = ("chrome", "msedge", "chromium")
+BROWSER_ENV = "BOOMERANG_BROWSER"
 
 VIEWPORT = {"width": 900, "height": 1200}
 REMOTE_SCHEMES = {"http", "https"}
@@ -146,6 +159,45 @@ def _stamp_title(pdf_path: Path, title: str) -> None:
         writer.write(handle)
 
 
+def wanted_channels() -> tuple[str, ...]:
+    """The channels to try, in order, honouring ``BOOMERANG_BROWSER``.
+
+    The variable pins a run to one browser and is not a hint: an unknown value
+    is refused rather than quietly falling back to the usual order, because a
+    run pinned to a browser that was never tried is worse than a run that
+    stops.
+    """
+    forced = os.environ.get(BROWSER_ENV, "").strip().lower()
+    if not forced:
+        return CHANNELS
+    if forced not in CHANNELS:
+        raise RuntimeError(f"{BROWSER_ENV} must be one of {', '.join(CHANNELS)}, not {forced!r}")
+    return (forced,)
+
+
+def launch_browser(play):
+    """Launch the first browser of the three this machine has.
+
+    Returns the browser and the channel it came from. Raises the missing
+    browser error when none of them launches.
+    """
+    last: PlaywrightError | None = None
+    for channel in wanted_channels():
+        try:
+            return play.chromium.launch(channel=channel), channel
+        except PlaywrightError as exc:
+            last = exc
+    raise RuntimeError(MISSING_BROWSER) from last
+
+
+def browser_channel() -> str:
+    """The channel that renders on this machine: chrome, msedge or chromium."""
+    with sync_playwright() as play:
+        browser, channel = launch_browser(play)
+        browser.close()
+        return channel
+
+
 def block_remote_requests(route) -> None:
     """Abort anything the page asks for over http or https, allow the rest."""
     if urlsplit(route.request.url).scheme.lower() in REMOTE_SCHEMES:
@@ -184,7 +236,7 @@ def _print_to_pdf(play, url: str, pdf_path: Path) -> None:
     The route handler is installed before the first navigation, so a remote
     image in a receipt never reaches the network at all.
     """
-    browser = play.chromium.launch()
+    browser, _channel = launch_browser(play)
     try:
         context = browser.new_context(viewport=VIEWPORT, java_script_enabled=False)
         page = context.new_page()
@@ -203,14 +255,8 @@ def render(html_path: Path, pdf_path: Path) -> int:
     pdf_path = Path(pdf_path)
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
     title = html_title(html_path)
-    try:
-        with sync_playwright() as play:
-            _print_to_pdf(play, html_path.as_uri(), pdf_path)
-    except PlaywrightError as exc:
-        message = str(exc).lower()
-        if "executable doesn't exist" in message or "playwright install" in message:
-            raise RuntimeError(MISSING_BROWSER) from exc
-        raise
+    with sync_playwright() as play:
+        _print_to_pdf(play, html_path.as_uri(), pdf_path)
     _stamp_title(pdf_path, title)
     return page_count(pdf_path)
 
@@ -223,6 +269,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     pages = render(args.html, args.pdf)
+    print(f"rendered with {browser_channel()}", file=sys.stderr)
     print(pages)
     if args.expect is not None and pages != args.expect:
         print(f"expected {args.expect} pages, got {pages}", file=sys.stderr)

@@ -1,7 +1,9 @@
 """Tests for the packet PDF render.
 
-These need the real headless Chromium. They do not skip when it is missing;
-they fail with the message that says how to install it.
+These need a real headless browser: the Google Chrome or Microsoft Edge
+already on the machine, or a Playwright Chromium if someone downloaded one.
+They do not skip when none is there; they fail with the message that says what
+to install.
 
 One test here is a tampering probe. It renders a packet whose receipt carries
 markup written to rewrite the summary amounts, and reads the finished PDF back
@@ -22,7 +24,6 @@ import pytest
 import render_pdf
 from fixtures.make_fixture import png_bytes
 from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import sync_playwright
 from pypdf import PdfReader
 
 PACKET_TITLE = "Packet, AUS to SEA onsite"
@@ -185,13 +186,96 @@ def _stub_html(tmp_path: Path) -> Path:
     return target
 
 
-def test_missing_chromium_raises_with_the_install_command(monkeypatch, tmp_path: Path) -> None:
-    def explode() -> None:
-        raise PlaywrightError("Executable doesn't exist at /nowhere/headless_shell")
+class FakeBrowser:
+    """Enough of a browser for the launcher tests: it can be closed."""
 
-    monkeypatch.setattr(render_pdf, "sync_playwright", explode)
-    with pytest.raises(RuntimeError, match=r"uv run playwright install chromium"):
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeChromium:
+    """A ``play.chromium`` that only launches the one channel it was given.
+
+    ``tried`` records every channel asked for, in order, so a test can say
+    which browsers were looked for as well as what the failure said.
+    """
+
+    def __init__(self, working: str | None = None) -> None:
+        self.working = working
+        self.tried: list[str | None] = []
+
+    def launch(self, channel: str | None = None) -> FakeBrowser:
+        self.tried.append(channel)
+        if channel == self.working:
+            return FakeBrowser()
+        raise PlaywrightError(f"Chromium distribution {channel!r} is not found")
+
+
+class FakePlaywright:
+    """Stands in for the ``sync_playwright()`` context manager."""
+
+    def __init__(self, chromium: FakeChromium) -> None:
+        self.chromium = chromium
+
+    def __call__(self) -> FakePlaywright:
+        return self
+
+    def __enter__(self) -> FakePlaywright:
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+
+def test_no_browser_at_all_names_chrome_edge_and_the_install_command(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Every channel fails, so the run stops and says what to install."""
+    chromium = FakeChromium()
+    monkeypatch.delenv(render_pdf.BROWSER_ENV, raising=False)
+    monkeypatch.setattr(render_pdf, "sync_playwright", FakePlaywright(chromium))
+    with pytest.raises(RuntimeError) as caught:
         render_pdf.render(_stub_html(tmp_path), tmp_path / "packet.pdf")
+    message = str(caught.value)
+    assert message == (
+        "No Chrome, Edge or Chromium found. Install Google Chrome or Microsoft Edge, "
+        "or run: uv run playwright install chromium"
+    )
+    assert chromium.tried == ["chrome", "msedge", "chromium"]
+
+
+def test_edge_is_used_when_chrome_is_missing(monkeypatch) -> None:
+    """The order is Chrome, then Edge, then a downloaded Chromium."""
+    chromium = FakeChromium(working="msedge")
+    monkeypatch.delenv(render_pdf.BROWSER_ENV, raising=False)
+    browser, channel = render_pdf.launch_browser(FakePlaywright(chromium))
+    assert channel == "msedge"
+    assert isinstance(browser, FakeBrowser)
+    assert chromium.tried == ["chrome", "msedge"]
+
+
+def test_the_env_override_pins_the_run_to_one_browser(monkeypatch) -> None:
+    """BOOMERANG_BROWSER skips the search and asks for that browser only."""
+    chromium = FakeChromium(working="chromium")
+    monkeypatch.setenv(render_pdf.BROWSER_ENV, "chromium")
+    monkeypatch.setattr(render_pdf, "sync_playwright", FakePlaywright(chromium))
+    assert render_pdf.browser_channel() == "chromium"
+    assert chromium.tried == ["chromium"]
+
+
+def test_an_unknown_env_override_is_refused(monkeypatch) -> None:
+    monkeypatch.setenv(render_pdf.BROWSER_ENV, "safari")
+    with pytest.raises(RuntimeError, match="BOOMERANG_BROWSER must be one of"):
+        render_pdf.wanted_channels()
+
+
+def test_the_real_machine_renders_with_one_of_the_three(monkeypatch) -> None:
+    """Whatever this machine has, the helper names it and it is a real one."""
+    monkeypatch.delenv(render_pdf.BROWSER_ENV, raising=False)
+    assert render_pdf.browser_channel() in render_pdf.CHANNELS
 
 
 def test_other_playwright_errors_are_not_reworded(monkeypatch, tmp_path: Path) -> None:
@@ -211,10 +295,15 @@ def tiny_packet(tmp_path_factory) -> Path:
     return write_packet(out / "tiny.html", data, out / "receipts", title=None)
 
 
-def test_cli_prints_the_page_count(tiny_packet: Path, tmp_path: Path, capsys) -> None:
+def test_cli_prints_the_page_count_and_names_the_browser(
+    tiny_packet: Path, tmp_path: Path, capsys
+) -> None:
     pdf = tmp_path / "tiny.pdf"
     assert render_pdf.main([str(tiny_packet), str(pdf), "--expect", "2"]) == 0
-    assert capsys.readouterr().out.strip() == "2"
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "2"
+    named = captured.err.strip().splitlines()[-1]
+    assert named in [f"rendered with {name}" for name in render_pdf.CHANNELS]
     metadata = PdfReader(str(pdf)).metadata or {}
     assert "/Title" not in metadata
 
@@ -327,8 +416,8 @@ def tall_image_packet(target: Path) -> Path:
 
 def measure(packet: Path) -> list[dict]:
     """Open the packet the way the renderer does and run the real fit pass."""
-    with sync_playwright() as play:
-        browser = play.chromium.launch()
+    with render_pdf.sync_playwright() as play:
+        browser, _channel = render_pdf.launch_browser(play)
         try:
             context = browser.new_context(viewport=render_pdf.VIEWPORT, java_script_enabled=False)
             page = context.new_page()
