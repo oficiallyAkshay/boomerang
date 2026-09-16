@@ -31,16 +31,32 @@ FIX_BROWSER = (
 EMAIL_REMINDER = """email       host's job  the host's email tool, or the bundled Gmail fallback
                         pip install google-api-python-client google-auth-oauthlib"""
 
-# Where a browser sits already. A path from another platform simply never exists.
-APPS = {
-    "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "msedge": "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+# Where an installed browser sits, one entry per channel the renderer drives:
+# the paths to try, then the names to look up on PATH. A path from another
+# platform simply never exists, so all of them are tried everywhere.
+#
+# Playwright is asked for nothing here. Its own lookup, ``chromium
+# .executable_path``, answers for the browser it downloaded rather than for a
+# channel, and reaching it means starting the driver, which is a subprocess on
+# a machine that may not have playwright installed at all. There is no
+# non-launching channel lookup to call, so this stays a table, kept as short
+# as the two channels allow.
+BROWSERS = {
+    "chrome": (
+        (
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        ),
+        ("google-chrome", "google-chrome-stable"),
+    ),
+    "msedge": (
+        (
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        ),
+        ("microsoft-edge",),
+    ),
 }
-EXES = {
-    "chrome": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-    "msedge": r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-}
-NAMES = {"chrome": ("google-chrome", "google-chrome-stable"), "msedge": ("microsoft-edge",)}
 
 
 def module_present(name: str) -> bool:
@@ -85,18 +101,20 @@ def channels_to_check() -> tuple[str, ...]:
     return (forced,) if forced in CHANNELS else CHANNELS
 
 
+def _installed(channel: str) -> bool:
+    """True when this channel is on the machine, found by file, never by launch."""
+    if channel == "chromium":
+        cache = playwright_cache()
+        return cache.is_dir() and any(cache.glob("chromium*"))
+    places, names = BROWSERS[channel]
+    if any(Path(place).exists() for place in places):
+        return True
+    return any(shutil.which(name) for name in names)
+
+
 def find_browser() -> str | None:
-    """The first channel this machine has, found by file rather than by launch."""
-    for channel in channels_to_check():
-        if channel == "chromium":
-            cache = playwright_cache()
-            found = cache.is_dir() and any(cache.glob("chromium*"))
-        else:
-            found = Path(APPS[channel]).exists() or Path(EXES[channel]).exists()
-            found = found or any(shutil.which(name) for name in NAMES[channel])
-        if found:
-            return channel
-    return None
+    """The first channel this machine has, in the order the renderer wants them."""
+    return next((channel for channel in channels_to_check() if _installed(channel)), None)
 
 
 def checks() -> list[tuple[str, bool, str, str]]:

@@ -62,10 +62,14 @@ def barren(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     Every path points inside tmp_path at a name that was never created, so a
     test can make one of them real and watch that one be found.
     """
-    for table in ("APPS", "EXES"):
-        places = {channel: str(tmp_path / f"{table}-{channel}") for channel in ("chrome", "msedge")}
-        monkeypatch.setattr(doctor, table, places)
-    monkeypatch.setattr(doctor, "NAMES", {"chrome": (), "msedge": ()})
+    monkeypatch.setattr(
+        doctor,
+        "BROWSERS",
+        {
+            channel: ((str(tmp_path / f"app-{channel}"), str(tmp_path / f"exe-{channel}")), ())
+            for channel in ("chrome", "msedge")
+        },
+    )
     monkeypatch.setattr(doctor.shutil, "which", lambda name: None)
     empty = tmp_path / "ms-playwright"
     empty.mkdir()
@@ -78,24 +82,35 @@ def test_no_browser_anywhere_is_reported_as_none(barren: Path):
     assert doctor.find_browser() is None
 
 
-def test_a_mac_app_is_found(barren: Path, monkeypatch: pytest.MonkeyPatch):
-    app = barren / "Google Chrome"
-    app.write_text("", encoding="utf-8")
-    monkeypatch.setitem(doctor.APPS, "chrome", str(app))
+def install(channel: str, *, windows: bool = False) -> None:
+    """Make the file the barren machine's table points at for one channel real."""
+    places, _ = doctor.BROWSERS[channel]
+    Path(places[1] if windows else places[0]).write_text("", encoding="utf-8")
+
+
+def test_a_mac_app_is_found(barren: Path):
+    install("chrome")
     assert doctor.find_browser() == "chrome"
 
 
-def test_a_windows_executable_is_found(barren: Path, monkeypatch: pytest.MonkeyPatch):
-    exe = barren / "msedge.exe"
-    exe.write_text("", encoding="utf-8")
-    monkeypatch.setitem(doctor.EXES, "msedge", str(exe))
+def test_a_windows_executable_is_found(barren: Path):
+    install("msedge", windows=True)
     assert doctor.find_browser() == "msedge"
 
 
 def test_a_browser_on_the_path_is_found(barren: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setitem(doctor.NAMES, "msedge", ("microsoft-edge",))
+    places, _ = doctor.BROWSERS["msedge"]
+    monkeypatch.setitem(doctor.BROWSERS, "msedge", (places, ("microsoft-edge",)))
     monkeypatch.setattr(doctor.shutil, "which", lambda name: "/usr/bin/microsoft-edge")
     assert doctor.find_browser() == "msedge"
+
+
+def test_the_shipped_table_names_a_place_for_every_channel_but_chromium():
+    """Chromium is the playwright download, found in its cache rather than by path."""
+    assert sorted(doctor.BROWSERS) == ["chrome", "msedge"]
+    assert set(doctor.CHANNELS) - set(doctor.BROWSERS) == {"chromium"}
+    for places, names in doctor.BROWSERS.values():
+        assert places and names
 
 
 def test_a_downloaded_chromium_is_found(barren: Path, monkeypatch: pytest.MonkeyPatch):
@@ -105,17 +120,14 @@ def test_a_downloaded_chromium_is_found(barren: Path, monkeypatch: pytest.Monkey
 
 def test_the_pinned_browser_is_the_only_one_checked(barren: Path, monkeypatch: pytest.MonkeyPatch):
     """BOOMERANG_BROWSER reaches the check through render_pdf's own order."""
-    app = barren / "Google Chrome"
-    app.write_text("", encoding="utf-8")
-    monkeypatch.setitem(doctor.APPS, "chrome", str(app))
+    install("chrome")
     monkeypatch.setenv("BOOMERANG_BROWSER", "msedge")
     assert doctor.find_browser() is None
 
 
 def test_an_unusable_pin_falls_back_to_the_shipped_order(barren: Path, monkeypatch):
     """render_pdf refuses an unknown BOOMERANG_BROWSER, so the check uses its own order."""
-    app = barren / "APPS-chrome"
-    app.write_text("", encoding="utf-8")
+    install("chrome")
     monkeypatch.setenv("BOOMERANG_BROWSER", "safari")
     assert doctor.find_browser() == "chrome"
 
@@ -144,9 +156,7 @@ def test_the_pin_is_honoured_with_no_renderer_to_ask(
     render_pdf is not there to be asked for its order, because naming the
     chrome beside it would answer a question nobody asked.
     """
-    app = barren / "Google Chrome"
-    app.write_text("", encoding="utf-8")
-    monkeypatch.setitem(doctor.APPS, "chrome", str(app))
+    install("chrome")
     monkeypatch.setenv("BOOMERANG_BROWSER", "msedge")
     assert doctor.channels_to_check() == ("msedge",)
     assert doctor.find_browser() is None
@@ -155,9 +165,7 @@ def test_the_pin_is_honoured_with_no_renderer_to_ask(
 def test_the_pinned_browser_is_found_with_no_renderer_to_ask(
     barren: Path, no_renderer: None, monkeypatch: pytest.MonkeyPatch
 ):
-    edge = barren / "Microsoft Edge"
-    edge.write_text("", encoding="utf-8")
-    monkeypatch.setitem(doctor.APPS, "msedge", str(edge))
+    install("msedge")
     monkeypatch.setenv("BOOMERANG_BROWSER", "msedge")
     assert doctor.find_browser() == "msedge"
 
