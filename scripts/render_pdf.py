@@ -190,29 +190,12 @@ def launch_browser(play):
     raise RuntimeError(MISSING_BROWSER) from last
 
 
-def browser_channel() -> str:
-    """The channel that renders on this machine: chrome, msedge or chromium."""
-    with sync_playwright() as play:
-        browser, channel = launch_browser(play)
-        browser.close()
-        return channel
-
-
 def block_remote_requests(route) -> None:
     """Abort anything the page asks for over http or https, allow the rest."""
     if urlsplit(route.request.url).scheme.lower() in REMOTE_SCHEMES:
         route.abort()
         return
     route.continue_()
-
-
-def fit_sections(page) -> list[dict]:
-    """Run the fit pass on an open page and return one measurement per section.
-
-    Each entry carries the section's heading, the scale applied to its body,
-    the height that body ended up at and the height it had to fit into.
-    """
-    return page.evaluate(FIT_JS)
 
 
 def _warn_about_small_sections(measurements: list[dict]) -> None:
@@ -226,39 +209,51 @@ def _warn_about_small_sections(measurements: list[dict]) -> None:
             )
 
 
-def _print_to_pdf(play, url: str, pdf_path: Path) -> None:
+def _print_to_pdf(play, url: str, pdf_path: Path) -> str:
     """Open the packet under print media, fit each receipt, and print to PDF.
 
+    Returns the channel the browser came from, because this is the one launch
+    a render does and asking a second time would open a second browser to be
+    told what the first one already knew.
+
     The context runs with page script off, so nothing the packet carries can
-    execute. The fit pass below is a ``page.evaluate``, which the driver runs
-    regardless, so the layout work is unaffected.
+    execute. The fit pass is a ``page.evaluate``, which the driver runs
+    regardless, so the layout work is unaffected: it walks every ``.rsec``,
+    forces a page break either side of it, and zooms a receipt body down when
+    it is taller or wider than the space one Letter page leaves.
 
     The route handler is installed before the first navigation, so a remote
     image in a receipt never reaches the network at all.
     """
-    browser, _channel = launch_browser(play)
+    browser, channel = launch_browser(play)
     try:
         context = browser.new_context(viewport=VIEWPORT, java_script_enabled=False)
         page = context.new_page()
         page.route("**/*", block_remote_requests)
         page.goto(url, wait_until="load")
         page.emulate_media(media="print")
-        _warn_about_small_sections(fit_sections(page))
+        _warn_about_small_sections(page.evaluate(FIT_JS))
         page.pdf(path=str(pdf_path), format="Letter", print_background=True, margin=MARGIN)
     finally:
         browser.close()
+    return channel
 
 
-def render(html_path: Path, pdf_path: Path) -> int:
-    """Render the packet at html_path to pdf_path. Returns the page count."""
+def render(html_path: Path, pdf_path: Path) -> tuple[int, str]:
+    """Render the packet at html_path to pdf_path.
+
+    Returns the page count and the channel that rendered it, chrome, msedge or
+    chromium, which is what a run prints so a reader knows which browser laid
+    the packet out.
+    """
     html_path = Path(html_path).resolve()
     pdf_path = Path(pdf_path)
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
     title = html_title(html_path)
     with sync_playwright() as play:
-        _print_to_pdf(play, html_path.as_uri(), pdf_path)
+        channel = _print_to_pdf(play, html_path.as_uri(), pdf_path)
     _stamp_title(pdf_path, title)
-    return page_count(pdf_path)
+    return page_count(pdf_path), channel
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -268,8 +263,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expect", type=int, help="fail when the page count differs")
     args = parser.parse_args(argv)
 
-    pages = render(args.html, args.pdf)
-    print(f"rendered with {browser_channel()}", file=sys.stderr)
+    pages, channel = render(args.html, args.pdf)
+    print(f"rendered with {channel}", file=sys.stderr)
     print(pages)
     if args.expect is not None and pages != args.expect:
         print(f"expected {args.expect} pages, got {pages}", file=sys.stderr)

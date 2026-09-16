@@ -131,8 +131,9 @@ def test_the_pipeline_runs_end_to_end(fixture_dir: Path, fixture_data: dict, tmp
     # One summary page, then one page per receipt.
     receipt_count = len(fixture_data["receipts"])
     packet_pdf = tmp_path / "packet.pdf"
-    pages = render_pdf.render(packet_html, packet_pdf)
+    pages, channel = render_pdf.render(packet_html, packet_pdf)
     assert pages == 1 + receipt_count
+    assert channel in render_pdf.CHANNELS
     assert render_pdf.page_count(packet_pdf) == pages
 
     # The folio's own pages land behind its card.
