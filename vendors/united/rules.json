@@ -1,0 +1,19 @@
+{
+  "name": "united",
+  "display": "United",
+  "sender_domains": ["united.com"],
+  "subject_patterns": [
+    "eTicket Itinerary and Receipt",
+    "eTicket [Cc]onfirmation",
+    "Wi-Fi",
+    "^Your receipt for"
+  ],
+  "strip_regex": [
+    "<tr[^>]*>(?:(?!</tr>).)*?(?:MileagePlus (?:credit card|offer)|Earn (?:up to )?[\\d,]+ (?:bonus )?miles|Book your next|Save on your next|Explore destinations)(?:(?!</tr>).)*?</tr>",
+    "<tr[^>]*>(?:(?!</tr>).)*?<img[^>]*src=\"[^\"]*(?:promo|banner|marketing|advert)[^\"]*\"[^>]*>(?:(?!</tr>).)*?</tr>"
+  ],
+  "unwrap_links_matching": ["click\\.", "/track", "utm_", "email\\."],
+  "amount_regex": "(?:Ticket total|Total)</td>\\s*<td[^>]*>\\s*(-?\\$[\\d,]+\\.\\d{2})",
+  "date_regex": "((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,\\s*[A-Z][a-z]+\\s+\\d{1,2},\\s+\\d{4})",
+  "notes": "Removed from a United eTicket or Wi-Fi receipt: the card and mileage offer rows and any banner image row, all of which are advertising. Kept verbatim: the confirmation code, the traveller line, every flight leg with its date, the fare and tax breakdown, the ticket total and the lines that say which card each charge went to. These two patterns find nothing in the synthetic sample, which carries no advertising."
+}

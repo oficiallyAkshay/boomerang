@@ -1,0 +1,20 @@
+{
+  "name": "doordash",
+  "display": "DoorDash",
+  "sender_domains": ["doordash.com"],
+  "subject_patterns": [
+    "^Your .* order",
+    "^Order (?:receipt|confirmation)",
+    "^Thanks for your order"
+  ],
+  "strip_regex": [
+    "<tr[^>]*>(?:(?!</tr>).)*?<a\\b[^>]*>\\s*Track [Yy]our [Oo]rder\\s*</a>(?:(?!</tr>).)*?</tr>",
+    "(?:<div[^>]*class=\"button\"[^>]*>\\s*)?<a\\b[^>]*>\\s*Track [Yy]our [Oo]rder\\s*</a>(?:\\s*</div>)?",
+    "<tr[^>]*>(?:(?!</tr>).)*?<img[^>]*src=\"[^\"]*hero[^\"]*\"[^>]*>(?:(?!</tr>).)*?</tr>",
+    "<tr[^>]*>(?:(?!</tr>).)*?(?:You are receiving this|Unsubscribe|Download the app|App Store|Google Play|facebook\\.com|twitter\\.com|instagram\\.com)(?:(?!</tr>).)*?</tr>"
+  ],
+  "unwrap_links_matching": ["click\\.", "/track", "utm_", "email\\."],
+  "amount_regex": "Total</td>\\s*<td[^>]*>\\s*(-?\\$[\\d,]+\\.\\d{2})",
+  "date_regex": "((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,\\s*[A-Z][a-z]+\\s+\\d{1,2},\\s+\\d{4})",
+  "notes": "Removed from a DoorDash order receipt: the track order button, the marketing hero image row, and the footer row that carries the app download links, the social links and the unsubscribe link. Kept verbatim: every item line, the subtotal, fees, tax and tip lines, the order total, the store name, the order date and the payment line."
+}
