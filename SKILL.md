@@ -132,8 +132,13 @@ receipt as you go:
 
 ```bash
 uv run python scripts/clean.py receipts/<rid>.html --out clean/<rid>.html \
-  --vendors vendors --images .image_cache
+  --vendors vendors --images .image-cache --fetch-images
 ```
+
+`--fetch-images` is the only step that opens a socket, and it downloads from
+the cleaned fragment, so the tracking pixels the cleaner just removed are never
+requested. `.image-cache` is the gitignored name; the cache is a working
+directory, not part of the packet.
 
 ### 6. Show the candidate list, then correct it
 
@@ -148,9 +153,13 @@ Then ask the one standing question in the next section. Wait for the answer.
 Write `expense_data.json`, then render.
 
 ```bash
-uv run python scripts/build.py expense_data.json --receipts receipts \
+uv run python scripts/build.py expense_data.json --receipts clean \
   --out packet.html
 ```
+
+Build from `clean`, the folder step 5 writes, never from `receipts`: a raw
+vendor email still carries its tracking pixels, its live links and whatever
+else was in the markup, and building from it puts all of that in the packet.
 
 The schema is in `docs/interfaces.md`. `build.py` validates before it writes,
 and every problem it finds is a real problem. Fix the data, not the validator.
@@ -220,24 +229,15 @@ Each receipt is rendered from the vendor's own email markup. Values, fonts,
 styles, and logos are the vendor's. The result looks like what the vendor sent,
 because it is.
 
-Removed before rendering:
-
-- Tracking links and tracking pixels
-- Tip buttons and rate-your-trip controls
-- Promotional modules and app-download banners
-- Hero images and social footers
-- Scripts
-
-Never altered:
-
-- Amounts, taxes, and fees
-- Dates and times
-- Line items
-- Addresses inside the receipt
-- Vendor logos and fonts
+Removed before rendering: the marketing, meaning tracking links and pixels, tip
+and rating controls, promotional modules, app-download banners, hero images and
+social footers; and everything that could act, meaning scripts, inline
+handlers, live URL schemes, and every element that can load a second document.
+Never altered: amounts, taxes and fees, dates and times, line items, addresses
+printed inside the receipt, and the vendor's own logos and fonts.
 
 Say this plainly to the user the first time you show them a rendered receipt.
-The per-vendor detail is in `references/vendors.md`, and the machine-readable
+The full list of both is in `references/vendors.md`, and the machine-readable
 form is `vendors/<name>/rules.json`.
 
 Two more rendering rules. Images are inlined as base64, or they break offline
@@ -256,6 +256,10 @@ beside the message as `<rid>.<n>.<ext>`.
 Either way, list the receipt in `expense_data.json` with `"kind": "pdf"`.
 `build.py` renders a card saying the attachment is embedded, and `attach_pdf.py`
 splices the real pages in behind it.
+
+To read a folio's values, use `attach_pdf.extract_text`, which returns the whole
+PDF as text with the pages joined by form feeds. Read the numbers from that
+rather than from a screenshot or a guess.
 
 ## Packet format, non-negotiable
 
