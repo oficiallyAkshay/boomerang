@@ -95,12 +95,33 @@ def rendered(fixture_dir: Path, fixture_data: dict, tmp_path_factory) -> dict:
     out = tmp_path_factory.mktemp("rendered")
     html = write_packet(out / "packet.html", fixture_data, fixture_dir / "receipts")
     pdf = out / "packet.pdf"
-    pages, channel = render_pdf.render(html, pdf)
-    return {"html": html, "pdf": pdf, "pages": pages, "channel": channel}
+    pages, channel, page_map = render_pdf.render(html, pdf)
+    return {"html": html, "pdf": pdf, "pages": pages, "channel": channel, "map": page_map}
 
 
-def test_one_page_per_receipt_plus_summary(rendered: dict, fixture_data: dict) -> None:
-    assert rendered["pages"] == 1 + len(fixture_data["receipts"])
+def test_the_summary_is_one_page_and_every_receipt_has_its_own(
+    rendered: dict, fixture_data: dict
+) -> None:
+    """One page each is no longer the rule, but a page of one's own still is."""
+    page_map = rendered["map"]
+    assert page_map["summary_pages"] == 1
+    assert len(page_map["pages"]) == len(fixture_data["receipts"])
+    assert all(count >= 1 for count in page_map["pages"])
+    assert rendered["pages"] == page_map["summary_pages"] + sum(page_map["pages"])
+
+
+def test_the_page_map_is_written_beside_the_pdf(rendered: dict) -> None:
+    """The splice runs as its own command and reads the map off disk."""
+    side = render_pdf.page_map_path(rendered["pdf"])
+    assert side.name == f"{rendered['pdf'].name}.pages.json"
+    assert json.loads(side.read_text(encoding="utf-8")) == rendered["map"]
+
+
+def test_the_page_map_counts_the_pages_the_pdf_really_has(rendered: dict) -> None:
+    """Measured against pypdf, which is the only count that matters."""
+    page_map = rendered["map"]
+    counted = page_map["summary_pages"] + sum(page_map["pages"])
+    assert counted == render_pdf.page_count(rendered["pdf"])
 
 
 def test_every_page_is_letter(rendered: dict) -> None:
@@ -109,15 +130,22 @@ def test_every_page_is_letter(rendered: dict) -> None:
         assert abs(float(page.mediabox.height) - LETTER_HEIGHT) <= TOLERANCE
 
 
-def test_oversized_receipt_is_scaled_onto_one_page(rendered: dict, fixture_data: dict) -> None:
-    """A 3000px body still takes exactly one page and keeps its text."""
-    assert rendered["pages"] == 1 + len(fixture_data["receipts"])
-    reader = PdfReader(str(rendered["pdf"]))
-    pages = [page.extract_text() or "" for page in reader.pages]
+def test_an_oversized_receipt_runs_on_rather_than_shrinking(rendered: dict) -> None:
+    """A 3000px body takes the pages it needs and stays the size it is.
+
+    It used to be squeezed onto one page at a third of its size. Now it starts
+    on its own page, as every receipt does, and runs on from there: the top
+    mark is on the first of its pages and the bottom mark on the last.
+    """
+    page_map = rendered["map"]
+    assert page_map["pages"][0] > 1
+    assert page_map["scales"][0] >= render_pdf.MIN_SCALE
+
+    pages = [page.extract_text() or "" for page in PdfReader(str(rendered["pdf"])).pages]
     carrying_top = [i for i, text in enumerate(pages) if TOP_MARK in text]
     carrying_bottom = [i for i, text in enumerate(pages) if BOTTOM_MARK in text]
     assert carrying_top == [1]
-    assert carrying_bottom == [1]
+    assert carrying_bottom == [page_map["summary_pages"] + page_map["pages"][0] - 1]
 
 
 def test_title_comes_from_the_html_and_there_is_no_author(rendered: dict) -> None:
@@ -288,10 +316,18 @@ def test_other_playwright_errors_are_not_reworded(monkeypatch, tmp_path: Path) -
 
 @pytest.fixture(scope="module")
 def tiny_packet(tmp_path_factory) -> Path:
-    """One receipt, no title element, for the fast CLI runs."""
+    """One short receipt, no title element, for the fast CLI runs."""
     out = tmp_path_factory.mktemp("tiny")
-    data = {"receipts": [{"rid": "only", "title": "The only receipt"}]}
-    return write_packet(out / "tiny.html", data, out / "receipts", title=None)
+    target = out / "tiny.html"
+    target.write_text(
+        "<html><body>"
+        '<div class="summary">Trip summary table goes here.</div>'
+        '<section class="rsec"><div class="rhead">The only receipt</div>'
+        '<div class="rc"><p>Receipt body for the only receipt.</p></div></section>'
+        "</body></html>",
+        encoding="utf-8",
+    )
+    return target
 
 
 def test_cli_prints_the_page_count_and_names_the_browser(
@@ -428,12 +464,21 @@ def measure(packet: Path) -> list[dict]:
             browser.close()
 
 
-def test_a_tall_image_receipt_ends_up_inside_the_page_budget(tmp_path: Path) -> None:
-    """An image at max-width:100% used to grow back and be cropped in half."""
-    sections = measure(tall_image_packet(tmp_path / "tall.html"))
+def test_a_tall_image_receipt_stays_readable_and_runs_on(tmp_path: Path) -> None:
+    """An image at max-width:100% used to grow back and be cropped in half.
+
+    It is not scaled to a fifth to reach the foot of one page either. It prints
+    at the width of the page and takes the pages it takes.
+    """
+    packet = tall_image_packet(tmp_path / "tall.html")
+    pdf = tmp_path / "tall.pdf"
+    sections = measure(packet)
     assert len(sections) == 1
-    assert sections[0]["height"] <= sections[0]["budget"] + TOLERANCE
-    assert sections[0]["scale"] < 1
+    assert sections[0]["scale"] >= render_pdf.MIN_SCALE
+
+    pages, _channel, page_map = render_pdf.render(packet, pdf)
+    assert page_map["pages"] == [pages - page_map["summary_pages"]]
+    assert page_map["pages"][0] > 1
 
 
 def small_packet(target: Path) -> Path:
@@ -453,20 +498,133 @@ def test_a_receipt_that_needs_no_scaling_is_left_alone(tmp_path: Path) -> None:
     assert sections[0]["scale"] == 1
 
 
-# --------------------------------------------------------------- the warning
+# ------------------------------------------------------- long, short and wide
 
 
-def test_a_heavily_scaled_receipt_is_named_on_stderr(
-    fixture_dir: Path, fixture_data: dict, tmp_path: Path, capsys
+def tall_table_packet(target: Path, rows: int = 200) -> Path:
+    """A receipt about 6000px tall: a table of rows, the shape a folio takes."""
+    body = "".join(
+        f"<tr><td>Row {number}</td><td>Line item number {number}</td><td>$ {number}.00</td></tr>"
+        for number in range(rows)
+    )
+    target.write_text(
+        "<html><head><title>Long</title>"
+        "<style>body{margin:0}.rhead{font-size:15px;padding:12px 16px}"
+        ".rc{padding:16px;width:fit-content;max-width:100%;margin:0 auto;box-sizing:border-box}"
+        "td{font-size:14px;padding:4px 8px}</style></head><body>"
+        '<div class="summary">Summary</div>'
+        '<section class="rsec"><div class="rhead">A very long receipt</div>'
+        f'<div class="rc"><p>{TOP_MARK}</p><table>{body}</table>'
+        f"<p>{BOTTOM_MARK}</p></div></section></body></html>",
+        encoding="utf-8",
+    )
+    return target
+
+
+def test_a_long_receipt_runs_on_at_a_readable_size(tmp_path: Path) -> None:
+    """The receipt this whole pass exists for: long, and nowhere near legible
+    at the scale that would have fitted it onto one page."""
+    packet = tall_table_packet(tmp_path / "long.html")
+    pdf = tmp_path / "long.pdf"
+    pages, _channel, page_map = render_pdf.render(packet, pdf)
+
+    assert page_map["summary_pages"] == 1
+    assert page_map["pages"] == [pages - 1]
+    assert page_map["pages"][0] >= 2
+    assert page_map["scales"][0] >= render_pdf.MIN_SCALE
+
+    text = [page.extract_text() or "" for page in PdfReader(str(pdf)).pages]
+    assert TOP_MARK in text[1]
+    assert "Row 199" in text[pages - 1]
+    assert BOTTOM_MARK in text[pages - 1]
+
+
+def narrow_receipt_packet(target: Path, receipts_dir: Path) -> Path:
+    """The real builder, over a receipt written for a phone screen.
+
+    600px wide is what a vendor's mail is laid out at, and on Letter that used
+    to print as a column up the left of the page with an inch of white either
+    side of it.
+    """
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+    (receipts_dir / "narrow.html").write_text(
+        '<table style="width:600px"><tr><td style="font-size:13px">'
+        "A receipt written for a phone screen.</td></tr></table>",
+        encoding="utf-8",
+    )
+    data = {
+        "company": "Northwind Systems",
+        "trip": "AUS to SEA onsite",
+        "traveler": "A traveler",
+        "days": [
+            {"label": "Monday", "items": [{"desc": "Bus fare", "amt": 3.25, "rid": "narrow"}]}
+        ],
+        "receipts": [{"rid": "narrow", "title": "A narrow receipt", "vendor": "generic"}],
+    }
+    target.write_text(build.render_packet(data, receipts_dir), encoding="utf-8")
+    return target
+
+
+def test_a_narrow_receipt_is_grown_to_fill_the_printable_width(tmp_path: Path) -> None:
+    """Measured on the card itself, against the width the page gives it."""
+    packet = narrow_receipt_packet(tmp_path / "narrow.html", tmp_path / "receipts")
+    with render_pdf.sync_playwright() as play:
+        browser, _channel = render_pdf.launch_browser(play)
+        try:
+            context = browser.new_context(viewport=render_pdf.VIEWPORT, java_script_enabled=False)
+            page = context.new_page()
+            page.route("**/*", render_pdf.block_remote_requests)
+            page.goto(packet.resolve().as_uri(), wait_until="load")
+            page.emulate_media(media="print")
+            sections = page.evaluate(render_pdf.FIT_JS)
+            box = page.evaluate(
+                """() => {
+                  const sec = document.querySelector('.rsec');
+                  return {
+                    card: sec.querySelector('.rc').getBoundingClientRect().width,
+                    page: sec.clientWidth
+                  };
+                }"""
+            )
+        finally:
+            browser.close()
+
+    assert sections[0]["scale"] > 1
+    assert sections[0]["scale"] <= render_pdf.MAX_SCALE
+    assert box["card"] >= box["page"] - TOLERANCE
+    assert box["card"] <= box["page"] + TOLERANCE
+
+
+# ------------------------------------------------------- what the run reports
+
+
+def test_the_cli_names_every_receipt_that_runs_to_more_than_one_page(
+    tmp_path: Path, capsys
 ) -> None:
-    """The oversized receipt in the helper packet lands well below half size."""
-    html = write_packet(tmp_path / "packet.html", fixture_data, fixture_dir / "receipts")
-    render_pdf.render(html, tmp_path / "packet.pdf")
-    err = capsys.readouterr().err
-    heading = fixture_data["receipts"][0].get("title", fixture_data["receipts"][0]["rid"])
-    assert f"render_pdf: {heading} was scaled to" in err
+    packet = tall_table_packet(tmp_path / "long.html")
+    pdf = tmp_path / "long.pdf"
+    assert render_pdf.main([str(packet), str(pdf)]) == 0
+    captured = capsys.readouterr()
+    pages = json.loads(render_pdf.page_map_path(pdf).read_text(encoding="utf-8"))
+    scale = pages["scales"][0]
+    assert f"receipt 1 spans {pages['pages'][0]} pages at scale {scale:.2f}" in captured.err
+    assert captured.out.strip() == str(pages["summary_pages"] + sum(pages["pages"]))
 
 
-def test_a_packet_that_fits_says_nothing(tmp_path: Path, capsys) -> None:
-    render_pdf.render(small_packet(tmp_path / "small.html"), tmp_path / "quiet.pdf")
-    assert capsys.readouterr().err == ""
+def test_a_packet_with_no_receipts_at_all_maps_to_the_summary(tmp_path: Path) -> None:
+    """A summary and nothing else: every page of it is the summary's."""
+    packet = tmp_path / "bare.html"
+    packet.write_text(
+        "<html><head><title>Bare</title></head><body>"
+        '<div class="summary">A trip with no receipts yet.</div></body></html>',
+        encoding="utf-8",
+    )
+    pages, _channel, page_map = render_pdf.render(packet, tmp_path / "bare.pdf")
+    assert page_map == {"summary_pages": pages, "pages": [], "scales": []}
+
+
+def test_a_packet_of_short_receipts_says_nothing_about_spans(tmp_path: Path, capsys) -> None:
+    assert (
+        render_pdf.main([str(small_packet(tmp_path / "small.html")), str(tmp_path / "s.pdf")]) == 0
+    )
+    assert "spans" not in capsys.readouterr().err
