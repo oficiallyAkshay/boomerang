@@ -58,7 +58,8 @@ one day out for everyone because nothing arrives before the thing it is a
 receipt for. The rest is data the model reads: a tender row marked `points`
 says this document settled in points and the cash is on another one, a
 `missing` entry says a figure is absent rather than zero, and a `last4_pattern`
-says where a vendor prints card digits that no general shape would find. The
+says where a vendor prints card digits that no general shape would find, which
+`cards.py --vendors vendors` reads along with the rest of the fingerprint. The
 kinds and categories come from closed sets, listed in
 `references/interfaces.md`, so a folder cannot invent a category the rest of
 the repo has never heard of. Each section below closes with what its own
@@ -279,8 +280,8 @@ and the amount is read from the payment row, because that is what was charged.
 Timing and reading: a ticket receipt arrives at purchase rather than at travel,
 so one day of padding around the travel window can miss it and the purchase
 date is the date to search on. The ticket row is a transit line, and the
-payment row names Apple Pay and prints no card digits, so the card fingerprint
-has nothing to match here.
+payment row is a wallet, Apple Pay, which settles to a card and never names it,
+so the card fingerprint has nothing to match here.
 
 ## Stripe receipt
 

@@ -15,6 +15,12 @@ A bare asterisk in front of four digits is a footnote at least as often as
 it is a card, so one mask character only counts when a card word stands
 close in front of it. Two or more mask characters count on their own.
 
+Some vendors print a card line none of those shapes reads. Given a vendors
+directory, each receipt is matched to the folder that sent it, through the
+headers ``fetch.py`` saved beside it, and read with that folder's own
+``last4_pattern`` where it has one. Without the directory nothing changes,
+and a receipt whose headers name no folder is read the built-in way.
+
 Nothing here is a payment detail. A last-4 is the only fragment receipts
 print, and it is read, counted and thrown away.
 """
@@ -28,6 +34,7 @@ import sys
 from pathlib import Path
 
 import attach_pdf
+import clean
 
 # A run of mask characters, then the four digits, with at most one space, dot
 # or hyphen between them. "Amex xxxx-4321" and "Visa •••• 4321" both land here.
@@ -144,8 +151,34 @@ def receipt_text(path: Path) -> str | None:
     return strip_tags(raw) if suffix == ".html" else raw
 
 
-def fingerprint(receipts_dir: Path) -> dict[str, list[str]]:
-    """last4 -> sorted rids, over every html, text and pdf receipt found."""
+def rules_for(path: Path, vendor_rules: dict | None) -> dict | None:
+    """The rules of the folder that sent this receipt, or None for the defaults.
+
+    The headers ``fetch.py`` saved beside the file name the vendor, and
+    ``clean.detect_vendor`` picks the folder from them, which is the same
+    answer the cleaner reached for the same receipt. A receipt with no meta
+    file beside it, or headers naming a folder these rules do not hold, falls
+    back to the built-in card shapes rather than to some other vendor's.
+    """
+    if not vendor_rules:
+        return None
+    meta = clean.read_meta(path)
+    if not meta:
+        return None
+    name = clean.detect_vendor(
+        str(meta.get("from") or ""), str(meta.get("subject") or ""), vendor_rules
+    )
+    return vendor_rules.get(name) if name else None
+
+
+def fingerprint(receipts_dir: Path, rules: dict | None = None) -> dict[str, list[str]]:
+    """last4 -> sorted rids, over every html, text and pdf receipt found.
+
+    With vendor rules, each receipt is read with its own folder's card line
+    where that folder describes one, so a card no general shape reaches is
+    counted along with the rest and can be the singleton that answers who
+    paid. Without them the reading is what it has always been.
+    """
     hits: dict[str, set[str]] = {}
     for path in sorted(Path(receipts_dir).iterdir()):
         if not path.is_file():
@@ -153,7 +186,7 @@ def fingerprint(receipts_dir: Path) -> dict[str, list[str]]:
         text = receipt_text(path)
         if text is None:
             continue
-        for last4 in find_last4(text):
+        for last4 in find_last4(text, rules_for(path, rules)):
             hits.setdefault(last4, set()).add(path.stem)
     return {last4: sorted(rids) for last4, rids in sorted(hits.items())}
 
@@ -166,9 +199,15 @@ def singletons(fp: dict[str, list[str]]) -> set[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Card fingerprints across a receipts directory.")
     parser.add_argument("receipts_dir", type=Path, help="directory of receipt files")
+    parser.add_argument(
+        "--vendors",
+        type=Path,
+        help="vendors directory, so a vendor's own card line is read too",
+    )
     args = parser.parse_args(argv)
 
-    fp = fingerprint(args.receipts_dir)
+    rules = clean.load_vendor_rules(args.vendors) if args.vendors else None
+    fp = fingerprint(args.receipts_dir, rules)
     print("last4  count  rids")
     for last4, rids in fp.items():
         print(f"{last4}  {len(rids)}  {' '.join(rids)}")
