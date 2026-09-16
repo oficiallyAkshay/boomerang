@@ -62,7 +62,7 @@ SENDERS = {
     "lyft": ("Lyft <no-reply@lyftmail.com>", "Your ride with Teodoro on June 15", "lyft"),
     "marriott": (
         "Marriott <reservations@res-marriott.com>",
-        "Reservation Confirmation #51882037 for Austin Congress Avenue",
+        "Reservation Confirmation #51882037 for The Westin Balcones Park",
         "marriott",
     ),
     "njtransit": ("NJ TRANSIT <noreply@mytix.njtransit.com>", "NJ TRANSIT - Receipt", "njtransit"),
@@ -407,6 +407,27 @@ def test_the_first_sender_domain_resolves_to_this_vendor(folder: str, rules: dic
     domain = rules[folder]["sender_domains"][0]
     assert domain in from_addr
     assert clean.detect_vendor(from_addr, subject, rules) == expected
+
+
+# A sample whose <title> is the subject line the vendor sent. Where a folder is
+# on this list, the two have to name the same thing: a subject naming one hotel
+# over a sample naming another reads as two stays and there is only one.
+TITLE_IS_THE_SUBJECT = ("marriott",)
+TITLE_RE = re.compile(r"<title>(.*?)</title>", re.S | re.I)
+
+
+@pytest.mark.parametrize("folder", TITLE_IS_THE_SUBJECT)
+def test_the_sample_title_and_the_subject_name_the_same_thing(folder: str) -> None:
+    """The scrubbing renamed the property, and the subject kept the old name.
+
+    Marriott puts the subject line in the sample's ``<title>``, so the two are
+    one string in two places, and a reader who saw a confirmation for one hotel
+    carrying a page titled for another would be right to distrust the packet.
+    """
+    for name, raw in samples_for(folder).items():
+        title = TITLE_RE.search(raw)
+        assert title, f"{folder}/{name} has no title"
+        assert title.group(1).strip() == SENDERS[folder][1]
 
 
 def test_uber_eats_is_told_from_an_uber_ride_by_its_subject(rules: dict) -> None:

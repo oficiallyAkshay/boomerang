@@ -194,7 +194,7 @@ SOURCES = [
         "marriott",
         VENDORS / "marriott" / "sample.html",
         "Marriott <reservations@res-marriott.com>",
-        "Reservation Confirmation #51882037 for Austin Congress Avenue",
+        "Reservation Confirmation #51882037 for The Westin Balcones Park",
         "Thu, 4 Jun 2026 08:30:00 -0500",
     ),
     (
