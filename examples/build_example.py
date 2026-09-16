@@ -58,10 +58,10 @@ and tracking pixels straight into the packet. The cleaned directory holds the
 cleaned HTML plus the text, PDF and image receipts copied across untouched.
 
 ``clean.py --fetch-images`` has no size cap, so the fetch is run once into the
-cache, the cache is then pruned of anything over 200 KB and trimmed to 1.5 MB,
-and the receipts are cleaned again offline against the pruned cache. That way
-the committed packet matches the committed cache exactly, which is what
-``--check`` verifies.
+cache, the cache is then pruned of anything that is not an image and anything
+over 200 KB and trimmed to 1.5 MB, and the receipts are cleaned again offline
+against the pruned cache. That way the committed packet matches the committed
+cache exactly, which is what ``--check`` verifies.
 
 Stdlib only, plus the repo's own scripts.
 """
@@ -94,6 +94,22 @@ PACKET_PDF = EXAMPLES / "packet.pdf"
 # the total is not something to commit. Both are enforced after the fetch.
 MAX_IMAGE_BYTES = 200 * 1024
 MAX_CACHE_BYTES = 1_500 * 1024
+
+# A cache entry smaller than this is not a picture of anything: it is a short
+# error body, or a bare "OK", saved under an image URL that answered with
+# something other than an image. Such an entry inlines as a broken data URI and
+# carries whatever the server said, so it is dropped before the cache is
+# committed.
+MIN_IMAGE_BYTES = 100
+
+# The first bytes of the four raster formats a receipt ever uses. WEBP is the
+# only one that needs two windows, because its marker sits after the RIFF size.
+IMAGE_SIGNATURES = (
+    b"\x89PNG\r\n\x1a\n",
+    b"\xff\xd8\xff",
+    b"GIF87a",
+    b"GIF89a",
+)
 
 COMPANY = "Northwind Labs, Inc."
 TRAVELER = "Jordan Rivera"
@@ -490,15 +506,33 @@ def expense_data() -> dict:
 # ---------------------------------------------------------------------- cache
 
 
+def looks_like_an_image(head: bytes) -> bool:
+    """True when these first bytes open a PNG, JPEG, GIF or WEBP file."""
+    if head.startswith(IMAGE_SIGNATURES):
+        return True
+    return head.startswith(b"RIFF") and head[8:12] == b"WEBP"
+
+
 def prune_cache(cache: Path) -> tuple[int, int]:
-    """Drop oversized cache entries, then the largest until the cache fits.
+    """Drop what is not an image, then oversized entries, then the largest.
 
     Returns the number of files kept and the total bytes. An image that is
     dropped is not lost from the packet: its ``src`` stays as the vendor wrote
     it, so the receipt still renders, just without that one picture offline.
+
+    The first pass is the privacy one. A URL that answers with a short error
+    body rather than a picture still lands in the cache, and a cached body that
+    is not an image is a stray fragment of someone's session, so an entry under
+    ``MIN_IMAGE_BYTES`` or without one of the four signatures is unlinked here
+    and never reaches a commit.
     """
     if not cache.is_dir():
         return 0, 0
+    for path in [path for path in sorted(cache.iterdir()) if path.is_file()]:
+        with path.open("rb") as handle:
+            head = handle.read(12)
+        if path.stat().st_size < MIN_IMAGE_BYTES or not looks_like_an_image(head):
+            path.unlink()
     files = [path for path in sorted(cache.iterdir()) if path.is_file()]
     for path in files:
         if path.stat().st_size > MAX_IMAGE_BYTES:

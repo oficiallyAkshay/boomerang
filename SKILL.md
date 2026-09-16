@@ -101,7 +101,7 @@ after the ride, and the airport legs get missed otherwise.
 `fetch.py` builds both passes from the vendor rules and does the padding:
 
 ```bash
-uv run python scripts/fetch.py --start 2026-03-02 --end 2026-03-06 \
+uv run python scripts/fetch.py --start 2026-06-11 --end 2026-06-16 \
   --out receipts --vendors vendors
 ```
 
