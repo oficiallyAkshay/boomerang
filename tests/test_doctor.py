@@ -120,6 +120,78 @@ def test_an_unusable_pin_falls_back_to_the_shipped_order(barren: Path, monkeypat
     assert doctor.find_browser() == "chrome"
 
 
+@pytest.fixture
+def no_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A machine where ``from render_pdf import ...`` cannot work.
+
+    ``None`` in ``sys.modules`` is what the import machinery treats as an
+    import that has been halted, so the import raises rather than finding the
+    renderer sitting beside doctor on the path. It stands for the machine this
+    check exists for: playwright is not installed, so render_pdf cannot import
+    playwright either.
+    """
+    monkeypatch.setitem(sys.modules, "render_pdf", None)
+    with pytest.raises(ImportError):
+        from render_pdf import wanted_channels  # noqa: F401
+
+
+def test_the_pin_is_honoured_with_no_renderer_to_ask(
+    barren: Path, no_renderer: None, monkeypatch: pytest.MonkeyPatch
+):
+    """The machine most likely to run doctor is the one with no renderer on it.
+
+    A run pinned to msedge is checked for msedge and nothing else, even though
+    render_pdf is not there to be asked for its order, because naming the
+    chrome beside it would answer a question nobody asked.
+    """
+    app = barren / "Google Chrome"
+    app.write_text("", encoding="utf-8")
+    monkeypatch.setitem(doctor.APPS, "chrome", str(app))
+    monkeypatch.setenv("BOOMERANG_BROWSER", "msedge")
+    assert doctor.channels_to_check() == ("msedge",)
+    assert doctor.find_browser() is None
+
+
+def test_the_pinned_browser_is_found_with_no_renderer_to_ask(
+    barren: Path, no_renderer: None, monkeypatch: pytest.MonkeyPatch
+):
+    edge = barren / "Microsoft Edge"
+    edge.write_text("", encoding="utf-8")
+    monkeypatch.setitem(doctor.APPS, "msedge", str(edge))
+    monkeypatch.setenv("BOOMERANG_BROWSER", "msedge")
+    assert doctor.find_browser() == "msedge"
+
+
+@pytest.mark.parametrize("pinned", ["MSEdge", "  msedge  "])
+def test_the_pin_is_read_the_way_the_renderer_reads_it(
+    pinned: str, barren: Path, no_renderer: None, monkeypatch: pytest.MonkeyPatch
+):
+    """Case and surrounding space are stripped here exactly as render_pdf strips them."""
+    monkeypatch.setenv("BOOMERANG_BROWSER", pinned)
+    assert doctor.channels_to_check() == ("msedge",)
+
+
+def test_no_pin_and_no_renderer_is_the_shipped_order(barren: Path, no_renderer: None):
+    assert doctor.channels_to_check() == doctor.CHANNELS
+
+
+@pytest.mark.parametrize("pinned", ["safari", ""])
+def test_a_pin_that_names_no_channel_is_the_shipped_order(
+    pinned: str, barren: Path, no_renderer: None, monkeypatch: pytest.MonkeyPatch
+):
+    """An unknown value is not a pin, which is where render_pdf refusing it lands too."""
+    monkeypatch.setenv("BOOMERANG_BROWSER", pinned)
+    assert doctor.channels_to_check() == doctor.CHANNELS
+
+
+def test_the_renderer_order_wins_when_the_renderer_imports(
+    barren: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """With render_pdf present it is the one asked, and doctor does not second guess it."""
+    monkeypatch.setenv("BOOMERANG_BROWSER", "chromium")
+    assert doctor.channels_to_check() == ("chromium",)
+
+
 def test_the_cache_path_follows_the_platform(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.delenv("PLAYWRIGHT_BROWSERS_PATH", raising=False)
     monkeypatch.setattr(doctor.platform, "system", lambda: "Darwin")
