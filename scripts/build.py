@@ -3,7 +3,9 @@
 
 Reads an expense_data.json, checks it against the schema in docs/interfaces.md,
 and renders one self contained HTML file: a cover block, one summary table, and
-one section per receipt in the order the data lists them.
+one section per receipt in the order the data lists them. The head carries a
+content security policy that allows no script and no remote fetch of any kind,
+so a receipt fragment cannot reach the network from inside a packet.
 
 Money is handled with Decimal throughout. ``totals`` returns Decimal values
 quantized to two places, so a packet's lines always add up to its total and
@@ -425,6 +427,11 @@ def render_packet(data: dict, receipts_dir: Path) -> str:
     out = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
+        # Belt to the cleaner's braces. Even if a receipt fragment smuggled
+        # something through, the packet loads no script and fetches nothing:
+        # images have to be data URIs and there is no other source at all.
+        '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
+        "img-src data:; style-src 'unsafe-inline'; font-src data:\">",
         f"<title>{title}</title>",
         f"<style>{CSS}</style>",
         '</head><body><div class="page">',

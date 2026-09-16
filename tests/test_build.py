@@ -416,6 +416,13 @@ def test_the_cover_block_names_the_trip(packet: str, data: dict) -> None:
     assert '<meta name="author"' not in packet.lower()
 
 
+def test_the_head_carries_a_content_security_policy(packet: str) -> None:
+    assert (
+        '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
+        "img-src data:; style-src 'unsafe-inline'; font-src data:\">"
+    ) in packet
+
+
 def test_the_summary_table_rows_are_in_order(packet: str, data: dict) -> None:
     region = summary_region(packet)
     for day in data["days"]:

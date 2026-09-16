@@ -72,7 +72,6 @@ CLI: gmail_cli.py auth --client-secret PATH | search QUERY | get RID --out DIR ;
 
 ```text
 render(html_path: Path, pdf_path: Path) -> int              # page count after render
-verify_pages(pdf_path: Path, expected: int) -> bool
 CLI: render_pdf.py packet.html packet.pdf [--expect N]      # prints the page count; exits 2 when --expect differs
 ```
 
