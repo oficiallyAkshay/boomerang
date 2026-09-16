@@ -29,9 +29,12 @@ import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-EM_DASH = "\u2014"  # written as an escape so this file stays clean
+# The two prose rules live in check_prose, which is the gate that enforces
+# them on the whole repo. Importing them here is what keeps a packet that
+# validates and a packet that passes the gate the same packet.
+from check_prose import BANNED_WORD_RE, EM_DASH
+
 RID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-BANNED_WORD_RE = re.compile(r"\bdue\b", re.IGNORECASE)
 CENTS = Decimal("0.01")
 
 KNOWN_KINDS = ("html", "text", "pdf", "image")

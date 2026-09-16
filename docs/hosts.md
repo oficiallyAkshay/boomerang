@@ -86,10 +86,6 @@ MCP server the user adds.
 
 Source: <https://cursor.com/docs/context/skills>
 
-### ChatGPT custom GPT
-
-Later, not in this release.
-
 ## The open specification
 
 The open skills specification requires `name` and `description`. The

@@ -15,8 +15,8 @@ from pathlib import Path
 import build
 import check_prose
 import pytest
+from check_prose import EM_DASH
 
-EM_DASH = "\u2014"  # written as an escape so this file stays clean
 RSEC_OPEN = '<section class="rsec"'
 
 

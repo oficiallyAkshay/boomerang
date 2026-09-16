@@ -137,9 +137,9 @@ def test_a_query_with_both_terms_and_domains_renders_both_groups():
 def test_fetch_all_writes_body_and_meta(tmp_path: Path):
     rid = "e20f48c14c0aa535"
     source = FakeSource({GENERIC_QUERY: [rid]}, {rid: message()})
-    written = fetch_all(source, build_queries(START, END, {}), tmp_path)
+    written, rejected, skipped = fetch_all(source, build_queries(START, END, {}), tmp_path)
 
-    assert written == [rid]
+    assert (written, rejected, skipped) == ([rid], [], [])
     assert (tmp_path / f"{rid}.html").read_text(encoding="utf-8") == "<p>a ride</p>"
     assert (tmp_path / f"{rid}.txt").read_text(encoding="utf-8") == "a ride"
     meta = json.loads((tmp_path / f"{rid}.meta.json").read_text(encoding="utf-8"))
@@ -163,7 +163,7 @@ def test_ids_are_deduped_across_queries_keeping_first_seen_order(tmp_path: Path)
         {rid: message() for rid in ("aaa", "bbb", "ccc")},
     )
     queries = [build_queries(START, END, VENDORS)[0], build_queries(START, END, VENDORS)[1]]
-    written = fetch_all(source, queries, tmp_path)
+    written, _, _ = fetch_all(source, queries, tmp_path)
     assert written == ["aaa", "bbb", "ccc"]
     assert source.fetched == ["aaa", "bbb", "ccc"]
 
@@ -172,10 +172,9 @@ def test_a_message_already_on_disk_is_not_fetched_again(tmp_path: Path):
     rid = "alreadyhere"
     (tmp_path / f"{rid}.meta.json").write_text("{}", encoding="utf-8")
     source = FakeSource({GENERIC_QUERY: [rid]}, {rid: message()})
-    report = fetch_all(source, build_queries(START, END, {}), tmp_path)
-    assert report == []
+    written, rejected, skipped = fetch_all(source, build_queries(START, END, {}), tmp_path)
+    assert (written, rejected, skipped) == ([], [], [rid])
     assert source.fetched == []
-    assert report.skipped == [rid]
 
 
 def test_attachments_are_written_with_a_sanitised_extension(tmp_path: Path):
@@ -214,9 +213,8 @@ def test_an_executable_attachment_is_skipped_and_noted(tmp_path: Path):
 @pytest.mark.parametrize("bad", ["../x", "a/b", "", "x" * 65, "has space", "dot.dot"])
 def test_a_message_id_that_is_not_a_safe_file_name_is_refused(tmp_path: Path, bad: str):
     source = FakeSource({GENERIC_QUERY: [bad]}, {})
-    report = fetch_all(source, build_queries(START, END, {}), tmp_path)
-    assert report == []
-    assert report.rejected == [bad]
+    written, rejected, skipped = fetch_all(source, build_queries(START, END, {}), tmp_path)
+    assert (written, rejected, skipped) == ([], [bad], [])
     assert source.fetched == []
     assert list(tmp_path.iterdir()) == []
 
@@ -314,8 +312,6 @@ def test_the_cli_fetches_through_the_gmail_source(tmp_path: Path, capsys, monkey
             "2026-06-09",
             "--out",
             str(tmp_path / "receipts"),
-            "--source",
-            "gmail",
         ]
     )
     assert code == 0

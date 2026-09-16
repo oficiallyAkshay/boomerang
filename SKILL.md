@@ -91,7 +91,7 @@ you:
 
 ```bash
 uv run python scripts/fetch.py --start 2026-03-02 --end 2026-03-06 \
-  --out receipts --vendors vendors --source gmail
+  --out receipts --vendors vendors
 ```
 
 ### 3. Fetch one receipt at a time, to disk
