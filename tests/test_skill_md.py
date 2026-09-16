@@ -99,6 +99,11 @@ def test_a_license_is_declared(skill: dict):
     assert skill["fields"].get("license", "").strip()
 
 
+def test_the_icon_is_declared(skill: dict):
+    """Cursor shows it; every other host ignores the field."""
+    assert skill["fields"].get("icon", "").strip()
+
+
 def test_every_script_the_body_names_exists(skill: dict):
     named = sorted(set(SCRIPT_RE.findall(skill["body"])))
     assert named, "the body should name at least one script"
