@@ -8,6 +8,19 @@ Both passes pad the window a day on each side, because ride receipts land
 six to twenty hours after the ride and the airport legs go missing without
 the padding.
 
+One day is right for a ride and short for a folio, so a vendor folder may say
+how late its own receipts arrive in ``arrival_lag_days`` and pass two pads
+that vendor's window end by it. Only the end moves: nothing arrives before the
+event, so the start stays one day out for every vendor, and pass one is a
+single query that cannot be padded per vendor and keeps its flat day.
+
+The same folders carry what the model needs at the reading steps rather than
+at the fetching one: which subject is the money record and which supersedes
+which, what the tender rows mean, what each charge line is, what the receipt
+does not print, and whether it names both endpoints. ``--knowledge`` prints
+all of it, every vendor in one pass, so it is read once instead of guessed at
+per receipt.
+
 The two passes are independent queries, so they run together on a small
 thread pool and their results are merged by query index rather than by
 whichever answered first. Bodies are fetched on a second small pool, and each
@@ -48,7 +61,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from build import RID_RE
-from clean import load_vendor_rules
+from clean import DEFAULT_ARRIVAL_LAG, KNOWLEDGE_TABLES, load_vendor_rules
 
 GENERIC_TERMS = [
     "receipt",
@@ -84,11 +97,32 @@ class Query:
     before: date
 
 
+def arrival_lag(rules: dict | None) -> int:
+    """How many days past the window end this vendor's receipts still arrive.
+
+    At least one, because every vendor needs the flat day, and the default
+    when a folder says nothing. A value of another type is read as the
+    default rather than raised on: ``load_vendor_rules`` already refuses one,
+    and a caller passing a dict of its own gets the safe answer.
+    """
+    lag = (rules or {}).get("arrival_lag_days", DEFAULT_ARRIVAL_LAG)
+    if isinstance(lag, bool) or not isinstance(lag, int):
+        return DEFAULT_ARRIVAL_LAG
+    return max(DEFAULT_ARRIVAL_LAG, lag)
+
+
 def build_queries(window_start: date, window_end: date, vendor_rules: dict) -> list[Query]:
     """Pass one generic terms, then one pass two query per vendor with domains.
 
     Vendors are visited in sorted name order so the query list is stable.
     A vendor whose rules list no sender domains contributes no query.
+
+    Pass one keeps a day on each side, because it is one query for every
+    vendor at once and there is no single lag that would be right for all of
+    them. Pass two moves each vendor's end out by that vendor's own lag, so a
+    folio that lands two days after checkout is inside the window that asked
+    for it. Every start stays one day out: a receipt does not arrive before
+    the thing it is a receipt for.
     """
     after = window_start - timedelta(days=1)
     before = window_end + timedelta(days=1)
@@ -98,8 +132,75 @@ def build_queries(window_start: date, window_end: date, vendor_rules: dict) -> l
         domains = [d for d in (rules.get("sender_domains") or []) if d]
         if not domains:
             continue
-        queries.append(Query(terms=[], from_domains=domains, after=after, before=before))
+        vendor_before = window_end + timedelta(days=arrival_lag(rules))
+        queries.append(Query(terms=[], from_domains=domains, after=after, before=vendor_before))
     return queries
+
+
+def _knowledge_rows(rules: dict, key: str) -> list[dict]:
+    """One knowledge table, with only the fields the printout reads kept."""
+    pattern_field, kind_field, _allowed, extra = KNOWLEDGE_TABLES[key]
+    rows: list[dict] = []
+    for row in rules.get(key) or []:
+        if not isinstance(row, dict):
+            continue
+        kept = {pattern_field: row.get(pattern_field, ""), kind_field: row.get(kind_field, "")}
+        if extra and row.get(extra):
+            kept[extra] = row[extra]
+        rows.append(kept)
+    return rows
+
+
+def vendor_knowledge(vendor_rules: dict) -> dict[str, dict]:
+    """What every folder says about its vendor, filled in and in name order.
+
+    Every vendor appears, including the search folders that say nothing but
+    their lag, because a folder missing from the printout reads as a vendor
+    nobody has looked at rather than as one with nothing to declare.
+    """
+    found: dict[str, dict] = {}
+    for name in sorted(vendor_rules):
+        rules = vendor_rules[name] or {}
+        facts = {key: _knowledge_rows(rules, key) for key in KNOWLEDGE_TABLES}
+        facts["arrival_lag_days"] = arrival_lag(rules)
+        facts["endpoints"] = bool(rules.get("endpoints"))
+        facts["missing"] = [gap for gap in (rules.get("missing") or []) if isinstance(gap, str)]
+        facts["last4_pattern"] = rules.get("last4_pattern") or ""
+        found[name] = facts
+    return found
+
+
+# The heading each table prints under. ``line_categories`` is long enough to
+# push the row off the line it belongs on, so it prints as lines.
+TABLE_HEADINGS = (("messages", "messages"), ("tenders", "tenders"), ("line_categories", "lines"))
+
+
+def knowledge_lines(knowledge: dict[str, dict]) -> list[str]:
+    """The printout: one header line per vendor, then only what it declares.
+
+    An empty table prints nothing at all, so a folder with one fact is one
+    line and the whole of it stays short enough to read in one go.
+    """
+    lines: list[str] = []
+    for name, facts in knowledge.items():
+        endpoints = "yes" if facts["endpoints"] else "no"
+        lines.append(f"{name}  lag {facts['arrival_lag_days']}d  endpoints {endpoints}")
+        for key, heading in TABLE_HEADINGS:
+            if not facts[key]:
+                continue
+            pattern_field, kind_field, _allowed, extra = KNOWLEDGE_TABLES[key]
+            parts = []
+            for row in facts[key]:
+                part = f"{row[kind_field]} {row[pattern_field]}"
+                if extra and extra in row:
+                    part += f" (supersedes {row[extra]})"
+                parts.append(part)
+            lines.append(f"  {heading}: " + " | ".join(parts))
+        if facts["missing"]:
+            lines.append("  missing: " + ", ".join(facts["missing"]))
+        if facts["last4_pattern"]:
+            lines.append(f"  last4: {facts['last4_pattern']}")
+    return lines
 
 
 def _quote(term: str) -> str:
@@ -294,11 +395,19 @@ def _parse_date(value: str) -> date:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Windowed two pass receipt search.")
-    parser.add_argument("--start", type=_parse_date, required=True, help="YYYY-MM-DD")
-    parser.add_argument("--end", type=_parse_date, required=True, help="YYYY-MM-DD")
-    parser.add_argument("--out", type=Path, required=True, help="receipts directory")
+    # None of the three is required outright, because --knowledge asks about
+    # the folders rather than about a trip and --dry-run writes nothing. Each
+    # is demanded below, at the point where the run actually needs it.
+    parser.add_argument("--start", type=_parse_date, help="YYYY-MM-DD")
+    parser.add_argument("--end", type=_parse_date, help="YYYY-MM-DD")
+    parser.add_argument("--out", type=Path, help="receipts directory")
     parser.add_argument("--vendors", type=Path, help="vendors directory for pass two")
     parser.add_argument("--dry-run", action="store_true", help="print the queries and stop")
+    parser.add_argument(
+        "--knowledge",
+        action="store_true",
+        help="print what every vendor folder says about its vendor, and stop",
+    )
     parser.add_argument(
         "--workers",
         type=int,
@@ -308,12 +417,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     rules = load_vendor_rules(args.vendors) if args.vendors else {}
+
+    if args.knowledge:
+        for line in knowledge_lines(vendor_knowledge(rules)):
+            print(line)
+        return 0
+
+    if args.start is None or args.end is None:
+        parser.error("--start and --end are required unless --knowledge is asked for")
     queries = build_queries(args.start, args.end, rules)
 
     if args.dry_run:
         for q in queries:
             print(to_gmail(q))
         return 0
+
+    if args.out is None:
+        parser.error("--out is required unless --dry-run or --knowledge is asked for")
 
     from gmail_cli import GmailSource
 

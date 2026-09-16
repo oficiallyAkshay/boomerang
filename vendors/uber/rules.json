@@ -24,5 +24,65 @@
   "unwrap_links_matching": [
     "uber\\.com"
   ],
-  "notes": "Removed from an Uber ride receipt: the app download and Download PDF buttons; the static map image, whose query string carries the pickup and dropoff coordinates; the social link row; the corporate address footer and the account and terms link cluster; and the support panels, matched at the wrapper that holds them so each one goes with its heading and its message rather than leaving those on the page. Two patterns here are written and then skipped, because each block prints a figure shaped like an amount and the guard will not take an amount out of a receipt. The Uber One cashback strip prints the $1.18 it credited, which is a real figure on a real receipt and is arguably part of it. The rate and tip module prints the driver's 4.92 rating, which is not money at all but cannot be told from money by its shape, so the module stays, minus its live controls, which are defused like every other link. Kept verbatim: the total, every fare line item including surcharges and promotions, the trip date and clock times, the pickup and dropoff rows, the product tier, and the payment rows with the card last four and the charge posting time. Nothing here is rewritten, so this folder carries no replace pairs. The total row gives the word Total a cell at width:100%, which once squeezed the amount beside it to a character a line, and the packet now scopes each receipt's stylesheet to its own card, so the row lays itself out inside that card and the total prints on one line without a rewrite."
+  "arrival_lag_days": 1,
+  "messages": [
+    {
+      "subject_pattern": "^(?:\\[Personal\\]\\s*)?Your .*(?:day (?:morning|afternoon|evening|night) )?trip with Uber",
+      "kind": "receipt"
+    },
+    {
+      "subject_pattern": "^Your Uber (?:receipt|trip)",
+      "kind": "receipt"
+    },
+    {
+      "subject_pattern": "^Uber: Your receipt$",
+      "kind": "receipt"
+    },
+    {
+      "subject_pattern": "^Here'?s your (?:trip|ride) receipt",
+      "kind": "receipt"
+    }
+  ],
+  "tenders": [
+    {
+      "label_pattern": "(?:Visa|Mastercard|Amex|American Express|Discover)\\s*(?:\u2022|&bull;)+\\s*\\d{4}",
+      "kind": "card"
+    }
+  ],
+  "line_categories": [
+    {
+      "label_pattern": "Trip fare",
+      "category": "fare"
+    },
+    {
+      "label_pattern": "Toll Plaza",
+      "category": "toll"
+    },
+    {
+      "label_pattern": "Congestion Surcharge",
+      "category": "ride_extra"
+    },
+    {
+      "label_pattern": "Driver Benefit Fund",
+      "category": "ride_extra"
+    },
+    {
+      "label_pattern": "Drop-off Surcharge",
+      "category": "ride_extra"
+    },
+    {
+      "label_pattern": "Access Fund",
+      "category": "ride_extra"
+    },
+    {
+      "label_pattern": "Promotion",
+      "category": "promo"
+    },
+    {
+      "label_pattern": "Uber One Credits",
+      "category": "promo"
+    }
+  ],
+  "endpoints": true,
+  "notes": "Removed from an Uber ride receipt: the app download and Download PDF buttons; the static map image, whose query string carries the pickup and dropoff coordinates; the social link row; the corporate address footer and the account and terms link cluster; and the support panels, matched at the wrapper that holds them so each one goes with its heading and its message rather than leaving those on the page. Two patterns here are written and then skipped, because each block prints a figure shaped like an amount and the guard will not take an amount out of a receipt. The Uber One cashback strip prints the $1.18 it credited, which is a real figure on a real receipt and is arguably part of it. The rate and tip module prints the driver's 4.92 rating, which is not money at all but cannot be told from money by its shape, so the module stays, minus its live controls, which are defused like every other link. Kept verbatim: the total, every fare line item including surcharges and promotions, the trip date and clock times, the pickup and dropoff rows, the product tier, and the payment rows with the card last four and the charge posting time. Nothing here is rewritten, so this folder carries no replace pairs. The total row gives the word Total a cell at width:100%, which once squeezed the amount beside it to a character a line, and the packet now scopes each receipt's stylesheet to its own card, so the row lays itself out inside that card and the total prints on one line without a rewrite. Timing and reading: ride receipts land 6 to 20 hours after the ride, so one day of padding covers them. Every subject this folder claims is a receipt, the card is the only tender, the fare rows carry the toll and the surcharges, and the pickup and drop-off rows carry both endpoints."
 }

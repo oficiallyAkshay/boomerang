@@ -73,14 +73,40 @@ def _has_card_word(text: str, before: int) -> bool:
     return CARD_WORD_RE.search(text[max(0, before - CONTEXT) : before]) is not None
 
 
-def find_last4(text: str) -> set[str]:
+def _from_vendor_pattern(text: str, pattern: str) -> set[str]:
+    """The last-4 values a vendor's own card line prints, group one each time.
+
+    Four digits and no more, and never a slice of a longer run, so a pattern
+    written loosely still cannot turn a reference number into a card.
+    """
+    found: set[str] = set()
+    for match in re.finditer(pattern, text, re.IGNORECASE):
+        digits = match.group(1) or ""
+        if len(digits) == 4 and digits.isdigit() and _isolated(text, match.start(1), match.end(1)):
+            found.add(digits)
+    return found
+
+
+def find_last4(text: str, rules: dict | None = None) -> set[str]:
     """Every card last-4 the text prints, in any of the known shapes.
 
     A single mask character is only read as a card when a card word stands
     close in front of it, so "Visa *4321" is a card and "Flight UA *1234",
     "Total *4321" and "Footnote: *2025 terms" are not. Two or more mask
     characters are a card on their own, because nothing else prints them.
+
+    A vendor whose card line fits none of those shapes says where its digits
+    are in its own ``last4_pattern``, and passing that vendor's rules here
+    reads the line that way instead. Stripe is the case that needs it: the
+    card brand is an image and the digits follow a bare dash, which no mask
+    and no "ending in" appears anywhere near. The pattern replaces the
+    built-in shapes rather than adding to them, because a folder that has to
+    describe its card line is a folder the defaults were wrong about. With no
+    rules, or with rules that name no pattern, nothing here changes.
     """
+    vendor_pattern = (rules or {}).get("last4_pattern")
+    if isinstance(vendor_pattern, str) and vendor_pattern:
+        return _from_vendor_pattern(text, vendor_pattern)
     found: set[str] = set()
     for match in ENDING_RE.finditer(text):
         if _isolated(text, match.start(1), match.end(1)):

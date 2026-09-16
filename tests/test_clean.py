@@ -1424,6 +1424,172 @@ def test_load_vendor_rules_on_an_empty_directory(tmp_path: Path) -> None:
     assert clean.load_vendor_rules(tmp_path) == {}
 
 
+# ------------------------------------------------------------ vendor knowledge
+
+# One well formed value for every optional field, so each test below can spoil
+# exactly one of them and nothing else.
+GOOD_KNOWLEDGE = {
+    "arrival_lag_days": 2,
+    "messages": [{"subject_pattern": "^A receipt", "kind": "receipt", "supersedes": "^A booking"}],
+    "tenders": [{"label_pattern": "Visa", "kind": "card"}],
+    "last4_pattern": r"Visa\s+(\d{4})",
+    "line_categories": [{"label_pattern": "Fare", "category": "fare"}],
+    "missing": ["total", "currency"],
+    "endpoints": True,
+}
+
+
+def test_a_folder_that_declares_nothing_about_its_vendor_still_loads(tmp_path: Path) -> None:
+    """Every knowledge field is optional, so the rules that predate them load."""
+    write_lyft_with(tmp_path)
+    loaded = clean.load_vendor_rules(tmp_path)["lyft"]
+    for key in GOOD_KNOWLEDGE:
+        loaded.pop(key, None)
+    assert clean._rule_problems(loaded) == []
+
+
+def test_every_knowledge_field_loads_as_written(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, **GOOD_KNOWLEDGE)
+    loaded = clean.load_vendor_rules(tmp_path)["lyft"]
+    for key, value in GOOD_KNOWLEDGE.items():
+        assert loaded[key] == value
+
+
+@pytest.mark.parametrize("lag", [1, 3, 0, -1], ids=["one", "three", "zero", "negative"])
+def test_any_whole_number_of_days_is_accepted_and_fetch_floors_it(lag: int, tmp_path: Path) -> None:
+    """The shape is checked here; whether it is sensible is fetch's business.
+
+    A folder saying zero days is saying nothing useful rather than saying
+    something wrong, and ``fetch.arrival_lag`` floors it at the flat day, so
+    refusing to load the whole folder over it would cost more than it saves.
+    """
+    write_lyft_with(tmp_path, arrival_lag_days=lag)
+    assert clean.load_vendor_rules(tmp_path)["lyft"]["arrival_lag_days"] == lag
+
+
+@pytest.mark.parametrize("bad", ["2", 1.5, None, True], ids=["string", "float", "null", "bool"])
+def test_a_lag_that_is_not_a_whole_number_is_refused(bad: object, tmp_path: Path) -> None:
+    """``True`` is in there on purpose: Python counts a bool as an int."""
+    write_lyft_with(tmp_path, arrival_lag_days=bad)
+    with pytest.raises(ValueError, match="arrival_lag_days must be an integer"):
+        clean.load_vendor_rules(tmp_path)
+
+
+@pytest.mark.parametrize("bad", ["yes", 1, None], ids=["string", "int", "null"])
+def test_endpoints_has_to_be_a_boolean(bad: object, tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, endpoints=bad)
+    with pytest.raises(ValueError, match="endpoints must be true or false"):
+        clean.load_vendor_rules(tmp_path)
+
+
+# Each table, with a value outside its closed set. A category only one folder
+# understands is a category the model cannot act on, so it stops the load.
+@pytest.mark.parametrize(
+    "key,row,field",
+    [
+        ("messages", {"subject_pattern": "^A", "kind": "voucher"}, "kind"),
+        ("tenders", {"label_pattern": "A", "kind": "cheque"}, "kind"),
+        ("line_categories", {"label_pattern": "A", "category": "laundry"}, "category"),
+    ],
+)
+def test_a_kind_outside_its_closed_set_stops_the_load(
+    key: str, row: dict, field: str, tmp_path: Path
+) -> None:
+    write_lyft_with(tmp_path, **{key: [row]})
+    with pytest.raises(ValueError, match=f"{key} 0 {field} must be one of"):
+        clean.load_vendor_rules(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "key,row,field",
+    [
+        ("messages", {"kind": "receipt"}, "subject_pattern"),
+        ("tenders", {"kind": "card"}, "label_pattern"),
+        ("line_categories", {"category": "fare"}, "label_pattern"),
+    ],
+)
+def test_a_row_without_its_pattern_stops_the_load(
+    key: str, row: dict, field: str, tmp_path: Path
+) -> None:
+    write_lyft_with(tmp_path, **{key: [row]})
+    with pytest.raises(ValueError, match=f"{key} 0 {field} must be a string"):
+        clean.load_vendor_rules(tmp_path)
+
+
+@pytest.mark.parametrize("key", sorted(clean.KNOWLEDGE_TABLES))
+def test_a_table_that_is_not_a_list_stops_the_load(key: str, tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, **{key: "one row"})
+    with pytest.raises(ValueError, match=f"{key} must be a list"):
+        clean.load_vendor_rules(tmp_path)
+
+
+@pytest.mark.parametrize("key", sorted(clean.KNOWLEDGE_TABLES))
+def test_a_row_that_is_not_an_object_stops_the_load(key: str, tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, **{key: ["a row as a string"]})
+    with pytest.raises(ValueError, match=f"{key} 0 must hold a JSON object"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_a_pattern_in_a_knowledge_row_is_compiled_at_load_time(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, tenders=[{"label_pattern": "(unclosed", "kind": "card"}])
+    with pytest.raises(ValueError, match="tenders 0 label_pattern does not compile"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_the_supersedes_pattern_is_compiled_too(tmp_path: Path) -> None:
+    """It is optional, so it is only read when the row carries one."""
+    row = {"subject_pattern": "^A", "kind": "update", "supersedes": "(unclosed"}
+    write_lyft_with(tmp_path, messages=[row])
+    with pytest.raises(ValueError, match="messages 0 supersedes does not compile"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_a_message_row_without_supersedes_is_complete(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, messages=[{"subject_pattern": "^A", "kind": "receipt"}])
+    assert clean.load_vendor_rules(tmp_path)["lyft"]["messages"][0] == {
+        "subject_pattern": "^A",
+        "kind": "receipt",
+    }
+
+
+def test_a_missing_fact_outside_the_closed_set_stops_the_load(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, missing=["total", "vat_number"])
+    with pytest.raises(ValueError, match="missing 1 must be one of"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_missing_has_to_be_a_list(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, missing="total")
+    with pytest.raises(ValueError, match="missing must be a list"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_a_last4_pattern_that_does_not_compile_stops_the_load(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, last4_pattern="(unclosed")
+    with pytest.raises(ValueError, match="last4_pattern does not compile"):
+        clean.load_vendor_rules(tmp_path)
+
+
+@pytest.mark.parametrize("bad", [r"Visa\s+\d{4}", r"(Visa)\s+(\d{4})"], ids=["none", "two"])
+def test_a_last4_pattern_has_to_capture_exactly_one_thing(bad: str, tmp_path: Path) -> None:
+    """find_last4 reads group one, so no group would raise and two would lie."""
+    write_lyft_with(tmp_path, last4_pattern=bad)
+    with pytest.raises(ValueError, match="last4_pattern must hold exactly one group"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_a_last4_pattern_that_is_not_a_string_stops_the_load(tmp_path: Path) -> None:
+    write_lyft_with(tmp_path, last4_pattern=4321)
+    with pytest.raises(ValueError, match="last4_pattern must be a string"):
+        clean.load_vendor_rules(tmp_path)
+
+
+def test_the_closed_sets_do_not_overlap_with_each_other() -> None:
+    """Two sets sharing a word would make a printed row ambiguous to read."""
+    assert clean.MESSAGE_KINDS & clean.TENDER_KINDS == set()
+    assert clean.LINE_CATEGORIES & clean.MISSING_FACTS == set()
+
+
 # ------------------------------------------------------------- vendor detection
 
 

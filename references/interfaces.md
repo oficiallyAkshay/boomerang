@@ -45,7 +45,7 @@ because a packet is built from the output of clean.py, not from the mailbox.
 Each vendor directory holds one, at `vendors/<name>/rules.json`.
 
 ```text
-{ "name": str, "display": str, "sender_domains": [str], "subject_patterns": [regex], "strip_regex": [regex applied with re.S over the HTML], "unwrap_links_matching": [regex on href, vendor specific only], "replace": [[regex, re.sub replacement]] (optional), "notes": str }
+{ "name": str, "display": str, "sender_domains": [str], "subject_patterns": [regex], "strip_regex": [regex applied with re.S over the HTML], "unwrap_links_matching": [regex on href, vendor specific only], "replace": [[regex, re.sub replacement]] (optional), "arrival_lag_days": int (optional, default 1), "messages": [{ "subject_pattern": regex, "kind": "receipt"|"update"|"confirmation"|"refund"|"marketing", "supersedes": regex (optional) }] (optional), "tenders": [{ "label_pattern": regex, "kind": "card"|"stored_value"|"points"|"credit"|"previous_ticket" }] (optional), "last4_pattern": regex with exactly one group (optional), "line_categories": [{ "label_pattern": regex, "category": one of fare, tip, ride_extra, toll, tax, promo, room, resort_fee, parking, incidental, minibar, bag, seat, wifi, change_fee, meal, alcohol, transit, other }] (optional), "missing": [one of date, total, currency, addresses, attachment_holds_charge] (optional), "endpoints": bool (optional, default false), "notes": str }
 ```
 
 `unwrap_links_matching` carries only the tracking shapes that are a vendor's own. The four every
@@ -54,6 +54,20 @@ every receipt, generic ones included. Every pattern in `strip_regex`, `subject_p
 `unwrap_links_matching` and `replace` is compiled when the rules load, so a pattern that does not
 compile names its key and its index instead of raising halfway through a receipt. `replace` pairs
 run before every pass that sanitises, so a replacement cannot put anything active into a fragment.
+
+Everything from `arrival_lag_days` on is vendor knowledge rather than cleaning: no cleaning pass
+reads any of it, and every field is optional with an empty default, so a folder written before it
+still loads. The closed sets are `clean.MESSAGE_KINDS`, `clean.TENDER_KINDS`,
+`clean.LINE_CATEGORIES` and `clean.MISSING_FACTS`, the lag default is
+`clean.DEFAULT_ARRIVAL_LAG`, and a value outside a set stops the load naming its key and its index.
+`arrival_lag_days` moves that vendor's pass two window end only; every start stays one day out. A
+`messages` row whose `supersedes` names another of that folder's subject patterns says the later
+message replaces the earlier one as the money record. `last4_pattern` is read by
+`cards.find_last4(text, rules)`, where it replaces the built-in card shapes rather than adding to
+them. `missing` names what the receipt does not print, so a gap is looked for elsewhere instead of
+being read as a zero, and `endpoints` says whether the receipt carries both a pickup and a
+drop-off address. `fetch.vendor_knowledge(rules)` fills all of it in per vendor and
+`fetch.knowledge_lines` renders the `--knowledge` printout.
 
 ## Command lines
 
@@ -67,8 +81,12 @@ CLI: clean.py --dir RECEIPTS --out CLEAN [--vendors DIR] [--images DIR] [--fetch
   # per receipt on stderr, in filename order, and the amount guard warnings in that order too
 CLI: cards.py RECEIPTS_DIR      # reads .html, .txt and .pdf receipts, so folios are counted too
 CLI: fetch.py --start YYYY-MM-DD --end YYYY-MM-DD --out DIR [--vendors DIR] [--dry-run] [--workers N]
+CLI: fetch.py --vendors DIR --knowledge     # every folder's vendor knowledge, then stop
+  # --knowledge needs no window and no --out, and --dry-run needs no --out; a real fetch needs all
+  # three and says which one is missing
   # runs the two passes as concurrent queries and merges the ids by query index, not by which
   # query answered first; --workers is how many bodies are fetched at once, 3 by default
+  # pass one pads a day each side; pass two pads each vendor's end by its own arrival_lag_days
   # writes <rid>.html, <rid>.txt, <rid>.meta.json; the first kept attachment of each kind is
   # <rid>.pdf | <rid>.png | <rid>.jpg and later ones of that kind <rid>.<n>.<ext>; a message
   # with no body and no kept attachment writes nothing and is named on stdout as empty

@@ -143,6 +143,57 @@ LIST_KEYS = (
 # The keys whose every entry is a regex, checked when the rules are loaded.
 PATTERN_KEYS = ("strip_regex", "subject_patterns", "unwrap_links_matching")
 
+# What a folder may say about the vendor rather than about its markup. None of
+# it is used while cleaning: it is read by the model, through
+# ``fetch.py --knowledge``, at the steps where a search window, a money record
+# and a policy line get decided. Every field is optional and every default is
+# empty, so a folder written before any of this still loads unchanged.
+#
+# Each set below is closed. A value outside it is a typo or a private category
+# nothing else understands, and either way the rules refuse to load, because a
+# category only one folder uses is a category the model cannot act on.
+MESSAGE_KINDS = frozenset({"receipt", "update", "confirmation", "refund", "marketing"})
+TENDER_KINDS = frozenset({"card", "stored_value", "points", "credit", "previous_ticket"})
+LINE_CATEGORIES = frozenset(
+    {
+        "fare",
+        "tip",
+        "ride_extra",
+        "toll",
+        "tax",
+        "promo",
+        "room",
+        "resort_fee",
+        "parking",
+        "incidental",
+        "minibar",
+        "bag",
+        "seat",
+        "wifi",
+        "change_fee",
+        "meal",
+        "alcohol",
+        "transit",
+        "other",
+    }
+)
+# What a vendor's receipt does not print, so the model looks for it elsewhere
+# rather than reporting a gap as a zero.
+MISSING_FACTS = frozenset({"date", "total", "currency", "addresses", "attachment_holds_charge"})
+
+# key -> (the field holding a regex, the field holding a closed set value, that
+# set, and one more optional regex field). All three tables have that shape.
+KNOWLEDGE_TABLES = {
+    "messages": ("subject_pattern", "kind", MESSAGE_KINDS, "supersedes"),
+    "tenders": ("label_pattern", "kind", TENDER_KINDS, None),
+    "line_categories": ("label_pattern", "category", LINE_CATEGORIES, None),
+}
+
+# How many days after the event this vendor's receipt usually lands, when the
+# folder does not say. One day is what every vendor with a same day receipt
+# needs; a folio needs more and says so.
+DEFAULT_ARRIVAL_LAG = 1
+
 # The tracking link shapes every vendor sends, unwrapped for all of them. A
 # rules.json lists only the shapes that are its own, so a sender domain that
 # wraps its links in ``click.`` never has to say so.
@@ -762,7 +813,103 @@ def _rule_problems(loaded: object) -> list[str]:
         problems.append("name must be a string")
     problems.extend(_pattern_problems(loaded))
     problems.extend(_replace_problems(loaded))
+    problems.extend(_knowledge_problems(loaded))
     return problems
+
+
+def _listed(allowed: frozenset[str]) -> str:
+    return ", ".join(sorted(allowed))
+
+
+def _regex_problems(where: str, pattern: object) -> list[str]:
+    """One regex field, named by where it sits rather than by its offset."""
+    if not isinstance(pattern, str):
+        return [f"{where} must be a string"]
+    try:
+        re.compile(pattern)
+    except re.error as error:
+        return [f"{where} does not compile: {error}"]
+    return []
+
+
+def _table_problems(loaded: dict, key: str) -> list[str]:
+    """One of the three knowledge tables: a list of small objects, all alike.
+
+    Every row carries a regex and a value from a closed set, and ``messages``
+    rows may carry one more regex naming the message this one supersedes. A
+    kind outside its set is refused here rather than ignored later, because a
+    row nothing understands is a row that silently does nothing.
+    """
+    if key not in loaded:
+        return []
+    rows = loaded[key]
+    if not isinstance(rows, list):
+        return [f"{key} must be a list"]
+    pattern_field, kind_field, allowed, extra = KNOWLEDGE_TABLES[key]
+    problems: list[str] = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            problems.append(f"{key} {index} must hold a JSON object")
+            continue
+        if row.get(kind_field) not in allowed:
+            problems.append(f"{key} {index} {kind_field} must be one of {_listed(allowed)}")
+        fields = [pattern_field] + ([extra] if extra and extra in row else [])
+        for field in fields:
+            problems.extend(_regex_problems(f"{key} {index} {field}", row.get(field)))
+    return problems
+
+
+def _knowledge_problems(loaded: dict) -> list[str]:
+    """What is wrong with the optional fields a folder says about its vendor.
+
+    All of them are optional, so a rules.json carrying none of them is
+    complete. What is checked is that anything present is the shape the model
+    will read: an integer of days, three tables of closed set rows, a list
+    drawn from the closed set of gaps, one capturing regex for a card line,
+    and a plain boolean for whether the receipt prints both endpoints.
+    """
+    problems: list[str] = []
+    if "arrival_lag_days" in loaded:
+        lag = loaded["arrival_lag_days"]
+        if isinstance(lag, bool) or not isinstance(lag, int):
+            problems.append("arrival_lag_days must be an integer")
+    if "endpoints" in loaded and not isinstance(loaded["endpoints"], bool):
+        problems.append("endpoints must be true or false")
+    for key in KNOWLEDGE_TABLES:
+        problems.extend(_table_problems(loaded, key))
+    problems.extend(_missing_problems(loaded))
+    problems.extend(_last4_problems(loaded))
+    return problems
+
+
+def _missing_problems(loaded: dict) -> list[str]:
+    if "missing" not in loaded:
+        return []
+    gaps = loaded["missing"]
+    if not isinstance(gaps, list):
+        return ["missing must be a list"]
+    return [
+        f"missing {index} must be one of {_listed(MISSING_FACTS)}"
+        for index, gap in enumerate(gaps)
+        if gap not in MISSING_FACTS
+    ]
+
+
+def _last4_problems(loaded: dict) -> list[str]:
+    """The one field that has to capture something, so the group is counted.
+
+    ``cards.find_last4`` reads group one of this pattern and nothing else, so
+    a pattern with no group would raise on the first receipt it matched and a
+    pattern with two would quietly read the wrong half of the card line.
+    """
+    if "last4_pattern" not in loaded:
+        return []
+    problems = _regex_problems("last4_pattern", loaded["last4_pattern"])
+    if problems:
+        return problems
+    if re.compile(loaded["last4_pattern"]).groups != 1:
+        return ["last4_pattern must hold exactly one group"]
+    return []
 
 
 def _pattern_problems(loaded: dict) -> list[str]:

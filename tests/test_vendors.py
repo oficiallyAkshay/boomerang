@@ -22,10 +22,15 @@ import json
 import re
 from pathlib import Path
 
+import cards
 import clean
 import pytest
 
 VENDORS_DIR = Path(__file__).resolve().parents[1] / "vendors"
+
+# A street address as a receipt prints one: a number, a name, then a city and a
+# two letter state. It is what a folder claiming both endpoints has to carry.
+STREET_RE = re.compile(r"\d+ [A-Z][\w'.-]*(?: [A-Z][\w'.-]*)*, [A-Z][\w .'-]+, [A-Z]{2}\b")
 
 # Every folder, and whether it ships a sample. The two search folders exist so
 # the second search pass covers hotel and airline mail; they clean nothing.
@@ -489,6 +494,116 @@ def test_the_plaintext_catch_all_wins_for_a_domainless_hotel_text(rules: dict) -
 
 def test_a_listed_hotel_domain_beats_the_catch_all(rules: dict) -> None:
     assert clean.detect_vendor("noreply@citizenm.com", PLAINTEXT_SUBJECT, rules) == "hotels"
+
+
+# --------------------------------------------------------- vendor knowledge
+
+
+@pytest.mark.parametrize("folder", FOLDERS)
+def test_every_folder_says_how_late_its_receipts_arrive(folder: str, rules: dict) -> None:
+    """A whole number of days, and at least one, in every folder.
+
+    The field is optional in the schema, so a folder could leave it out and
+    load. None of the shipped ones does: a reader comparing two folders should
+    never have to work out whether a silence means one day or means nobody
+    looked.
+    """
+    lag = rules[folder]["arrival_lag_days"]
+    assert isinstance(lag, int) and not isinstance(lag, bool)
+    assert lag >= 1, f"{folder} says its receipts arrive before the event"
+
+
+def test_the_folders_that_wait_for_a_folio_say_so() -> None:
+    """The two day lags are the hotel shaped ones, and nothing else."""
+    rules = clean.load_vendor_rules(VENDORS_DIR)
+    slow = {name for name, rule in rules.items() if rule["arrival_lag_days"] > 1}
+    assert slow == {"hotels", "marriott", "plaintext"}
+
+
+@pytest.mark.parametrize("folder", FOLDERS)
+def test_every_declared_kind_and_category_is_in_its_closed_set(folder: str, rules: dict) -> None:
+    """load_vendor_rules refuses anything else, so this is the shipped proof."""
+    rule = rules[folder]
+    assert {row["kind"] for row in rule.get("messages", [])} <= clean.MESSAGE_KINDS
+    assert {row["kind"] for row in rule.get("tenders", [])} <= clean.TENDER_KINDS
+    assert {row["category"] for row in rule.get("line_categories", [])} <= clean.LINE_CATEGORIES
+    assert set(rule.get("missing", [])) <= clean.MISSING_FACTS
+
+
+@pytest.mark.parametrize("folder", FOLDERS)
+def test_a_message_row_only_supersedes_a_subject_its_own_folder_claims(
+    folder: str, rules: dict
+) -> None:
+    """Otherwise the row names a message this folder would never be given."""
+    rule = rules[folder]
+    claimed = set(rule["subject_patterns"])
+    for index, row in enumerate(rule.get("messages", [])):
+        assert row["subject_pattern"] in claimed, f"{folder} messages {index} claims no subject"
+        if "supersedes" in row:
+            assert row["supersedes"] in claimed, f"{folder} messages {index} supersedes an outsider"
+
+
+def sample_text(folder: str) -> list[str]:
+    """Every sample in a folder as the text a reader of values would see."""
+    return [
+        cards.strip_tags(raw) if name.endswith(".html") else raw
+        for name, raw in samples_for(folder).items()
+    ]
+
+
+@pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
+def test_every_label_a_folder_names_is_one_its_sample_prints(folder: str, rules: dict) -> None:
+    """The same rule the strip patterns live under, for the knowledge labels.
+
+    A tender or a line category describing a label no sample carries is a
+    guess about the vendor, and a guess is what this whole folder exists to
+    replace. Matching is on the text a reader sees, tags gone and entities
+    resolved, because that is what the label is by the time anyone reads it.
+    """
+    texts = sample_text(folder)
+    for key in ("tenders", "line_categories"):
+        for index, row in enumerate(rules[folder].get(key, [])):
+            pattern = row["label_pattern"]
+            assert any(re.search(pattern, text) for text in texts), (
+                f"{folder} {key} {index} names a label no sample prints: {pattern}"
+            )
+
+
+@pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
+def test_a_folder_with_its_own_card_shape_finds_a_card_the_defaults_miss(
+    folder: str, rules: dict
+) -> None:
+    """The only reason to carry last4_pattern is that nothing else works."""
+    pattern = rules[folder].get("last4_pattern")
+    if pattern is None:
+        return
+    for text in sample_text(folder):
+        assert cards.find_last4(text) == set(), f"{folder} needs no last4_pattern"
+        assert cards.find_last4(text, rules[folder]), f"{folder} last4_pattern finds nothing"
+
+
+def test_stripe_is_the_folder_that_needs_its_own_card_shape(rules: dict) -> None:
+    """Named here so that a second one has to be a deliberate addition."""
+    carried = {name for name in FOLDERS if rules[name].get("last4_pattern")}
+    assert carried == {"stripe"}
+
+
+@pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
+def test_a_folder_claiming_both_endpoints_prints_both_addresses(folder: str, rules: dict) -> None:
+    """endpoints says a ride can be classified from the receipt alone.
+
+    Two street addresses in the body is what that takes, so the claim is
+    checked against the sample rather than trusted.
+    """
+    if not rules[folder].get("endpoints"):
+        return
+    for text in sample_text(folder):
+        assert len(STREET_RE.findall(text)) >= 2, f"{folder} claims endpoints it does not print"
+
+
+def test_the_ride_and_delivery_folders_are_the_ones_with_endpoints(rules: dict) -> None:
+    named = {name for name in FOLDERS if rules[name].get("endpoints")}
+    assert named == {"lyft", "uber", "uber-eats"}
 
 
 # ------------------------------------------------------------- the reference

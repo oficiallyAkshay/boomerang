@@ -69,8 +69,13 @@ parts and never the answer.
 **Adding a vendor.** New folder `vendors/<name>/`, holding `rules.json` with
 `name` matching the folder, `display`, `sender_domains`, `subject_patterns`,
 `strip_regex` applied with `re.S`, `unwrap_links_matching`, an optional
-`replace` of before and after pairs for markup a strip pattern cannot fix, and
-`notes` that agree with the vendor's paragraph in `references/vendors.md`. Ship
+`replace` of before and after pairs for markup a strip pattern cannot fix, the
+optional vendor knowledge fields `arrival_lag_days`, `messages`, `tenders`,
+`last4_pattern`, `line_categories`, `missing` and `endpoints`, and `notes` that
+agree with the vendor's paragraph in `references/vendors.md`. The knowledge
+fields are read by the model rather than by the cleaner, their kinds and
+categories come from the closed sets in `references/interfaces.md`, and every
+label they name has to be a label the sample really prints. Ship
 a synthetic sample beside it, scrubbed of anything real and tag-balanced, so
 each strip pattern takes a whole element. Prove every pattern fires on that
 sample in `tests/test_vendors.py`. The amount guard skips any pattern that would

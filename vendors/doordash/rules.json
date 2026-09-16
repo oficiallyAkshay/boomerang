@@ -22,5 +22,61 @@
   "unwrap_links_matching": [
     "tracksg\\."
   ],
-  "notes": "Removed from a DoorDash final order receipt: the open pixel on tracksg.doordash.com, the marketing hero illustration, the hidden preheader spacer, the adjustment policy boilerplate, the Get Order Help button, the footer table carrying the corporate address and its privacy and help centre links. Kept verbatim: every line item with its quantity, the weighted item unit prices, both halves of each substitution pair, the subtotal, the delivery and service fees, the tax, the Dasher tip row, the discount, the header total and the final total charged, the payment line with its card last four, and the store name. The Dasher tip is a fee row in the receipt, not a tip button, so it stays visible and policy removes it from the claim instead. This template prints no order date anywhere, not in the body and not in the footer, so the date has to come from the message headers."
+  "arrival_lag_days": 1,
+  "messages": [
+    {
+      "subject_pattern": "^Final receipt for .+ from ",
+      "kind": "update",
+      "supersedes": "^Your .* order(?: confirmation)?$"
+    },
+    {
+      "subject_pattern": "^Your .* order(?: confirmation)?$",
+      "kind": "confirmation"
+    },
+    {
+      "subject_pattern": "^Order (?:receipt|confirmation)",
+      "kind": "confirmation"
+    },
+    {
+      "subject_pattern": "^Thanks for your order",
+      "kind": "confirmation"
+    }
+  ],
+  "tenders": [
+    {
+      "label_pattern": "Paid with\\s+(?:Visa|Mastercard|Amex|American Express|Discover)\\s+Ending in",
+      "kind": "card"
+    },
+    {
+      "label_pattern": "and/or\\s+credits",
+      "kind": "credit"
+    }
+  ],
+  "line_categories": [
+    {
+      "label_pattern": "Dasher\\s+tip",
+      "category": "tip"
+    },
+    {
+      "label_pattern": "Delivery fee",
+      "category": "other"
+    },
+    {
+      "label_pattern": "Service\\s+fee",
+      "category": "other"
+    },
+    {
+      "label_pattern": "Tax",
+      "category": "tax"
+    },
+    {
+      "label_pattern": "Discount",
+      "category": "promo"
+    }
+  ],
+  "missing": [
+    "date"
+  ],
+  "endpoints": false,
+  "notes": "Removed from a DoorDash final order receipt: the open pixel on tracksg.doordash.com, the marketing hero illustration, the hidden preheader spacer, the adjustment policy boilerplate, the Get Order Help button, the footer table carrying the corporate address and its privacy and help centre links. Kept verbatim: every line item with its quantity, the weighted item unit prices, both halves of each substitution pair, the subtotal, the delivery and service fees, the tax, the Dasher tip row, the discount, the header total and the final total charged, the payment line with its card last four, and the store name. The Dasher tip is a fee row in the receipt, not a tip button, so it stays visible and policy removes it from the claim instead. This template prints no order date anywhere, not in the body and not in the footer, so the date has to come from the message headers. Timing and reading: an order receipt lands within a day of the delivery. The final receipt is an update and supersedes the order confirmation it revises, the card and the credits share one payment line, and the missing fact is the date."
 }

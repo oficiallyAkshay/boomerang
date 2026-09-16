@@ -40,11 +40,10 @@ script and read its output.
 ## Capability contract
 
 Before anything else, run `python scripts/doctor.py`; if it reports something
-missing, run the command it prints, with the user's consent, then continue.
-Never install a browser download without asking.
-
-Boomerang needs five capabilities. Check which ones the host gives you, and say
-plainly which are missing.
+missing, run the command it prints, with the user's consent, then continue, and
+never install a browser download without asking. Boomerang needs five
+capabilities: check which ones the host gives you, and say plainly which are
+missing.
 
 | Capability | On a connector host | With the bundled fallback |
 | --- | --- | --- |
@@ -98,10 +97,12 @@ Pass one is date-windowed generic terms: receipt, confirmation, your ride, your
 order, eTicket. Pass two is one query per vendor: Lyft, Uber, DoorDash, United,
 Delta, hotel chains, Hotels.com, citizenM, Lime.
 
-Pad the window one day on each side: ride receipts arrive six to twenty hours
-after the ride, and the airport legs get missed otherwise. `fetch.py` builds
-both passes from the vendor rules, pads the window, runs every query at once,
-and orders the results by query rather than by whichever answered first:
+`fetch.py` builds both passes from the vendor rules, runs every query at once,
+and orders results by query, not by whichever answered first. Pass one is padded
+a day each side, because ride receipts arrive six to twenty hours late; pass two
+is padded by each vendor's own lag. Read the vendor knowledge first, with
+`--knowledge` and no window: every folder's lag, which subject is the money
+record, what its tenders and charge lines mean, and what its receipt omits.
 
 ```bash
 uv run python scripts/fetch.py --start 2026-06-11 --end 2026-06-16 \
@@ -132,7 +133,9 @@ uv run python scripts/cards.py receipts
 ```
 
 The eTicket chain: read it oldest first. The phrase "previous ticket value
-applied" means the base fare was paid earlier, by someone else.
+applied" means the base fare was paid earlier, by someone else. Step 2's
+knowledge names each vendor's tenders, so a points or previous_ticket row did
+not settle in cash, and a last4_pattern says where `cards.py` alone finds none.
 
 ### 5. Apply the policy
 
@@ -166,6 +169,8 @@ Build the candidate list with the defaults applied, and put the arithmetic in
 the data, not your head: a refunded line carries `amt` and `refund`, a stipend
 `rate` and `days`, a line paid abroad `local_amt` and `local_currency`, and
 `build.py` sums them. Give every meal an `at`, so two from one slot are caught.
+Classify each line with its vendor's category from step 2, and read a missing
+fact as absent rather than zero: chase it in the folio, not in the confirmation.
 
 ### 6. Show the candidate list, then correct it
 
@@ -185,11 +190,9 @@ uv run python scripts/build.py expense_data.json --receipts clean \
 
 Build from `clean`, the folder step 5 writes, never from `receipts`: a raw
 vendor email still carries its tracking pixels and its live links, and building
-from it puts all of that in the packet.
-
-The schema is in `references/interfaces.md`. `build.py` validates before it
-writes, and every problem it finds is a real problem: fix the data, not the
-validator.
+from it puts all of that in the packet. The schema is in
+`references/interfaces.md`, and `build.py` validates before it writes: every
+problem it finds is a real one, so fix the data, not the validator.
 
 ```bash
 uv run python scripts/render_pdf.py packet.html packet.pdf --expect 12
@@ -263,18 +266,15 @@ and rating controls, promotional modules, app-download banners, hero images and
 social footers; and everything that could act, meaning scripts, inline handlers,
 live URL schemes, and every element that can load a second document. Never
 altered: amounts, taxes and fees, dates and times, line items, addresses printed
-inside the receipt, and the vendor's own logos and fonts.
+inside the receipt, and the vendor's own logos and fonts. Say this plainly the
+first time you show a rendered receipt. The full list of both is in
+`references/vendors.md`, the machine-readable form `vendors/<name>/rules.json`.
 
-Say this plainly to the user the first time you show them a rendered receipt.
-The full list of both is in `references/vendors.md`, and the machine-readable
-form is `vendors/<name>/rules.json`.
-
-Three more rendering rules. Images are inlined as base64, or they break
-offline and in the PDF. Vendor CSS is scoped to that one receipt's card, so two
-vendors on one page do not fight. A promotional or tip module that carries an
-amount is kept: the guard that stops a strip pattern carrying a figure away
-cannot tell a real amount from an advertised one, so some marketing text does
-survive on a receipt. Say so rather than letting the user wonder.
+Three more rendering rules. Images are inlined as base64, or they break offline
+and in the PDF. Vendor CSS is scoped to that one receipt's card, so two vendors
+on one page do not fight. A promotional or tip module that carries an amount is
+kept: the guard that stops a strip pattern carrying a figure away cannot tell a
+real amount from an advertised one, so some marketing text survives. Say so.
 
 Plaintext confirmations, which is how most hotel emails arrive, render as a
 monospace block with From, Date and Subject headers above the body.

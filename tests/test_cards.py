@@ -124,6 +124,55 @@ def test_no_singletons_when_every_card_repeats():
     assert singletons({"4321": ["a", "b"]}) == set()
 
 
+# --------------------------------------------------- a vendor's own card line
+
+# Stripe's shape, and the reason the field exists: the brand is an image, so
+# nothing survives the tag strip except a dash and four digits.
+STRIPE_LINE = "Payment method\n   \n    - 4321\n"
+STRIPE_RULES = {"last4_pattern": r"Payment method\s*-\s*(\d{4})"}
+
+
+def test_a_card_line_no_default_shape_reads_is_found_by_the_vendor_pattern():
+    """The line the built-in shapes miss, and the rules that find it."""
+    assert find_last4(STRIPE_LINE) == set()
+    assert find_last4(STRIPE_LINE, STRIPE_RULES) == {"4321"}
+
+
+def test_the_vendor_pattern_replaces_the_built_in_shapes():
+    """A folder that describes its card line is a folder the defaults got wrong.
+
+    So the pattern is not one more shape to try. A receipt carrying both its
+    own line and something the defaults would have read answers with the
+    vendor's line alone.
+    """
+    both = STRIPE_LINE + "Visa ending in 8802"
+    assert find_last4(both) == {"8802"}
+    assert find_last4(both, STRIPE_RULES) == {"4321"}
+
+
+def test_rules_that_name_no_pattern_change_nothing():
+    for rules in ({}, {"last4_pattern": ""}, {"last4_pattern": None}, {"name": "lyft"}):
+        assert find_last4("Visa *4321", rules) == {"4321"}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Payment method - 43215",
+        "Payment method - 921",
+        "Payment method - 4321",
+    ],
+)
+def test_a_loose_vendor_pattern_still_cannot_take_a_longer_run(text: str):
+    """Four digits, standing alone, however loosely the folder wrote it.
+
+    The first two are a reference number and a short code; only the third is
+    a card, and it is the only one that comes back.
+    """
+    found = find_last4(text, {"last4_pattern": r"-\s*(\d+)"})
+    assert found == ({"4321"} if text.endswith("- 4321") else set())
+
+
 # ------------------------------------------------------- against the fixture
 
 

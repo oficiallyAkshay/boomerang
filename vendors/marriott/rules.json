@@ -13,14 +13,14 @@
   ],
   "strip_regex": [
     "<table[^>]*class=\"wrap\"[^>]*>(?=[\\s\\S]{0,2000}Cardmember Offer)(?:[\\s\\S]*?</table>){7}",
-    "<table[^>]*class=\"wrap\"[^>]*>(?=[\\s\\S]{0,2000}(?:trip’s waiting in the App|Unlock your stay with the Marriott Bonvoy))(?:[\\s\\S]*?</table>){10}",
-    "<p[^>]*>[\\s\\S]{0,800}?(?:Platinum|Gold|Titanium|Silver|Ambassador)\\s*Elite(?:&nbsp;|\\s)*(?:→|&rarr;)[\\s\\S]{0,900}?[\\d,]+\\s+Points[\\s\\S]{0,200}?</p>",
+    "<table[^>]*class=\"wrap\"[^>]*>(?=[\\s\\S]{0,2000}(?:trip\u2019s waiting in the App|Unlock your stay with the Marriott Bonvoy))(?:[\\s\\S]*?</table>){10}",
+    "<p[^>]*>[\\s\\S]{0,800}?(?:Platinum|Gold|Titanium|Silver|Ambassador)\\s*Elite(?:&nbsp;|\\s)*(?:\u2192|&rarr;)[\\s\\S]{0,900}?[\\d,]+\\s+Points[\\s\\S]{0,200}?</p>",
     "<img[^>]*src=[\"']?https://(?:images\\.harmony\\.epsilon\\.com|marriottinternationa\\.demdex\\.net)[^\"'>\\s]*[^>]*>",
     "ReplyCode:\\s*[A-Z]{2}\\|[A-Z]{3}\\|[a-z]{2}_[A-Z]{2}",
     "<a[^>]*>\\s*(?:Manage Stay|Go Now|Activate Now|View in Browser)\\s*</a>",
     "<a[^>]*>\\s*(?:Terms of Use|Privacy Policy|About Us|FAQs|Contact Us)\\s*</a>",
     "Email Unsubscribe[\\s\\S]*?program terms and conditions\\.",
-    "(?:©|&copy;|&#169;)\\s*\\d{4}\\s*MARRIOTT INTERNATIONAL, INC\\.[\\s\\S]*?MARRIOTT PROPRIETARY INFORMATION",
+    "(?:\u00a9|&copy;|&#169;)\\s*\\d{4}\\s*MARRIOTT INTERNATIONAL, INC\\.[\\s\\S]*?MARRIOTT PROPRIETARY INFORMATION",
     "Confirmation Authenticity[\\s\\S]*?sent it to you\\."
   ],
   "unwrap_links_matching": [
@@ -28,5 +28,45 @@
     "demdex\\.",
     "epsilon\\."
   ],
-  "notes": "Removed from a Marriott stay confirmation: the cardmember bonus points offer and the app download banner, each matched as the whole banner table so that none of its lines is left standing on the page without the banner around it, the loyalty tier and points balance strip, the Epsilon and Adobe tracking pixels, whose pattern reads a source however the template quoted it, the hidden ReplyCode preheader, the Manage Stay and Go Now action buttons, the footer link row, the unsubscribe and programme terms block, the copyright and proprietary notice, and the confirmation authenticity boilerplate. Kept verbatim: the property name and address, the confirmation number, the check-in and check-out dates and times, the room description, the rate line, the summary of charges, the taxes and fees line, and the cancellation terms with their deadline. Known gap: this sample is a points redemption stay, so the total is a points figure and there is no cash amount and no card last four in it. A cash rate confirmation from the same template fills the same cells with a currency amount; the cash a traveller actually settles at the desk appears on the folio, not here."
+  "arrival_lag_days": 2,
+  "messages": [
+    {
+      "subject_pattern": "^Reservation Confirmation #\\d+ for ",
+      "kind": "confirmation"
+    },
+    {
+      "subject_pattern": "^Check-In Instructions for ",
+      "kind": "confirmation"
+    }
+  ],
+  "tenders": [
+    {
+      "label_pattern": "PointSaver Redemption Rate",
+      "kind": "points"
+    },
+    {
+      "label_pattern": "Total Points Redeemed",
+      "kind": "points"
+    }
+  ],
+  "line_categories": [
+    {
+      "label_pattern": "PointSaver Redemption Rate",
+      "category": "room"
+    },
+    {
+      "label_pattern": "Estimated Government Taxes",
+      "category": "tax"
+    },
+    {
+      "label_pattern": "Complimentary (?:on-site|valet) parking",
+      "category": "parking"
+    }
+  ],
+  "missing": [
+    "total",
+    "currency"
+  ],
+  "endpoints": false,
+  "notes": "Removed from a Marriott stay confirmation: the cardmember bonus points offer and the app download banner, each matched as the whole banner table so that none of its lines is left standing on the page without the banner around it, the loyalty tier and points balance strip, the Epsilon and Adobe tracking pixels, whose pattern reads a source however the template quoted it, the hidden ReplyCode preheader, the Manage Stay and Go Now action buttons, the footer link row, the unsubscribe and programme terms block, the copyright and proprietary notice, and the confirmation authenticity boilerplate. Kept verbatim: the property name and address, the confirmation number, the check-in and check-out dates and times, the room description, the rate line, the summary of charges, the taxes and fees line, and the cancellation terms with their deadline. Known gap: this sample is a points redemption stay, so the total is a points figure and there is no cash amount and no card last four in it. A cash rate confirmation from the same template fills the same cells with a currency amount; the cash a traveller actually settles at the desk appears on the folio, not here. Timing and reading: a folio follows checkout by a day or two, so two days of padding covers it. This confirmation settles in points rather than cash, so both tender rows are points, the missing facts are the total and the currency, and the folio rather than the confirmation carries the charge."
 }
