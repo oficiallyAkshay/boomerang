@@ -74,17 +74,24 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import struct
 import subprocess
 import sys
 import tempfile
-import zlib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = REPO_ROOT / "examples"
 SCRIPTS = REPO_ROOT / "scripts"
 VENDORS = REPO_ROOT / "vendors"
+
+# The receipt writers, shared with the fixture generator, and the cleaner,
+# which this script drives in process for the one stage that is a directory in
+# and a directory out. Everything else is run as the documented command line.
+sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(EXAMPLES))
+
+import clean  # noqa: E402
+from synth import money, pdf_bytes, png_bytes  # noqa: E402
 
 RECEIPTS = EXAMPLES / "receipts"
 CLEAN = EXAMPLES / "clean"
@@ -104,15 +111,6 @@ MAX_CACHE_BYTES = 1_500 * 1024
 # carries whatever the server said, so it is dropped before the cache is
 # committed.
 MIN_IMAGE_BYTES = 100
-
-# The first bytes of the four raster formats a receipt ever uses. WEBP is the
-# only one that needs two windows, because its marker sits after the RIFF size.
-IMAGE_SIGNATURES = (
-    b"\x89PNG\r\n\x1a\n",
-    b"\xff\xd8\xff",
-    b"GIF87a",
-    b"GIF89a",
-)
 
 COMPANY = "Northwind Labs, Inc."
 TRAVELER = "Jordan Rivera"
@@ -354,67 +352,6 @@ TEXT_SUFFIXES = {".html", ".txt"}
 # ------------------------------------------------------------------- receipts
 
 
-def money(value: float) -> str:
-    sign = "-" if value < 0 else ""
-    return f"{sign}${abs(value):,.2f}"
-
-
-def png_bytes(width: int, height: int, rgb: tuple[int, int, int]) -> bytes:
-    """A solid colour PNG, built without an image library."""
-
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        crc = zlib.crc32(tag + data) & 0xFFFFFFFF
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
-
-    row = b"\x00" + bytes(rgb) * width
-    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", header)
-        + chunk(b"IDAT", zlib.compress(row * height, 9))
-        + chunk(b"IEND", b"")
-    )
-
-
-def pdf_bytes(pages: list[list[str]]) -> bytes:
-    """A minimal multi page PDF with one Helvetica text block per page."""
-    objects: dict[int, bytes] = {}
-    kids = " ".join(f"{5 + 2 * i} 0 R" for i in range(len(pages)))
-    objects[1] = b"<< /Type /Catalog /Pages 2 0 R >>"
-    objects[2] = f"<< /Type /Pages /Count {len(pages)} /Kids [{kids}] >>".encode()
-    objects[3] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
-    for index, lines in enumerate(pages):
-        body = ["BT", "/F1 12 Tf", "72 720 Td", "16 TL"]
-        for line in lines:
-            safe = line.replace("\\", "").replace("(", "").replace(")", "")
-            body.append(f"({safe}) Tj T*")
-        body.append("ET")
-        stream = "\n".join(body).encode()
-        content_num = 4 + 2 * index
-        page_num = content_num + 1
-        objects[content_num] = (
-            f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream"
-        )
-        objects[page_num] = (
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-            "/Resources << /Font << /F1 3 0 R >> >> "
-            f"/Contents {content_num} 0 R >>"
-        ).encode()
-
-    out = bytearray(b"%PDF-1.4\n")
-    offsets: dict[int, int] = {}
-    for num in sorted(objects):
-        offsets[num] = len(out)
-        out += f"{num} 0 obj\n".encode() + objects[num] + b"\nendobj\n"
-    start = len(out)
-    size = max(objects) + 1
-    out += f"xref\n0 {size}\n".encode() + b"0000000000 65535 f \n"
-    for num in range(1, size):
-        out += f"{offsets[num]:010d} 00000 n \n".encode()
-    out += f"trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{start}\n%%EOF\n".encode()
-    return bytes(out)
-
-
 def folio_pages() -> list[list[str]]:
     """The two pages of the folio, a room line and a tax line per night.
 
@@ -509,13 +446,6 @@ def expense_data() -> dict:
 # ---------------------------------------------------------------------- cache
 
 
-def looks_like_an_image(head: bytes) -> bool:
-    """True when these first bytes open a PNG, JPEG, GIF or WEBP file."""
-    if head.startswith(IMAGE_SIGNATURES):
-        return True
-    return head.startswith(b"RIFF") and head[8:12] == b"WEBP"
-
-
 def prune_cache(cache: Path) -> tuple[int, int]:
     """Drop what is not an image, then oversized entries, then the largest.
 
@@ -536,8 +466,6 @@ def prune_cache(cache: Path) -> tuple[int, int]:
     """
     if not cache.is_dir():
         return 0, 0
-    sys.path.insert(0, str(SCRIPTS))
-    import clean
 
     def entries() -> list[Path]:
         return [
@@ -549,7 +477,7 @@ def prune_cache(cache: Path) -> tuple[int, int]:
     for path in entries():
         with path.open("rb") as handle:
             head = handle.read(12)
-        if path.stat().st_size < MIN_IMAGE_BYTES or not looks_like_an_image(head):
+        if path.stat().st_size < MIN_IMAGE_BYTES or not clean._looks_like_an_image(head):
             path.unlink()
     for path in entries():
         if path.stat().st_size > MAX_IMAGE_BYTES:
@@ -582,55 +510,21 @@ def run(name: str, *args: str) -> str:
     return done.stdout
 
 
-def detect(receipts: Path, key: str) -> str | None:
-    """The vendor a receipt's own headers resolve to.
-
-    Nothing is overridden here. ``detect_vendor`` reads the saved From and
-    Subject the same way the cleaner does when it is given no ``--vendor``,
-    including the one case that used to need a hand: Uber and Uber Eats send
-    from the same domain, and the detection prefers the folder whose subject
-    patterns fit as well as its domain.
-    """
-    sys.path.insert(0, str(SCRIPTS))
-    import clean
-
-    rules = clean.load_vendor_rules(VENDORS)
-    meta = json.loads((receipts / f"{RIDS[key]}.meta.json").read_text(encoding="utf-8"))
-    return clean.detect_vendor(meta["from"], meta["subject"], rules)
-
-
 def clean_receipts(receipts: Path, cleaned: Path, cache: Path, fetch: bool) -> list[str]:
-    """Clean every HTML receipt, carry the rest across untouched."""
+    """Stage 5, in one call: every receipt in, every receipt out.
+
+    ``clean_dir`` is what SKILL.md documents and what the cleaner's own tests
+    cover, so the example runs it rather than a loop of its own. It reads each
+    receipt's vendor from the ``.meta.json`` saved beside it, which is the one
+    case that used to need a hand here: Uber and Uber Eats send from the same
+    domain, and the detection prefers the folder whose subject patterns fit as
+    well as its domain. The ``.txt``, ``.pdf`` and ``.png`` receipts are
+    carried across untouched.
+    """
     if cleaned.exists():
         shutil.rmtree(cleaned)
-    cleaned.mkdir(parents=True)
-    lines = []
-    for key, *_ in SOURCES:
-        source = next(
-            path
-            for path in sorted(receipts.glob(f"{RIDS[key]}.*"))
-            if path.suffix != ".json" and not path.name.endswith(".meta.json")
-        )
-        if source.suffix != ".html":
-            shutil.copyfile(source, cleaned / source.name)
-            continue
-        vendor = detect(receipts, key)
-        args = [
-            str(source),
-            "--out",
-            str(cleaned / source.name),
-            "--vendors",
-            str(VENDORS),
-            "--images",
-            str(cache),
-        ]
-        if vendor:
-            args += ["--vendor", vendor]
-        if fetch:
-            args.append("--fetch-images")
-        run("clean", *args)
-        lines.append(f"{key} -> {vendor}")
-    return lines
+    listed = clean.clean_dir(receipts, cleaned, VENDORS, image_cache=cache, fetch_images=fetch)
+    return [f"{name} -> {vendor}" for name, vendor in listed]
 
 
 def build_packet(data_path: Path, cleaned: Path, out_html: Path, out_pdf: Path) -> int:

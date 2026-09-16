@@ -1,8 +1,8 @@
 """SKILL.md is the thing a host loads, so it is checked like code.
 
-The frontmatter is parsed by reading lines, not with a YAML dependency: every
-value is plain text on one line, inline `metadata` map included, and a parser
-would be the only runtime dependency the tests add. Everything else here
+The frontmatter is read with a regex, not with a YAML dependency: every value
+is plain text on one line, inline `metadata` map included, and a parser would
+be the only runtime dependency the tests add. Everything else here
 guards the promises the body makes. A script named in a command the model is
 told to run has to exist, every other repo path it prints in backticks has to
 exist too, the two policy files both have to be pointed at, and the one
@@ -19,6 +19,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILL_PATH = REPO_ROOT / "SKILL.md"
 MAX_DESCRIPTION = 200
+
+FRONT_RE = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*\r?\n", re.S)
+FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$", re.M)
 
 SCRIPT_RE = re.compile(r"scripts/([A-Za-z0-9_]+)\.py")
 STANDING_QUESTION = "Anything you paid for outside this inbox"
@@ -52,37 +55,31 @@ def repo_paths_in_backticks(body: str) -> list[str]:
     return sorted(found)
 
 
-def split_frontmatter(text: str) -> tuple[list[str], str]:
-    """The lines between the opening and closing fences, and the body after."""
-    lines = text.splitlines()
-    assert lines and lines[0].strip() == "---", "SKILL.md must open with a frontmatter fence"
-    for index in range(1, len(lines)):
-        if lines[index].strip() == "---":
-            return lines[1:index], "\n".join(lines[index + 1 :])
-    raise AssertionError("SKILL.md frontmatter is never closed")
+def unquote(value: str) -> str:
+    """One level of matching quotes off a frontmatter value."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+        return value[1:-1]
+    return value
 
 
-def parse_frontmatter(lines: list[str]) -> dict[str, str]:
-    """key: value per line, with one level of quotes taken off the value."""
-    fields: dict[str, str] = {}
-    for line in lines:
-        if not line.strip() or line.startswith((" ", "\t", "#")):
-            continue
-        key, separator, value = line.partition(":")
-        if not separator:
-            continue
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        fields[key.strip()] = value
-    return fields
+def frontmatter(text: str) -> tuple[dict[str, str], str]:
+    """The front block's fields, and the body that follows it.
+
+    A key starts a line, so the indented continuation of a folded value is
+    never mistaken for one, and the inline `metadata` map comes back as the
+    text between its braces for the icon test to look inside.
+    """
+    match = FRONT_RE.match(text)
+    assert match, "SKILL.md must open with a frontmatter fence and close it"
+    fields = {key: unquote(value) for key, value in FIELD_RE.findall(match.group(1))}
+    return fields, text[match.end() :]
 
 
 @pytest.fixture(scope="module")
 def skill() -> dict:
     text = SKILL_PATH.read_text(encoding="utf-8")
-    front, body = split_frontmatter(text)
-    return {"text": text, "fields": parse_frontmatter(front), "body": body}
+    fields, body = frontmatter(text)
+    return {"text": text, "fields": fields, "body": body}
 
 
 def test_the_name_is_the_skill_name(skill: dict):

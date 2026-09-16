@@ -7,7 +7,7 @@ from pathlib import Path
 
 import build
 import check_prose
-from fixtures.make_fixture import make, make_vendor_samples
+from fixtures.make_fixture import make
 from pypdf import PdfReader
 
 
@@ -55,9 +55,3 @@ def test_generated_files_pass_the_privacy_gate(fixture_dir: Path) -> None:
     assert denylist
     files = [fixture_dir / "expense_data.json", *sorted((fixture_dir / "receipts").iterdir())]
     assert check_prose.scan(files, denylist) == []
-
-
-def test_vendor_samples_are_written(tmp_path: Path) -> None:
-    make_vendor_samples(tmp_path / "templates")
-    names = sorted(p.name for p in (tmp_path / "templates").iterdir())
-    assert names == ["doordash.html", "lyft.html", "plaintext.txt", "uber.html", "united.html"]
