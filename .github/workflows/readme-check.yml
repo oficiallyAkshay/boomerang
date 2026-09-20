@@ -25,6 +25,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: oficiallyAkshay/readmerlin@29b374152205bd8096c011d88a6e9ed153ab41c5   # v1.0.1
+      - uses: oficiallyAkshay/readmerlin@63f78b5379bcdeff23a443ecf165ceb43544eebb # v1.0.2
         with:
           exec: "true"
