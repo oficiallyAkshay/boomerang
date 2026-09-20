@@ -37,7 +37,7 @@ uv run pytest
 
 Chrome or Edge on the machine renders the PDF; line three is only for a machine
 with neither, and line two says whether this is one of them. Coverage bar:
-changed lines at 90 percent or above, CI enforces it.
+every line and branch, changed or not, CI enforces it at 100 percent.
 
 ## Install and configure
 
@@ -150,7 +150,7 @@ fails without the rule and passes with it.
 **The gates, run locally.**
 
 ```bash
-uv run pre-commit run --all-files                     # ruff, markdownlint, gitleaks, prose
+uv run pre-commit run --all-files   # ruff, actionlint, zizmor, markdownlint, gitleaks, prose
 uv run python scripts/check_prose.py                  # tracked files
 uv run python scripts/check_prose.py --packet packet.html
 uv run python examples/build_example.py --check       # after anything that alters a packet
@@ -165,10 +165,10 @@ it cannot authenticate until the repository is public.
 | pre-commit hooks, gitleaks skipped | `checks` | yes |
 | packet prose and privacy gate | `checks` | yes |
 | secrets scan over the whole history | `checks` | yes |
-| workflow lint | `checks` | yes |
+| verify actions are pinned | `checks` | yes |
 | dependency audit | `checks` | yes |
 | pytest with coverage | `test`, on 3.11 and 3.13 | yes |
-| diff coverage at 90 percent | `test`, pull requests only | yes |
+| diff coverage at 100 percent | `test`, pull requests only | yes |
 | example check | `test`, on 3.11 and 3.13 | yes |
 | coverage upload | `test`, on 3.13 only | no |
 | gate | `ci` | yes |
@@ -188,6 +188,7 @@ triaged, not a ruleset failure.
 | `dependency-review.yml` | Scans a pull request's manifest changes for a known-vulnerable package | Every pull request |
 | `audit.yml` | The dependency audit split out of the pull request path, so an advisory published later still gets caught | Weekly, and any pull request touching `pyproject.toml` |
 | `clonometer.yml` | Reads the daily clone and view counts the badges read from | Daily, on a schedule |
+| `dependabot-auto-merge.yml` | Arms auto-merge on a Dependabot pull request; the `ci` gate still has to pass before it actually merges | Every Dependabot pull request |
 
 **Test plan a change must satisfy.** Find your area and write the test that
 proves the row before you open the pull request.

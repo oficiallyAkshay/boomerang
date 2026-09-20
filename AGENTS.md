@@ -15,7 +15,7 @@ uv run python examples/build_example.py --check
 ```
 
 All four must pass. Coverage stays at the floor recorded in `pyproject.toml`;
-changed lines hold to 90 percent, which CI enforces with diff-cover.
+changed lines hold to the same 100 percent, which CI enforces with diff-cover.
 
 ## Rules that bind agents here
 
