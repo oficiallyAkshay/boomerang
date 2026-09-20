@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   # One runner for everything that reads the tree without running the test
-  # suite: hooks, the packet gate, secrets, workflow lint, dependency audit.
+  # suite: hooks, the packet gate, secrets, pin verification, dependency audit.
   checks:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -36,11 +36,19 @@ jobs:
           python-version: "3.12"
           enable-cache: true
           cache-dependency-glob: "pyproject.toml"
+      # The actionlint hook is built from Go source on first use, about
+      # twenty seconds on a fresh runner and most of this job's time. The
+      # hook cache is keyed on the config, so a bump rebuilds it once.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
       - run: uv sync --all-extras
 
       # The same hooks contributors run locally, so CI and the pre-commit
-      # config cannot drift. gitleaks is skipped here because the step below
-      # scans the whole history rather than the working tree.
+      # config cannot drift: ruff, actionlint, zizmor, markdownlint, the
+      # prose gate. gitleaks is skipped here because the step below scans
+      # the whole history rather than the working tree.
       - name: pre-commit hooks
         run: SKIP=gitleaks uv run pre-commit run --all-files --show-diff-on-failure
 
@@ -54,11 +62,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: workflow lint
-        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+      # pinact has no pre-commit hook of its own to pin to, so it runs as its
+      # own step: every `uses:` must be a full commit SHA, and that SHA must
+      # actually be the commit the trailing version comment names, never a
+      # hand-edited or stale one. fix: "false" only checks; it never rewrites
+      # a workflow file or pushes a commit.
+      - name: verify actions are pinned
+        uses: suzuki-shunsuke/pinact-action@896d595f299e71d65b9d28349d6956abe144390a # v3.0.0
         with:
-          version: "1.7.12"
-          files: ".github/workflows/*.yml"
+          fix: "false"
+          verify: "true"
 
       # Audit the resolved dependency set, runtime and dev alike, against the
       # advisory database. A known vulnerability fails the job.
@@ -122,7 +135,7 @@ jobs:
         run: |
           git fetch "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPOSITORY}.git" \
             main:refs/remotes/origin/main
-          uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=90
+          uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=100
       - run: uv run python examples/build_example.py --check
 
   # The one context the branch ruleset requires. It exists on every run, forks
