@@ -7,6 +7,13 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # A pinned commit that only turned up this week is a week nobody else has
+    # exercised yet; wait for it to prove itself before bumping to it.
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"]
 
   # The runtime and dev pins in pyproject.toml. The cap keeps a quiet week
   # from opening more pull requests than one person can read.
@@ -15,3 +22,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      pip:
+        patterns: ["*"]
