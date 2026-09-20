@@ -97,6 +97,7 @@ import shutil
 import socket
 import sys
 from email.utils import parseaddr
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -222,8 +223,6 @@ NESTED_AT_RULES = {"media", "supports", "layer", "container", "document", "scope
 ATTRS = r"""(?:"[^"]*"|'[^']*'|[^>])*+"""
 
 COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
-SCRIPT_RE = re.compile(r"<script\b.*?</script\s*>", re.DOTALL | re.IGNORECASE)
-LONE_SCRIPT_RE = re.compile(rf"</?script\b{ATTRS}>", re.IGNORECASE)
 STYLE_RE = re.compile(rf"<style\b{ATTRS}>(.*?)</style\s*>", re.DOTALL | re.IGNORECASE)
 # What is left once the complete blocks are out: an opener with no closer
 # takes the CSS that follows it, up to the next tag, and the bare tokens go.
@@ -383,6 +382,100 @@ def _scheme_of(value: str) -> str:
     is read as one scheme by a browser and has to be read the same way here.
     """
     return URL_NOISE_RE.sub("", html_module.unescape(value)).lower()
+
+
+# --------------------------------------------------------------------- script
+
+
+class _ScriptStripper(HTMLParser):
+    """Cut every ``<script>`` element out of a fragment, tag shape or no tag shape.
+
+    A regex that matches ``<script ...>...</script>`` only removes what it
+    recognises as that shape, and a crafted tag can be shaped to slip past
+    it: left unterminated, split across a newline, closed with an attribute
+    tacked on the end tag. The standard library's own tokenizer has to get
+    every one of those right to parse HTML at all, so this walks the
+    fragment with that instead of a pattern: whatever ``HTMLParser`` calls a
+    script start or end, this drops, all the way to the end of the fragment
+    when a start tag never finds its close, exactly as a browser reads an
+    EOF inside one.
+
+    ``feed`` is called once, with the whole fragment, and ``close`` right
+    after; the library only trims ``rawdata`` when it is fed again, so every
+    position ``getpos()`` reports during that single pass still lines up
+    with an offset into the original string. Everything outside a script
+    element is copied out of that string by position rather than
+    reassembled from what a callback handed back, so the vendor's own
+    markup survives byte for byte.
+
+    Only three callbacks matter. A start or end tag is what flips whether a
+    span is being skipped, and a script element's own content, however long,
+    always arrives as one ``handle_data`` call, because the parser's raw text
+    mode for ``script`` looks only for the closing tag and hands back
+    everything before it as data - a comment, a declaration or an entity
+    reference inside a script is never seen as one, only as more of that
+    data. Outside a script element none of those needs a callback either:
+    whatever text sits between one marked position and the next is copied
+    verbatim regardless of what produced it, so a comment or an entity
+    reference in the kept markup is carried along for free.
+    """
+
+    def __init__(self, text: str) -> None:
+        super().__init__(convert_charrefs=False)
+        self._text = text
+        self._line_starts = [0]
+        for index, char in enumerate(text):
+            if char == "\n":
+                self._line_starts.append(index + 1)
+        self._out: list[str] = []
+        self._cursor: int | None = 0
+        self._in_script = False
+
+    def _offset(self) -> int:
+        lineno, col = self.getpos()
+        return self._line_starts[lineno - 1] + col
+
+    def _mark(self) -> None:
+        """Record the current token's start, keeping or dropping the gap before it."""
+        position = self._offset()
+        if self._in_script:
+            self._cursor = None
+            return
+        if self._cursor is not None:
+            self._out.append(self._text[self._cursor : position])
+        self._cursor = position
+
+    # The signature is HTMLParser's own; attrs is never read because a
+    # script element is dropped whole, never rewritten attribute by attribute.
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # noqa: ARG002
+        self._mark()
+        if tag == "script":
+            self._in_script = True
+
+    def handle_endtag(self, tag: str) -> None:
+        self._mark()
+        if tag == "script":
+            self._in_script = False
+
+    # data is never read: _mark() decides from _in_script alone whether the
+    # data this call carries survives, and copies it out of the original
+    # string later rather than from what this call was handed.
+    def handle_data(self, data: str) -> None:  # noqa: ARG002
+        self._mark()
+
+    def result(self) -> str:
+        """Everything outside a script element, in the order it was found."""
+        if self._cursor is not None:
+            self._out.append(self._text[self._cursor :])
+        return "".join(self._out)
+
+
+def _strip_script(html: str) -> str:
+    """Remove every ``<script>`` element, however its tags are shaped."""
+    stripper = _ScriptStripper(html)
+    stripper.feed(html)
+    stripper.close()
+    return stripper.result()
 
 
 # ------------------------------------------------------------------- elements
@@ -1204,8 +1297,7 @@ def clean_html(raw: str, rules: dict | None = None, image_cache: Path | None = N
     body = COMMENT_RE.sub("", body)
     body, warnings = _apply_replacements(body, rules)
     body, styles = _take_styles(body)
-    body = SCRIPT_RE.sub("", body)
-    body = LONE_SCRIPT_RE.sub("", body)
+    body = _strip_script(body)
     body = HEAD_RE.sub("", body)
 
     inside = BODY_RE.search(body)
