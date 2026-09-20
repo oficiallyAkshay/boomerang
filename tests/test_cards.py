@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import runpy
+import sys
 from pathlib import Path
 
 import cards
@@ -11,6 +13,7 @@ import pytest
 from cards import find_last4, fingerprint, main, receipt_text, singletons, strip_tags
 from fixtures.make_fixture import CARD_LAST4, RIDS, pdf_bytes
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 COMPANY_CARD = "8802"
 
 
@@ -300,3 +303,14 @@ def test_the_cli_says_so_when_no_card_stands_alone(tmp_path: Path, capsys):
     (tmp_path / "b.txt").write_text("Visa ending 4321", encoding="utf-8")
     assert main([str(tmp_path)]) == 0
     assert capsys.readouterr().out.splitlines()[-1].startswith("No last-4 seen once")
+
+
+def test_running_the_file_as_a_script_hits_the_main_guard(
+    fixture_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """``python scripts/cards.py`` is the documented command line, not just the function."""
+    monkeypatch.setattr(sys, "argv", ["cards.py", str(fixture_dir / "receipts")])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(REPO_ROOT / "scripts" / "cards.py"), run_name="__main__")
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out.splitlines()[0] == "last4  count  rids"

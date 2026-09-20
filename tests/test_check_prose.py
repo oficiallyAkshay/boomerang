@@ -9,6 +9,7 @@ answer; packet mode reads one file and is the mode a host installation runs.
 from __future__ import annotations
 
 import hashlib
+import runpy
 import subprocess
 import sys
 from pathlib import Path
@@ -220,3 +221,15 @@ def test_both_modes_run_from_any_directory(where: str, tmp_path: Path) -> None:
     on_tree = run_gate(cwd)
     assert on_tree.returncode == 0, on_tree.stdout + on_tree.stderr
     assert "check_prose: 0 errors" in on_tree.stdout
+
+
+def test_running_the_file_as_a_script_hits_the_main_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """``python scripts/check_prose.py`` is the documented command line, not just the function."""
+    packet = write(tmp_path, "packet.html", "<p>A clean packet</p>\n")
+    monkeypatch.setattr(sys, "argv", ["check_prose.py", "--packet", str(packet)])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(GATE), run_name="__main__")
+    assert exc_info.value.code == 0
+    assert "check_prose: 0 errors" in capsys.readouterr().out

@@ -20,13 +20,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILL_PATH = REPO_ROOT / "SKILL.md"
 MAX_DESCRIPTION = 200
 
-FRONT_RE = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*\r?\n", re.S)
-FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$", re.M)
+FRONT_RE = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*\r?\n", re.DOTALL)
+FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$", re.MULTILINE)
 
 SCRIPT_RE = re.compile(r"scripts/([A-Za-z0-9_]+)\.py")
 STANDING_QUESTION = "Anything you paid for outside this inbox"
 
-FENCE_RE = re.compile(r"```.*?```", re.S)
+FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
 INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 # A path has no spaces, no angle-bracket placeholder, and does not start with a
 # dash, so command flags and `<rid>.html` shapes fall out here.
@@ -87,8 +87,9 @@ def test_the_name_is_the_skill_name(skill: dict):
 
 
 def test_the_description_says_what_and_when(skill: dict):
-    """Short enough for every host, and carrying the two words a user's own
-    request is most likely to contain, so the skill triggers on it.
+    """Short enough for every host, and carrying the words a request is likely to use.
+
+    That is what makes the skill trigger on it.
     """
     description = skill["fields"].get("description", "")
     assert description.strip()
@@ -103,8 +104,9 @@ def test_a_license_is_declared(skill: dict):
 
 
 def test_the_icon_travels_under_metadata(skill: dict):
-    """Anthropic's validator rejects unknown top-level keys, and `metadata` is
-    the string map the specification allows, so the icon lives in there.
+    """Anthropic's validator rejects unknown top-level keys.
+
+    `metadata` is the string map the specification allows, so the icon lives in there.
     """
     assert "icon" not in skill["fields"], "the icon must not be a top-level key"
     metadata = skill["fields"].get("metadata", "")

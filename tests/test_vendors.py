@@ -40,12 +40,14 @@ FOLDERS = sorted(path.name for path in VENDORS_DIR.iterdir() if (path / "rules.j
 # Money, as a receipt prints it: a symbol in front, or a currency code behind.
 # A bare 12.34 is not counted, because stylesheets are full of them.
 MONEY_RE = re.compile(r"(?:[$£€₹]\s?\d[\d,]*\.\d{2})|(?:\b\d[\d,]*\.\d{2}\s?(?:USD|EUR|GBP|CHF))")
-HANDLER_RE = re.compile(r"\son\w+\s*=", re.I)
+HANDLER_RE = re.compile(r"\son\w+\s*=", re.IGNORECASE)
 
 # Every tag in a fragment, open or close, with the element name in group two.
-TAG_RE = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9]*)\b[^>]*?(/?)>", re.S)
+TAG_RE = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9]*)\b[^>]*?(/?)>", re.DOTALL)
 # Elements that carry no closing tag, so counting them would never balance.
-VOID_ELEMENTS = frozenset("img br hr meta link input source track wbr col".split())
+VOID_ELEMENTS = frozenset(
+    ["img", "br", "hr", "meta", "link", "input", "source", "track", "wbr", "col"]
+)
 
 # A From header and a subject line per folder, in the shape that vendor sends.
 # Every one of them resolves to its own folder, including the two that share a
@@ -139,7 +141,7 @@ def test_every_pattern_compiles(folder: str, rules: dict) -> None:
     rule = rules[folder]
     for key in ("strip_regex", "subject_patterns", "unwrap_links_matching"):
         for pattern in rule[key]:
-            re.compile(pattern, re.S)
+            re.compile(pattern, re.DOTALL)
 
 
 # -------------------------------------------------------------- strip patterns
@@ -161,7 +163,7 @@ def test_every_strip_pattern_is_proven_on_the_sample(folder: str, rules: dict) -
     unmatched = [
         index
         for index, pattern in enumerate(rules[folder]["strip_regex"])
-        if not any(re.search(pattern, text, re.S) for text in samples.values())
+        if not any(re.search(pattern, text, re.DOTALL) for text in samples.values())
     ]
     assert unmatched == [], f"{folder} strip patterns {unmatched} match no sample in the folder"
 
@@ -213,7 +215,7 @@ def test_every_strip_pattern_removes_a_whole_element(folder: str, rules: dict) -
         text = clean.COMMENT_RE.sub("", raw)
         orphans = tag_balance(text)
         for index, pattern in enumerate(rules[folder]["strip_regex"]):
-            for match in re.finditer(pattern, text, re.S | re.I):
+            for match in re.finditer(pattern, text, re.DOTALL | re.IGNORECASE):
                 halves = {
                     element: count
                     for element, count in tag_balance(match.group(0)).items()
@@ -285,7 +287,7 @@ def test_the_lyft_promo_modules_go_whole_and_the_receipt_stays(rules: dict) -> N
 TOTAL_ROW_RE = re.compile(
     r'(<td[^>]*class="total-fare-title"[^>]*>)(.*?)</td>\s*'
     r'(<td[^>]*class="total-fare-amount"[^>]*>)(.*?)</td>',
-    re.S,
+    re.DOTALL,
 )
 
 UBER_TOTALS = {"uber": "$34.86", "uber-eats": "$88.60"}
@@ -320,10 +322,10 @@ def test_every_replace_pattern_compiles_and_matches_its_sample(folder: str, rule
     """A replace pair a sample never matches is a pair nothing proves."""
     samples = samples_for(folder)
     for index, (pattern, _) in enumerate(rules[folder].get("replace") or []):
-        re.compile(pattern, re.S)
-        assert any(re.search(pattern, text, re.S | re.I) for text in samples.values()), (
-            f"{folder} replace pattern {index} matches no sample"
-        )
+        re.compile(pattern, re.DOTALL)
+        assert any(
+            re.search(pattern, text, re.DOTALL | re.IGNORECASE) for text in samples.values()
+        ), f"{folder} replace pattern {index} matches no sample"
 
 
 @pytest.mark.parametrize("folder", FOLDERS)
@@ -339,7 +341,7 @@ def test_no_folder_repeats_a_generic_unwrap_pattern(folder: str, rules: dict) ->
 
 
 def test_the_generic_unwrap_shapes_reach_a_vendor_that_lists_none(rules: dict) -> None:
-    """njtransit names no tracking shape of its own and still unwraps the four."""
+    """Njtransit names no tracking shape of its own and still unwraps the four."""
     assert rules["njtransit"]["unwrap_links_matching"] == []
     raw = '<p><a href="https://example.com/x?utm_source=email">Manage trip</a></p>'
     out = clean.clean_html(raw, rules["njtransit"])
@@ -351,7 +353,7 @@ def test_at_least_one_strip_pattern_matches(folder: str, rules: dict) -> None:
     samples = samples_for(folder)
     patterns = rules[folder]["strip_regex"]
     assert any(
-        re.search(pattern, text, re.S) for pattern in patterns for text in samples.values()
+        re.search(pattern, text, re.DOTALL) for pattern in patterns for text in samples.values()
     ), f"{folder} strips nothing at all from its own sample"
 
 
@@ -448,7 +450,7 @@ def test_the_first_sender_domain_resolves_to_this_vendor(folder: str, rules: dic
 # on this list, the two have to name the same thing: a subject naming one hotel
 # over a sample naming another reads as two stays and there is only one.
 TITLE_IS_THE_SUBJECT = ("marriott",)
-TITLE_RE = re.compile(r"<title>(.*?)</title>", re.S | re.I)
+TITLE_RE = re.compile(r"<title>(.*?)</title>", re.DOTALL | re.IGNORECASE)
 
 
 @pytest.mark.parametrize("folder", TITLE_IS_THE_SUBJECT)
@@ -546,7 +548,7 @@ def test_a_message_row_only_supersedes_a_subject_its_own_folder_claims(
 # A subject line the folder can show someone, written down in one of the four
 # places a subject is ever recorded in this repo.
 NOTES_SUBJECT_RE = re.compile(r'"([^"\n]{4,120})"')
-TXT_SUBJECT_RE = re.compile(r"^Subject:\s*(.+)$", re.M)
+TXT_SUBJECT_RE = re.compile(r"^Subject:\s*(.+)$", re.MULTILINE)
 EXAMPLE_RECEIPTS = VENDORS_DIR.parent / "examples" / "receipts"
 
 
@@ -680,7 +682,7 @@ def test_stripe_is_the_folder_that_needs_its_own_card_shape(rules: dict) -> None
 
 @pytest.mark.parametrize("folder", [name for name in FOLDERS if name not in SEARCH_ONLY])
 def test_a_folder_claiming_both_endpoints_prints_both_addresses(folder: str, rules: dict) -> None:
-    """endpoints says a ride can be classified from the receipt alone.
+    """Endpoints says a ride can be classified from the receipt alone.
 
     Two street addresses in the body is what that takes, so the claim is
     checked against the sample rather than trusted.

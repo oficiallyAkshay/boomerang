@@ -41,19 +41,53 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+select = ["ALL"]
+ignore = [
+    "COM812", # conflicts with the ruff formatter
+    "ISC001", # conflicts with the ruff formatter
+    "T20", # the CLI scripts and examples print their output and status by design
+    "D401", # every docstring here names a value, not a command; deliberate house style
+    "CPY001", # no per-file copyright header convention here; LICENSE covers the whole tree
+    "EM", # every raised exception here carries one formatted message; it does not need a dedicated exception class
+    "TRY003", # see EM: the message is built inline for that one generic exception
+    "PLC0415", # build.py, fetch.py and gmail_cli.py import a sibling lazily, each documented where it happens: a cycle to avoid, or an optional dependency (gmail, google's client libraries) that must not fail every import when it is missing
+    "ANN", # this repo runs no type checker; an annotation here would be unverified decoration, not a checked contract. The contract is the docstring and references/interfaces.md
+    "FBT", # small internal helpers take a boolean flag positionally; this is not a public API where a keyword-only call site earns its keep
+    "PLR0911", "PLR0912", "PLR0913", "PLR0917", "C901", # argparse entry points and one validation function branch once per flag or per check; splitting them would scatter one place's error handling for no reader's benefit
+    "BLE001", # every blind except here is a documented best-effort fallback (browser detection, page count, card read), explained beside it
+    "INP001", # scripts, tests and examples are flat directories on pythonpath, not a package
+    "PLR2004", # a handful of small literals here are the plain reading of the check itself (four digits, a pair, cents of precision), not a hidden constant
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "S101", # assert is pytest's own idiom
+    "ARG001", # a pytest fixture is requested by name, not always used in the body
+    "ARG002", # a fake class's method matches the real interface it stands in for; it does not have to use every part of it
+    "ARG005", # a monkeypatched stub matches the real signature; it does not have to use every part of it
+    "D100", "D101", "D102", "D103", "D104", "D105", "D107", # a test's name is its documentation, and so is a fake's
+    "SLF001", # a white-box test reaches into internals on purpose
+    "PT001", "PT006", "PT011", "PT018", # pytest style the fixtures and assertions here do not follow: a composite assert reads fine as one check in a test body
+    "S603", "S607", # a test shells out to this interpreter or to git, both fixed, trusted names
+    "S108", "S104", "S311", # fixed test-only temp paths, bind addresses and a non-cryptographic random pick, never production paths or secrets
+    "PYI034", "TC003", # same as ANN above: no type checker reads these stub and type-only-import conventions here
+]
 
 [tool.coverage.run]
 source = ["scripts"]
 omit = ["scripts/gmail_cli.py"]
+branch = true
 # greenlet for the playwright render, thread for the pools in fetch.py and
 # clean.py. Without thread, work done in a worker reads as never run at all.
 concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
-# The floor the suite already clears with room to spare; diff-cover holds
-# changed lines to the same 90 percent in CI. Below 100, on purpose: the
-# runtime depends on playwright and pypdf (STR-001 does not hold here, see
-# the pull request body), so this repo stays at the build stage rather than
-# the finish stage a 100 floor would trigger.
-fail_under = 90
+# Every line and branch the suite can reach, held at 100 percent; diff-cover
+# holds changed lines to the same 100 in CI. STR-001 (standard library only
+# at runtime) stays an accepted ossemble finding on its own axis: playwright
+# renders the packet and pypdf counts its pages, which is a dependency-count
+# question, not a coverage one, so it does not move this floor.
+fail_under = 100

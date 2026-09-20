@@ -10,6 +10,7 @@ order on purpose and check that what comes back is still ordered by query.
 from __future__ import annotations
 
 import json
+import runpy
 import sys
 import threading
 import types
@@ -33,6 +34,8 @@ from fetch import (
     to_gmail,
     write_message,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 START = date(2026, 6, 8)
 END = date(2026, 6, 9)
@@ -838,7 +841,7 @@ def test_a_write_that_raises_is_reported_the_same_way(tmp_path: Path, capsys):
 
 
 def test_fetch_re_exports_the_one_rid_pattern() -> None:
-    """build defines it; fetch and gmail_cli read the same object."""
+    """Build defines it; fetch and gmail_cli read the same object."""
     assert fetch.RID_RE is build.RID_RE
 
 
@@ -886,3 +889,18 @@ def test_the_cli_defaults_to_three_workers(tmp_path: Path, monkeypatch, capsys):
     assert main(["--start", "2026-06-08", "--end", "2026-06-09", "--out", str(tmp_path)]) == 0
     assert seen == {"workers": BODY_WORKERS}
     capsys.readouterr()
+
+
+def test_running_the_file_as_a_script_hits_the_main_guard(
+    monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """``python scripts/fetch.py`` is the documented command line, not just the function.
+
+    ``--knowledge`` with no ``--vendors`` reads no filesystem and touches no
+    network, so this needs no stub beyond argv.
+    """
+    monkeypatch.setattr(sys, "argv", ["fetch.py", "--knowledge"])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(REPO_ROOT / "scripts" / "fetch.py"), run_name="__main__")
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out == ""

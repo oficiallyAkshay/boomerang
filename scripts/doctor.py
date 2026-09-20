@@ -95,7 +95,11 @@ def channels_to_check() -> tuple[str, ...]:
         from render_pdf import wanted_channels
 
         return tuple(wanted_channels())
-    except Exception:
+    except Exception:  # noqa: S110
+        # playwright not being importable yet is exactly the case this
+        # function exists to run before, on the machine most likely to hit
+        # it; any other import failure falls back to the same shipped order,
+        # which is what an unrecognised pin already resolves to below.
         pass
     forced = os.environ.get(BROWSER_ENV, "").strip().lower()
     return (forced,) if forced in CHANNELS else CHANNELS
@@ -130,6 +134,7 @@ def checks() -> list[tuple[str, bool, str, str]]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Check what boomerang needs on this machine."""
     parser = argparse.ArgumentParser(description="Check what boomerang needs on this machine.")
     parser.add_argument("--install", action="store_true", help="pip install -r requirements.txt")
     parser.add_argument("--install-browser", action="store_true", help="also fetch a Chromium")
@@ -140,7 +145,9 @@ def main(argv: list[str] | None = None) -> int:
             runs.append([sys.executable, "-m", "playwright", "install", "chromium"])
         for run in runs:
             print("running: " + " ".join(run))
-            if subprocess.call(run) != 0:
+            # Every entry in runs is built above from sys.executable and
+            # literal flags; nothing here comes from argv or the network.
+            if subprocess.call(run) != 0:  # noqa: S603
                 return 1
     ready = True
     for label, present, detail, fix in checks():

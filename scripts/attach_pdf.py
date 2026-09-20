@@ -146,12 +146,13 @@ def splice(packet_pdf: Path, data: dict, receipts_dir: Path, out_pdf: Path) -> i
     writer.add_metadata(metadata)
     out_pdf = Path(out_pdf)
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_pdf, "wb") as handle:
+    with out_pdf.open("wb") as handle:
         writer.write(handle)
     return len(writer.pages)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Splice PDF receipts into a rendered packet."""
     parser = argparse.ArgumentParser(description="Splice PDF receipts into a rendered packet.")
     parser.add_argument("packet", type=Path, help="rendered packet PDF")
     parser.add_argument("data", type=Path, help="expense_data.json")
