@@ -26,3 +26,5 @@ jobs:
         with:
           persist-credentials: false
       - uses: oficiallyAkshay/readmerlin@29b374152205bd8096c011d88a6e9ed153ab41c5   # v1.0.1
+        with:
+          exec: "true"
