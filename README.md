@@ -11,6 +11,7 @@
   <a href="https://github.com/oficiallyAkshay/clonometer"><img alt="clones of this repository, last seven days and all time" src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones.json&query=$.badge&label=clones&logo=github&logoColor=white"></a>
   <a href="references/vendors.md"><img alt="vendors covered" src="https://img.shields.io/badge/vendors-10-6f42c1?logo=databricks&logoColor=white"></a>
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/license-MIT-2f6f4e?logo=opensourceinitiative&logoColor=white"></a>
+  <a href="https://www.bestpractices.dev/projects/14734"><img alt="OpenSSF Best Practices, passing" src="https://www.bestpractices.dev/projects/14734/badge"></a>
 </p>
 
 <p align="center">
@@ -87,8 +88,6 @@ No credential is required for the core flow; the optional Gmail fallback needs a
 By default, `policy.md` sets the rules; your own copy of the [local override template](references/policy.local.example.md) overrides it.
 By default, the browser is Chrome, then Edge, then Chromium; `BOOMERANG_BROWSER` overrides it.
 By default, email goes through the host's own tool; set `BOOMERANG_GMAIL_CLIENT_SECRET` for the Gmail fallback.
-
-<p align="center"><a href="https://www.bestpractices.dev/projects/14734"><img alt="OpenSSF Best Practices, passing" src="https://www.bestpractices.dev/projects/14734/badge"></a></p>
 
 ## Badges
 
