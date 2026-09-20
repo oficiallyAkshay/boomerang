@@ -26,7 +26,7 @@ from synth import money, pdf_bytes, png_bytes
 COMPANY = "Northwind Labs, Inc."
 TRAVELER = "Jordan Rivera"
 TRIP = "AUS to SEA onsite, June 2026"
-FIRST_NAME = TRAVELER.split()[0]
+FIRST_NAME = TRAVELER.split(maxsplit=1)[0]
 CARD_LAST4 = "4321"
 HOTEL = "Harborview Hotel"
 OFFICE = "Northwind office"

@@ -25,8 +25,8 @@ TEMPLATE_PATH = REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 CI_TABLE_LEAD = "**What CI runs.**"
 PLAN_TABLE_LEAD = "**Test plan a change must satisfy.**"
 
-JOB_RE = re.compile(r"^  ([A-Za-z0-9_-]+):", re.M)
-COMMAND_RE = re.compile(r"^(uv run .+?)(?:\s{2,}#.*)?$", re.M)
+JOB_RE = re.compile(r"^  ([A-Za-z0-9_-]+):", re.MULTILINE)
+COMMAND_RE = re.compile(r"^(uv run .+?)(?:\s{2,}#.*)?$", re.MULTILINE)
 
 
 def job_names(text: str) -> list[str]:

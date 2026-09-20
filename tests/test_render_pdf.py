@@ -15,6 +15,8 @@ script, so it cannot change a number on its way to the PDF.
 from __future__ import annotations
 
 import json
+import runpy
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -26,6 +28,7 @@ from fixtures.make_fixture import png_bytes
 from playwright.sync_api import Error as PlaywrightError
 from pypdf import PdfReader
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKET_TITLE = "Packet, AUS to SEA onsite"
 TOP_MARK = "Oversized receipt top mark"
 BOTTOM_MARK = "Oversized receipt bottom mark"
@@ -46,8 +49,10 @@ def packet_html(data: dict, receipts_dir: Path, title: str | None = PACKET_TITLE
     parts = [
         "<html><head>",
         head,
-        "<style>body{font-family:Helvetica,Arial,sans-serif;margin:0}"
-        ".rhead{font-size:15px;font-weight:700;padding:4px 0}</style>",
+        (
+            "<style>body{font-family:Helvetica,Arial,sans-serif;margin:0}"
+            ".rhead{font-size:15px;font-weight:700;padding:4px 0}</style>"
+        ),
         "</head><body>",
         '<div class="summary">Trip summary table goes here.</div>',
     ]
@@ -357,9 +362,11 @@ def test_cli_exits_two_on_a_page_count_mismatch(tiny_packet: Path, tmp_path: Pat
 class CountingHandler(BaseHTTPRequestHandler):
     """Records every path asked for, so the test can prove none was."""
 
-    asked: list[str] = []
+    # http.server builds a new handler per request, so the recording has to
+    # live on the class to survive across requests within one test.
+    asked: list[str] = []  # noqa: RUF012
 
-    def do_GET(self) -> None:  # noqa: N802  (the stdlib spells it this way)
+    def do_GET(self) -> None:
         CountingHandler.asked.append(self.path)
         self.send_response(404)
         self.end_headers()
@@ -522,8 +529,10 @@ def tall_table_packet(target: Path, rows: int = 200) -> Path:
 
 
 def test_a_long_receipt_runs_on_at_a_readable_size(tmp_path: Path) -> None:
-    """The receipt this whole pass exists for: long, and nowhere near legible
-    at the scale that would have fitted it onto one page."""
+    """The receipt this whole pass exists for: long, and nowhere near legible.
+
+    Not at the scale that would have fitted it onto one page.
+    """
     packet = tall_table_packet(tmp_path / "long.html")
     pdf = tmp_path / "long.pdf"
     pages, _channel, page_map = render_pdf.render(packet, pdf)
@@ -628,3 +637,16 @@ def test_a_packet_of_short_receipts_says_nothing_about_spans(tmp_path: Path, cap
         render_pdf.main([str(small_packet(tmp_path / "small.html")), str(tmp_path / "s.pdf")]) == 0
     )
     assert "spans" not in capsys.readouterr().err
+
+
+def test_running_the_file_as_a_script_hits_the_main_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``python scripts/render_pdf.py`` is the documented command line, not just the function."""
+    packet = small_packet(tmp_path / "small.html")
+    pdf = tmp_path / "small.pdf"
+    monkeypatch.setattr(sys, "argv", ["render_pdf.py", str(packet), str(pdf)])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(REPO_ROOT / "scripts" / "render_pdf.py"), run_name="__main__")
+    assert exc_info.value.code == 0
+    assert pdf.exists()

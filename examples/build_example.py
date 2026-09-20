@@ -124,7 +124,7 @@ MIN_IMAGE_BYTES = 100
 # surviving http source is a picture this machine could not fetch and did not
 # record, which would reach for the network from whatever opens the packet.
 REMOTE_SRC_RE = re.compile(
-    r"""src\s*=\s*(?:"(https?://[^"]*)"|'(https?://[^']*)'|(https?://[^\s>]+))""", re.I
+    r"""src\s*=\s*(?:"(https?://[^"]*)"|'(https?://[^']*)'|(https?://[^\s>]+))""", re.IGNORECASE
 )
 
 COMPANY = "Northwind Labs, Inc."
@@ -512,7 +512,10 @@ def prune_cache(cache: Path) -> tuple[int, int]:
 
 def run(name: str, *args: str) -> str:
     """One documented command line, run from the repo root."""
-    done = subprocess.run(
+    # sys.executable is this interpreter and name selects a script under
+    # SCRIPTS, both fixed by this file, not by anything an argv or an
+    # environment variable hands in.
+    done = subprocess.run(  # noqa: S603
         [sys.executable, str(SCRIPTS / f"{name}.py"), *args],
         cwd=str(REPO_ROOT),
         capture_output=True,
@@ -572,6 +575,7 @@ def build_packet(data_path: Path, cleaned: Path, out_html: Path, out_pdf: Path) 
 
 
 def pdf_pages(path: Path) -> int:
+    """The page count of a PDF on disk."""
     from pypdf import PdfReader
 
     return len(PdfReader(str(path)).pages)
@@ -676,6 +680,7 @@ def check() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Build or check the example packet."""
     parser = argparse.ArgumentParser(description="Build or check the example packet.")
     parser.add_argument(
         "--check",

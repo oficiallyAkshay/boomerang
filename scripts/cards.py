@@ -197,6 +197,7 @@ def singletons(fp: dict[str, list[str]]) -> set[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Card fingerprints across a receipts directory."""
     parser = argparse.ArgumentParser(description="Card fingerprints across a receipts directory.")
     parser.add_argument("receipts_dir", type=Path, help="directory of receipt files")
     parser.add_argument(

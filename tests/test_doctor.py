@@ -12,6 +12,7 @@ and a pip install that quietly lags a uv sync is worse than either.
 
 from __future__ import annotations
 
+import runpy
 import subprocess
 import sys
 import tomllib
@@ -144,6 +145,8 @@ def no_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setitem(sys.modules, "render_pdf", None)
     with pytest.raises(ImportError):
+        # The import itself is the probe; raising is the point, never using
+        # the name it would have bound.
         from render_pdf import wanted_channels  # noqa: F401
 
 
@@ -278,3 +281,15 @@ def test_a_failed_install_stops_there(monkeypatch: pytest.MonkeyPatch, capsys):
     monkeypatch.setattr(subprocess, "call", lambda command, *a, **k: 1)
     assert doctor.main(["--install"]) == 1
     assert "ok" not in capsys.readouterr().out
+
+
+def test_running_the_file_as_a_script_hits_the_main_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``python scripts/doctor.py`` is the documented command line, not just the function.
+
+    playwright and pypdf are both real dependencies of this project, so a
+    checkout with ``uv sync`` run always reports ready, browser or no browser.
+    """
+    monkeypatch.setattr(sys, "argv", ["doctor.py"])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(REPO_ROOT / "scripts" / "doctor.py"), run_name="__main__")
+    assert exc_info.value.code == 0

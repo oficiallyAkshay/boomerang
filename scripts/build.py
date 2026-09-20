@@ -79,14 +79,14 @@ STREET_RE = re.compile(
 MEAL_WORDS = ("breakfast", "brunch", "lunch", "dinner", "coffee", "snack")
 MEAL_MINUTES = 60
 # What a receipt fragment looks like when it never went through clean.py.
-UNCLEANED_RE = re.compile(r"<script|<html|<head|on\w+=", re.I)
+UNCLEANED_RE = re.compile(r"<script|<html|<head|on\w+=", re.IGNORECASE)
 
 # The cleaner leaves every vendor selector prefixed with this class, and the
 # packet gives each receipt that class plus its own ordinal, so the prefix is
 # what a fragment's stylesheet is narrowed through at insert time.
 SCOPE_CLASS = "rc"
 SCOPE_CLASS_RE = re.compile(rf"\.{SCOPE_CLASS}(?![\w-])")
-STYLE_BLOCK_RE = re.compile(r"(<style\b[^>]*>)(.*?)(</style\s*>)", re.S | re.I)
+STYLE_BLOCK_RE = re.compile(r"(<style\b[^>]*>)(.*?)(</style\s*>)", re.DOTALL | re.IGNORECASE)
 
 CSS = """
 body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;margin:0;color:#111;
@@ -812,15 +812,19 @@ def render_packet(data: dict, receipts_dir: Path) -> str:
         # Belt to the cleaner's braces. Even if a receipt fragment smuggled
         # something through, the packet loads no script and fetches nothing:
         # images have to be data URIs and there is no other source at all.
-        '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
-        "img-src data:; style-src 'unsafe-inline'; font-src data:\">",
+        (
+            '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; '
+            "img-src data:; style-src 'unsafe-inline'; font-src data:\">"
+        ),
         f"<title>{title}</title>",
         f"<style>{CSS}</style>",
         '</head><body><div class="page">',
         '<div class="cover"><h1>Expense reimbursement packet</h1>',
-        f'<div class="sub"><b>{company}</b><br>'
-        f"{html.escape(str(data.get('trip', '')))}<br>"
-        f"{html.escape(str(data.get('traveler', '')))}</div></div>",
+        (
+            f'<div class="sub"><b>{company}</b><br>'
+            f"{html.escape(str(data.get('trip', '')))}<br>"
+            f"{html.escape(str(data.get('traveler', '')))}</div></div>"
+        ),
         _summary_table(data, currency),
     ]
 
@@ -893,6 +897,7 @@ def unprinted_amounts(data: dict, receipts_dir: Path) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Build a reimbursement packet."""
     parser = argparse.ArgumentParser(description="Build a reimbursement packet.")
     parser.add_argument("data", type=Path, help="expense_data.json")
     parser.add_argument("--receipts", type=Path, required=True, help="receipts directory")

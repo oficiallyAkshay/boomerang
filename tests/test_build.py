@@ -9,7 +9,9 @@ from __future__ import annotations
 import base64
 import copy
 import json
+import runpy
 import shutil
+import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -17,6 +19,8 @@ import build
 import check_prose
 import pytest
 from check_prose import EM_DASH
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 RSEC_OPEN = '<section class="rsec"'
 
@@ -649,7 +653,7 @@ def test_money_formats_other_currencies_with_a_code() -> None:
 
 
 def test_an_amount_that_is_not_a_number_raises() -> None:
-    """validate refuses junk before anything renders, so this is a bug, not a total."""
+    """Validate refuses junk before anything renders, so this is a bug, not a total."""
     with pytest.raises(ValueError, match="amount is not a number"):
         build._decimal("not a number")
     with pytest.raises(ValueError, match="amount is not a number"):
@@ -664,7 +668,7 @@ def test_totals_match_a_hand_computation(data: dict) -> None:
     expected_expenses = Decimal("0.00")
     for day in data["days"]:
         subtotal = sum(
-            (Decimal(str(item["amt"])) for item in day["items"]), start=Decimal("0")
+            (Decimal(str(item["amt"])) for item in day["items"]), start=Decimal(0)
         ).quantize(Decimal("0.01"))
         expected_days.append((day["label"], subtotal))
         expected_expenses += subtotal
@@ -1280,3 +1284,26 @@ def test_the_cli_runs_the_disk_checks_on_the_receipts_it_was_given(
     with pytest.raises(ValueError, match=f"receipt {rid}: pdf cannot be read"):
         build.main([str(path), "--receipts", str(folder), "--out", str(out)])
     assert not out.exists()
+
+
+def test_running_the_file_as_a_script_hits_the_main_guard(
+    fixture_dir: Path, cleaned_receipts: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``python scripts/build.py`` is the documented command line, not just the function."""
+    out = tmp_path / "packet.html"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build.py",
+            str(fixture_dir / "expense_data.json"),
+            "--receipts",
+            str(cleaned_receipts),
+            "--out",
+            str(out),
+        ],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(REPO_ROOT / "scripts" / "build.py"), run_name="__main__")
+    assert exc_info.value.code == 0
+    assert out.is_file()

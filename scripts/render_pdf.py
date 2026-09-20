@@ -216,7 +216,7 @@ def _stamp_title(pdf_path: Path, title: str) -> None:
         writer.add_page(page)
     if title:
         writer.add_metadata({"/Title": title})
-    with open(pdf_path, "wb") as handle:
+    with Path(pdf_path).open("wb") as handle:
         writer.write(handle)
 
 
@@ -362,6 +362,7 @@ def render(html_path: Path, pdf_path: Path) -> tuple[int, str, dict]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Render a packet HTML file to a Letter PDF."""
     parser = argparse.ArgumentParser(description="Render a packet HTML file to a Letter PDF.")
     parser.add_argument("html", type=Path, help="packet HTML file")
     parser.add_argument("pdf", type=Path, help="PDF file to write")

@@ -159,10 +159,12 @@ class GmailSource:
     """The search and get pair fetch.py expects."""
 
     def __init__(self, service=None, token: Path | None = None) -> None:
+        """Hold a Gmail service, real or already built, and the token path."""
         self._service = service
         self._token = token
 
     def service(self):
+        """The Gmail service, building and caching one on first use."""
         if self._service is None:
             self._service = build_service(self._token)
         return self._service
@@ -214,6 +216,7 @@ class GmailSource:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Read only Gmail access for boomerang."""
     parser = argparse.ArgumentParser(description="Read only Gmail access for boomerang.")
     sub = parser.add_subparsers(dest="command", required=True)
 

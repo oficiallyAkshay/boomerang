@@ -390,10 +390,14 @@ def fetch_all(
 
 
 def _parse_date(value: str) -> date:
-    return datetime.strptime(value, "%Y-%m-%d").date()
+    """A YYYY-MM-DD command line argument, parsed as the date it names."""
+    # Date only, ".date()" immediately drops the naive time datetime.strptime
+    # attaches; there is no timezone here to lose.
+    return datetime.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Windowed two pass receipt search."""
     parser = argparse.ArgumentParser(description="Windowed two pass receipt search.")
     # None of the three is required outright, because --knowledge asks about
     # the folders rather than about a trip and --dry-run writes nothing. Each

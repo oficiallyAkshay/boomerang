@@ -66,8 +66,10 @@ def load_denylist(path: Path = DENYLIST_PATH) -> set[str]:
 
 def git_files(root: Path | None = None) -> list[Path]:
     """Every tracked file, as paths relative to the repo root."""
+    # "git" is a fixed, trusted binary name; resolving it through PATH is
+    # what every git user already expects, not untrusted input reaching argv.
     out = subprocess.run(
-        ["git", "ls-files", "-z"],
+        ["git", "ls-files", "-z"],  # noqa: S607
         cwd=str(root) if root else None,
         capture_output=True,
         text=True,
@@ -158,6 +160,7 @@ def scan(files: list[Path], denylist: set[str], root: Path | None = None) -> lis
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Prose and privacy gate."""
     parser = argparse.ArgumentParser(description="Prose and privacy gate.")
     parser.add_argument("--packet", type=Path, help="check this built packet, and nothing else")
     args = parser.parse_args(argv)

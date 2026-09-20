@@ -17,14 +17,17 @@ from __future__ import annotations
 
 import json
 import re
+import runpy
 import shutil
+import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
 import clean
 import pytest
 
-VENDORS_DIR = Path(__file__).resolve().parents[1] / "vendors"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+VENDORS_DIR = REPO_ROOT / "vendors"
 # The folders this file reaches into. Every folder, sample or no sample, is
 # covered by tests/test_vendors.py.
 VENDOR_NAMES = ["doordash", "lyft", "plaintext", "uber", "united"]
@@ -103,7 +106,7 @@ def test_html_comments_are_removed() -> None:
 
 # -------------------------------------------------- nothing active survives
 
-HANDLER_RE = re.compile(r"\bon\w+\s*=", re.I)
+HANDLER_RE = re.compile(r"\bon\w+\s*=", re.IGNORECASE)
 
 # Split by shape, not by danger: the void ones carry no content to remove.
 PAIRED_ELEMENTS = [
@@ -727,13 +730,13 @@ def test_at_least_one_strip_pattern_matches_the_sample(
     vendor: str, rules: dict, samples: dict
 ) -> None:
     patterns = rules[vendor]["strip_regex"]
-    assert any(re.search(p, samples[vendor], re.S) for p in patterns)
+    assert any(re.search(p, samples[vendor], re.DOTALL) for p in patterns)
 
 
 @pytest.mark.parametrize("vendor", VENDOR_NAMES)
 def test_every_strip_pattern_compiles(vendor: str, rules: dict) -> None:
     for pattern in rules[vendor]["strip_regex"]:
-        re.compile(pattern, re.S)
+        re.compile(pattern, re.DOTALL)
 
 
 def test_strip_patterns_run_case_insensitively(rules: dict) -> None:
@@ -1192,6 +1195,12 @@ def test_a_record_that_cannot_be_read_names_no_failures(tmp_path: Path) -> None:
     assert clean.failed_images(tmp_path) == set()
 
 
+def test_a_record_that_is_not_a_list_names_no_failures(tmp_path: Path) -> None:
+    """Valid JSON, wrong shape: a hand-edited record that is an object, not a list."""
+    (tmp_path / clean.FAILED_RECORD).write_text(json.dumps({"not": "a list"}), encoding="utf-8")
+    assert clean.failed_images(tmp_path) == set()
+
+
 def test_a_failed_image_becomes_its_alt_text(tmp_path: Path, no_network: None) -> None:
     url = "https://cdn.example.com/logo.png"
     (tmp_path / clean.FAILED_RECORD).write_text(json.dumps([url]), encoding="utf-8")
@@ -1342,7 +1351,7 @@ def write_lyft_with(tmp_path: Path, **overrides: object) -> None:
 
 
 def test_load_vendor_rules_accepts_rules_without_a_replace_field(tmp_path: Path) -> None:
-    """replace is optional, so the rules that predate it still load."""
+    """Replace is optional, so the rules that predate it still load."""
     write_lyft_with(tmp_path)
     assert "replace" not in clean.load_vendor_rules(tmp_path)["lyft"]
 
@@ -1586,8 +1595,8 @@ def test_a_last4_pattern_that_is_not_a_string_stops_the_load(tmp_path: Path) -> 
 
 def test_the_closed_sets_do_not_overlap_with_each_other() -> None:
     """Two sets sharing a word would make a printed row ambiguous to read."""
-    assert clean.MESSAGE_KINDS & clean.TENDER_KINDS == set()
-    assert clean.LINE_CATEGORIES & clean.MISSING_FACTS == set()
+    assert set() == clean.MESSAGE_KINDS & clean.TENDER_KINDS
+    assert set() == clean.LINE_CATEGORIES & clean.MISSING_FACTS
 
 
 # ------------------------------------------------------------- vendor detection
@@ -2135,3 +2144,17 @@ def test_thousands_separators_are_not_money() -> None:
     assert clean.MONEY_RE.findall("earn 60,000 bonus points") == []
     assert clean.MONEY_RE.findall("Total 214,90 EUR") == ["214,90"]
     assert clean.MONEY_RE.findall("$1,234.50 charged") == ["1,234.50"]
+
+
+def test_running_the_file_as_a_script_hits_the_main_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``python scripts/clean.py`` is the documented command line, not just the function."""
+    source = tmp_path / "in.html"
+    source.write_text("<html><body><p>Fare</p></body></html>", encoding="utf-8")
+    out = tmp_path / "out.html"
+    monkeypatch.setattr(sys, "argv", ["clean.py", str(source), "--out", str(out)])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(REPO_ROOT / "scripts" / "clean.py"), run_name="__main__")
+    assert exc_info.value.code == 0
+    assert out.read_text(encoding="utf-8") == "<p>Fare</p>\n"

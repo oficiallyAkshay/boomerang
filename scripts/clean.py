@@ -221,23 +221,23 @@ NESTED_AT_RULES = {"media", "supports", "layer", "container", "document", "scope
 # a bracket would be retried every way round.
 ATTRS = r"""(?:"[^"]*"|'[^']*'|[^>])*+"""
 
-COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
-SCRIPT_RE = re.compile(r"<script\b.*?</script\s*>", re.S | re.I)
-LONE_SCRIPT_RE = re.compile(rf"</?script\b{ATTRS}>", re.I)
-STYLE_RE = re.compile(rf"<style\b{ATTRS}>(.*?)</style\s*>", re.S | re.I)
+COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+SCRIPT_RE = re.compile(r"<script\b.*?</script\s*>", re.DOTALL | re.IGNORECASE)
+LONE_SCRIPT_RE = re.compile(rf"</?script\b{ATTRS}>", re.IGNORECASE)
+STYLE_RE = re.compile(rf"<style\b{ATTRS}>(.*?)</style\s*>", re.DOTALL | re.IGNORECASE)
 # What is left once the complete blocks are out: an opener with no closer
 # takes the CSS that follows it, up to the next tag, and the bare tokens go.
-ORPHAN_STYLE_RE = re.compile(rf"<style\b{ATTRS}>([^<]*)", re.I)
-LONE_STYLE_RE = re.compile(rf"</?style\b{ATTRS}>?", re.I)
-HEAD_RE = re.compile(rf"<head\b{ATTRS}>.*?</head\s*>", re.S | re.I)
-BODY_RE = re.compile(rf"<body\b{ATTRS}>(.*)</body\s*>", re.S | re.I)
-DOCTYPE_RE = re.compile(rf"<!doctype{ATTRS}>", re.I)
-WRAPPER_RE = re.compile(rf"</?(?:html|body)\b{ATTRS}>", re.I)
-IMG_RE = re.compile(rf"<img\b{ATTRS}>", re.I)
-ANCHOR_RE = re.compile(rf"<a\b({ATTRS})>(.*?)</a\s*>", re.S | re.I)
-OPEN_ANCHOR_RE = re.compile(rf"<a\b({ATTRS})>", re.I)
+ORPHAN_STYLE_RE = re.compile(rf"<style\b{ATTRS}>([^<]*)", re.IGNORECASE)
+LONE_STYLE_RE = re.compile(rf"</?style\b{ATTRS}>?", re.IGNORECASE)
+HEAD_RE = re.compile(rf"<head\b{ATTRS}>.*?</head\s*>", re.DOTALL | re.IGNORECASE)
+BODY_RE = re.compile(rf"<body\b{ATTRS}>(.*)</body\s*>", re.DOTALL | re.IGNORECASE)
+DOCTYPE_RE = re.compile(rf"<!doctype{ATTRS}>", re.IGNORECASE)
+WRAPPER_RE = re.compile(rf"</?(?:html|body)\b{ATTRS}>", re.IGNORECASE)
+IMG_RE = re.compile(rf"<img\b{ATTRS}>", re.IGNORECASE)
+ANCHOR_RE = re.compile(rf"<a\b({ATTRS})>(.*?)</a\s*>", re.DOTALL | re.IGNORECASE)
+OPEN_ANCHOR_RE = re.compile(rf"<a\b({ATTRS})>", re.IGNORECASE)
 LINK_ATTR_RE = re.compile(
-    r"""\s+(?:href|target|ping|rel|on\w+)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.I
+    r"""\s+(?:href|target|ping|rel|on\w+)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.IGNORECASE
 )
 # A remote image source, however the vendor quoted it. HTML lets an attribute
 # value be double quoted, single quoted or bare, a browser reads all three the
@@ -246,16 +246,16 @@ LINK_ATTR_RE = re.compile(
 # form, so the quote that opened the value is the quote that closes it and a
 # bare value stops at the first space or bracket.
 SRC_RE = re.compile(
-    r"""src\s*=\s*(?:"(https?://[^"]+)"|'(https?://[^']+)'|(https?://[^\s>"']+))""", re.I
+    r"""src\s*=\s*(?:"(https?://[^"]+)"|'(https?://[^']+)'|(https?://[^\s>"']+))""", re.IGNORECASE
 )
-PIXEL_HINT_RE = re.compile(r"open|track|pixel|beacon", re.I)
+PIXEL_HINT_RE = re.compile(r"open|track|pixel|beacon", re.IGNORECASE)
 # A spacer or beacon sized in CSS rather than in attributes. ``max-`` is in
 # there because a hidden preheader image is usually held at ``max-height: 0``,
 # and the unit is optional because a zero needs none.
 TINY_STYLE_RE = re.compile(
-    r"(?:^|;)\s*(?:max-)?(?:width|height)\s*:\s*[01](?:\.\d+)?\s*(?:px)?\s*(?:;|$)", re.I
+    r"(?:^|;)\s*(?:max-)?(?:width|height)\s*:\s*[01](?:\.\d+)?\s*(?:px)?\s*(?:;|$)", re.IGNORECASE
 )
-BARE_PAGE_SELECTOR_RE = re.compile(r"(?<![\w.#\[-])(?:html|body)\b", re.I)
+BARE_PAGE_SELECTOR_RE = re.compile(r"(?<![\w.#\[-])(?:html|body)\b", re.IGNORECASE)
 
 # Elements a receipt never needs and a packet must never carry: anything that
 # loads a second document, anything interactive, and anything that can hold a
@@ -288,39 +288,44 @@ DANGEROUS_ELEMENTS = (
 VOID_ELEMENTS = ("base", "input", "link", "meta", "source", "track")
 PAIRED_ELEMENTS = tuple(name for name in DANGEROUS_ELEMENTS if name not in VOID_ELEMENTS)
 ELEMENT_BOUNDS = {
-    name: (re.compile(rf"<{name}\b{ATTRS}>", re.I), re.compile(rf"</{name}\s*>", re.I))
+    name: (
+        re.compile(rf"<{name}\b{ATTRS}>", re.IGNORECASE),
+        re.compile(rf"</{name}\s*>", re.IGNORECASE),
+    )
     for name in PAIRED_ELEMENTS
 }
-LONE_ELEMENT_RE = re.compile(rf"</?(?:{'|'.join(DANGEROUS_ELEMENTS)})\b{ATTRS}>", re.I)
+LONE_ELEMENT_RE = re.compile(rf"</?(?:{'|'.join(DANGEROUS_ELEMENTS)})\b{ATTRS}>", re.IGNORECASE)
 
 TAG_RE = re.compile(rf"<([A-Za-z][-\w]*)({ATTRS})>")
-HANDLER_ATTR_RE = re.compile(r"""\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.I)
-SRCSET_ATTR_RE = re.compile(r"""\s+srcset\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.I)
+HANDLER_ATTR_RE = re.compile(r"""\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.IGNORECASE)
+SRCSET_ATTR_RE = re.compile(r"""\s+srcset\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.IGNORECASE)
 URL_ATTR_RE = re.compile(
     r"""\s+(formaction|background|poster|action|href|src|data)\s*=\s*"""
     r"""("[^"]*"|'[^']*'|[^\s>]+)""",
-    re.I,
+    re.IGNORECASE,
 )
-STYLE_ATTR_RE = re.compile(r"""\s+style\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", re.I)
+STYLE_ATTR_RE = re.compile(r"""\s+style\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", re.IGNORECASE)
 URL_NOISE_RE = re.compile(r"[\s\x00-\x20\x7f]+")
 BLOCKED_SCHEMES = ("javascript:", "data:text/html")
 IMAGE_SCHEMES = ("http://", "https://", "data:image/")
 
-CSS_IMPORT_RE = re.compile(r"@import\b[^;{}]*;?", re.I)
+CSS_IMPORT_RE = re.compile(r"@import\b[^;{}]*;?", re.IGNORECASE)
 CSS_BANNED_DECL_RE = re.compile(
-    r"[^;{}]*(?:expression\s*\(|-moz-binding|behavior\s*:)[^;{}]*;?", re.I
+    r"[^;{}]*(?:expression\s*\(|-moz-binding|behavior\s*:)[^;{}]*;?", re.IGNORECASE
 )
-CSS_URL_RE = re.compile(r"""url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)""", re.I)
+CSS_URL_RE = re.compile(r"""url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)""", re.IGNORECASE)
 # page-break-before and friends, and the modern break-before spelling. The
 # lookbehind keeps word-break and line-break out of it.
-CSS_BREAK_DECL_RE = re.compile(r"[^;{}]*(?<![-\w])(?:page-)?break-[-\w]+\s*:[^;{}]*;?", re.I)
+CSS_BREAK_DECL_RE = re.compile(
+    r"[^;{}]*(?<![-\w])(?:page-)?break-[-\w]+\s*:[^;{}]*;?", re.IGNORECASE
+)
 # The only data URIs a receipt's CSS has any use for. A data:text/html in a
 # url() is a document, not a picture, so it goes the way a remote URL does.
 CSS_DATA_SCHEMES = ("data:image/", "data:font/")
 # Comments and whitespace in front of a rule's selector or at-rule keyword.
 # Taken off before the keyword is read, so a commented @media is still an
 # at-rule and is never handed to the selector scoping as if it were one.
-CSS_LEAD_RE = re.compile(r"\A\s*(?:/\*.*?\*/\s*)+", re.S)
+CSS_LEAD_RE = re.compile(r"\A\s*(?:/\*.*?\*/\s*)+", re.DOTALL)
 
 # A money string as a receipt prints one. Counted before and after each vendor
 # strip pattern, never parsed. The comma is there because a euro receipt writes
@@ -337,13 +342,15 @@ MARKUP_RE = re.compile(r"<[^>]*>")
 def _attr(tag: str, name: str) -> str | None:
     """The value of one attribute of a tag, unquoted, or None."""
     pattern = rf"""(?<![-\w]){name}\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))"""
-    match = re.search(pattern, tag, re.I)
+    match = re.search(pattern, tag, re.IGNORECASE)
     if not match:
         return None
-    for group in (2, 3, 4):
-        if match.group(group) is not None:
-            return match.group(group)
-    return None
+    # One of the three quoting alternatives in the pattern above always
+    # captures into group 2, 3 or 4 once the outer match succeeds, so the
+    # default here is never actually returned; next() takes it as a plain
+    # value rather than as a branch a future edit to the pattern could
+    # silently stop reaching.
+    return next((match.group(group) for group in (2, 3, 4) if match.group(group) is not None), None)
 
 
 def _is_tracking_pixel(tag: str) -> bool:
@@ -358,9 +365,7 @@ def _is_tracking_pixel(tag: str) -> bool:
     if TINY_STYLE_RE.search(_attr(tag, "style") or ""):
         return True
     src = _attr(tag, "src") or ""
-    if src.lower().startswith(("http://", "https://")) and PIXEL_HINT_RE.search(src):
-        return True
-    return False
+    return bool(src.lower().startswith(("http://", "https://")) and PIXEL_HINT_RE.search(src))
 
 
 def _unquote(raw: str) -> str:
@@ -700,7 +705,9 @@ class _NoRedirect(HTTPRedirectHandler):
     host check never saw, so the fetch stops at the first hop.
     """
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
+    # The signature is HTTPRedirectHandler's own; every parameter but code
+    # exists to match it, not because this override reads them.
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ARG002
         raise URLError(f"refused a redirect ({code})")
 
 
@@ -757,7 +764,7 @@ def fetch_images(html: str, cache_dir: Path) -> int:
             print("clean: image not fetched (host refused)", file=sys.stderr)
             continue
         try:
-            with urlopen(url, timeout=FETCH_TIMEOUT) as response:  # noqa: S310
+            with urlopen(url, timeout=FETCH_TIMEOUT) as response:
                 blob = response.read(MAX_IMAGE_BYTES + 1)
         except HTTPError as error:
             print(f"clean: image not fetched (HTTP {error.code})", file=sys.stderr)
@@ -788,7 +795,7 @@ def _unwrap_links(html: str, patterns: list[str]) -> str:
     def replace(match: re.Match[str]) -> str:
         href = _attr(match.group(1), "href") or ""
         for pattern in patterns:
-            if re.search(pattern, href, re.I):
+            if re.search(pattern, href, re.IGNORECASE):
                 return match.group(2)
         return match.group(0)
 
@@ -807,12 +814,12 @@ def _rule_problems(loaded: object) -> list[str]:
     problems: list[str] = []
     if not isinstance(loaded, dict):
         return ["rules must hold a JSON object"]
-    for key in REQUIRED_KEYS:
-        if key not in loaded:
-            problems.append(f"missing key {key}")
-    for key in LIST_KEYS:
-        if key in loaded and not isinstance(loaded[key], list):
-            problems.append(f"{key} must be a list")
+    problems.extend(f"missing key {key}" for key in REQUIRED_KEYS if key not in loaded)
+    problems.extend(
+        f"{key} must be a list"
+        for key in LIST_KEYS
+        if key in loaded and not isinstance(loaded[key], list)
+    )
     if "name" in loaded and not isinstance(loaded["name"], str):
         problems.append("name must be a string")
     problems.extend(_pattern_problems(loaded))
@@ -1029,7 +1036,8 @@ def _domain_fits(rule: dict, domain: str) -> bool:
 def _subject_fits(rule: dict, subject: str) -> bool:
     """True when any of a vendor's subject patterns matches this subject."""
     return any(
-        re.search(pattern, subject or "", re.I) for pattern in rule.get("subject_patterns") or []
+        re.search(pattern, subject or "", re.IGNORECASE)
+        for pattern in rule.get("subject_patterns") or []
     )
 
 
@@ -1121,7 +1129,7 @@ def _apply_strip_patterns(body: str, rules: dict) -> tuple[str, list[str]]:
     warnings: list[str] = []
     kept = _printed_amounts(body)
     for index, pattern in enumerate(patterns):
-        candidate = re.sub(pattern, "", body, flags=re.S | re.I)
+        candidate = re.sub(pattern, "", body, flags=re.DOTALL | re.IGNORECASE)
         found = _printed_amounts(candidate)
         if found < kept:
             warnings.append(
@@ -1153,7 +1161,7 @@ def _apply_replacements(body: str, rules: dict) -> tuple[str, list[str]]:
     warnings: list[str] = []
     kept = _printed_amounts(body)
     for index, (pattern, replacement) in enumerate(pairs):
-        candidate = re.sub(pattern, replacement, body, flags=re.S | re.I)
+        candidate = re.sub(pattern, replacement, body, flags=re.DOTALL | re.IGNORECASE)
         found = _printed_amounts(candidate)
         if found < kept:
             warnings.append(
@@ -1317,6 +1325,7 @@ def _run_dir(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Clean a vendor receipt email for a packet."""
     parser = argparse.ArgumentParser(description="Clean a vendor receipt email for a packet.")
     parser.add_argument("source", type=Path, nargs="?", help="the saved receipt HTML")
     parser.add_argument("--dir", type=Path, help="clean every receipt in this directory at once")
@@ -1376,7 +1385,7 @@ def main(argv: list[str] | None = None) -> int:
         fetch_images(cleaned, args.images)
     if args.images is not None:
         cleaned = inline_images(cleaned, args.images)
-    if args.out.parent != Path(""):
+    if args.out.parent != Path():
         args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(cleaned + "\n", encoding="utf-8")
     print(f"clean: wrote {args.out.as_posix()}, {len(cleaned)} characters")

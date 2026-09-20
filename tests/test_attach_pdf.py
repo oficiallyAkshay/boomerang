@@ -7,6 +7,8 @@ these exercise the real page geometry rather than a hand built PDF.
 from __future__ import annotations
 
 import json
+import runpy
+import sys
 from pathlib import Path
 
 import attach_pdf
@@ -16,6 +18,7 @@ from fixtures.make_fixture import pdf_bytes
 from pypdf import PdfReader
 from test_render_pdf import PACKET_TITLE, write_packet
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 FOLIO_MARK_ONE = "folio page 1 of 2"
 FOLIO_MARK_TWO = "folio page 2 of 2"
 
@@ -229,9 +232,10 @@ def test_a_folio_behind_a_long_receipt_lands_after_its_last_page(tmp_path: Path)
 def test_splice_rejects_an_unmapped_packet_with_no_summary_page(
     packet: dict, unmapped_packet: Path, tmp_path: Path
 ) -> None:
-    """With no map to read, one page per receipt is all the splice can assume,
-    and a packet that cannot be read that way is refused rather than guessed
-    at."""
+    """With no map to read, one page per receipt is all the splice can assume.
+
+    A packet that cannot be read that way is refused rather than guessed at.
+    """
     crowded = {"receipts": [{"rid": f"r{n}"} for n in range(packet["pages"] + 3)]}
     with pytest.raises(ValueError, match="no summary page"):
         attach_pdf.splice(unmapped_packet, crowded, tmp_path, tmp_path / "final.pdf")
@@ -240,8 +244,10 @@ def test_splice_rejects_an_unmapped_packet_with_no_summary_page(
 def test_splice_refuses_a_map_that_does_not_describe_the_packet(
     packet: dict, tmp_path: Path
 ) -> None:
-    """A map for eleven receipts and a claim naming one is not a mismatch to
-    guess a way through: every folio after the first would land early."""
+    """A map for eleven receipts and a claim naming one is not a mismatch to guess through.
+
+    Every folio after the first would land early.
+    """
     data = {"receipts": [{"rid": "alpha", "title": "Folio alpha"}]}
     with pytest.raises(ValueError, match="describes 11 receipts"):
         attach_pdf.splice(packet["pdf"], data, tmp_path, tmp_path / "final.pdf")
@@ -319,3 +325,33 @@ def test_the_cli_validates_before_it_touches_the_packet(
     assert code == 2
     assert "title" in capsys.readouterr().err
     assert not out.exists()
+
+
+def test_running_the_file_as_a_script_hits_the_main_guard(
+    packet: dict,
+    cleaned_receipts: Path,
+    fixture_data: dict,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``python scripts/attach_pdf.py`` is the documented command line, not just the function."""
+    data_path = tmp_path / "expense_data.json"
+    data_path.write_text(json.dumps(fixture_data), encoding="utf-8")
+    out = tmp_path / "script_final.pdf"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "attach_pdf.py",
+            str(packet["pdf"]),
+            str(data_path),
+            "--receipts",
+            str(cleaned_receipts),
+            "--out",
+            str(out),
+        ],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(REPO_ROOT / "scripts" / "attach_pdf.py"), run_name="__main__")
+    assert exc_info.value.code == 0
+    assert out.exists()

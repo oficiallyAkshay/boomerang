@@ -75,5 +75,6 @@ def pdf_bytes(pages: list[list[str]]) -> bytes:
 
 
 def money(value: float) -> str:
+    """A dollar amount formatted the way a receipt prints one."""
     sign = "-" if value < 0 else ""
     return f"{sign}${abs(value):,.2f}"
