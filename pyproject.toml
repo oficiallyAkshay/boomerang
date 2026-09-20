@@ -15,6 +15,8 @@ gmail = [
     "google-api-python-client==2.200.0",
     "google-auth-oauthlib==1.4.1",
 ]
+
+[dependency-groups]
 dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
@@ -24,6 +26,8 @@ dev = [
 ]
 
 [tool.uv]
+# boomerang is an agent skill, not a built or published package; uv sync has
+# nothing to build, so it must not require a build backend.
 package = false
 
 [tool.pytest.ini_options]
@@ -45,3 +49,11 @@ omit = ["scripts/gmail_cli.py"]
 # greenlet for the playwright render, thread for the pools in fetch.py and
 # clean.py. Without thread, work done in a worker reads as never run at all.
 concurrency = ["greenlet", "thread"]
+
+[tool.coverage.report]
+# The floor the suite already clears with room to spare; diff-cover holds
+# changed lines to the same 90 percent in CI. Below 100, on purpose: the
+# runtime depends on playwright and pypdf (STR-001 does not hold here, see
+# the pull request body), so this repo stays at the build stage rather than
+# the finish stage a 100 floor would trigger.
+fail_under = 90
