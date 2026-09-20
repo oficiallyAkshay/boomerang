@@ -88,6 +88,8 @@ By default, `policy.md` sets the rules; your own copy of the [local override tem
 By default, the browser is Chrome, then Edge, then Chromium; `BOOMERANG_BROWSER` overrides it.
 By default, email goes through the host's own tool; set `BOOMERANG_GMAIL_CLIENT_SECRET` for the Gmail fallback.
 
+<p align="center"><a href="https://www.bestpractices.dev/projects/14734"><img alt="OpenSSF Best Practices, passing" src="https://www.bestpractices.dev/projects/14734/badge"></a></p>
+
 ## Badges
 
 Click a badge for its recipe; Both is the recommended shape. Counts come from clonometer, linked above, read once a day and written to a badges branch. Until the owner adds a traffic token and flips the repository public, every cell below reads "resource not found."
