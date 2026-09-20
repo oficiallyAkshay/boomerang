@@ -7,21 +7,19 @@
 </p>
 
 <p align="center">
-  <a href=".github/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/oficiallyAkshay/boomerang/ci.yml?branch=main&logo=githubactions&logoColor=white&label=CI"></a>
   <a href="https://codecov.io/gh/oficiallyAkshay/boomerang"><img alt="coverage" src="https://img.shields.io/codecov/c/github/oficiallyAkshay/boomerang?logo=codecov&logoColor=white"></a>
-  <a href="#how-usage-is-counted"><img alt="clones in the last 14 days" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones-14d.json&logo=github&logoColor=white"></a>
-  <img alt="Python 3.11 or newer" src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white">
+  <a href="https://github.com/oficiallyAkshay/clonometer"><img alt="clones of this repository, last seven days and all time" src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones.json&query=$.badge&label=clones&logo=github&logoColor=white"></a>
   <a href="references/vendors.md"><img alt="vendors covered" src="https://img.shields.io/badge/vendors-10-6f42c1?logo=databricks&logoColor=white"></a>
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/license-MIT-2f6f4e?logo=opensourceinitiative&logoColor=white"></a>
 </p>
 
 <p align="center">
-  <sub>Runs on</sub>
+  Works with
   <br>
   <a href="references/hosts.md#claude-code"><img alt="Claude Code" src="https://img.shields.io/badge/Claude%20Code-3f3f46?logo=anthropic&logoColor=white"></a>
   <a href="references/hosts.md#claudeai-and-the-claude-desktop-app"><img alt="Claude.ai" src="https://img.shields.io/badge/Claude.ai-3f3f46?logo=claude&logoColor=white"></a>
   <a href="references/hosts.md#cursor"><img alt="Cursor" src="https://img.shields.io/badge/Cursor-3f3f46?logo=cursor&logoColor=white"></a>
-  <a href="references/hosts.md#codex"><img alt="Codex" src="https://img.shields.io/badge/Codex-3f3f46"></a>
+  <a href="references/hosts.md#codex"><img alt="Codex" src="https://img.shields.io/badge/Codex-3f3f46?logo=data:image/svg%2bxml;base64,PHN2ZyBmaWxsPSJ3aGl0ZSIgcm9sZT0iaW1nIiB2aWV3Qm94PSIwIDAgMjQgMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHRpdGxlPk9wZW5BSTwvdGl0bGU+PHBhdGggZD0iTTIyLjI4MTkgOS44MjExYTUuOTg0NyA1Ljk4NDcgMCAwIDAtLjUxNTctNC45MTA4IDYuMDQ2MiA2LjA0NjIgMCAwIDAtNi41MDk4LTIuOUE2LjA2NTEgNi4wNjUxIDAgMCAwIDQuOTgwNyA0LjE4MThhNS45ODQ3IDUuOTg0NyAwIDAgMC0zLjk5NzcgMi45IDYuMDQ2MiA2LjA0NjIgMCAwIDAgLjc0MjcgNy4wOTY2IDUuOTggNS45OCAwIDAgMCAuNTExIDQuOTEwNyA2LjA1MSA2LjA1MSAwIDAgMCA2LjUxNDYgMi45MDAxQTUuOTg0NyA1Ljk4NDcgMCAwIDAgMTMuMjU5OSAyNGE2LjA1NTcgNi4wNTU3IDAgMCAwIDUuNzcxOC00LjIwNTggNS45ODk0IDUuOTg5NCAwIDAgMCAzLjk5NzctMi45MDAxIDYuMDU1NyA2LjA1NTcgMCAwIDAtLjc0NzUtNy4wNzI5em0tOS4wMjIgMTIuNjA4MWE0LjQ3NTUgNC40NzU1IDAgMCAxLTIuODc2NC0xLjA0MDhsLjE0MTktLjA4MDQgNC43NzgzLTIuNzU4MmEuNzk0OC43OTQ4IDAgMCAwIC4zOTI3LS42ODEzdi02LjczNjlsMi4wMiAxLjE2ODZhLjA3MS4wNzEgMCAwIDEgLjAzOC4wNTJ2NS41ODI2YTQuNTA0IDQuNTA0IDAgMCAxLTQuNDk0NSA0LjQ5NDR6bS05LjY2MDctNC4xMjU0YTQuNDcwOCA0LjQ3MDggMCAwIDEtLjUzNDYtMy4wMTM3bC4xNDIuMDg1MiA0Ljc4MyAyLjc1ODJhLjc3MTIuNzcxMiAwIDAgMCAuNzgwNiAwbDUuODQyOC0zLjM2ODV2Mi4zMzI0YS4wODA0LjA4MDQgMCAwIDEtLjAzMzIuMDYxNUw5Ljc0IDE5Ljk1MDJhNC40OTkyIDQuNDk5MiAwIDAgMS02LjE0MDgtMS42NDY0ek0yLjM0MDggNy44OTU2YTQuNDg1IDQuNDg1IDAgMCAxIDIuMzY1NS0xLjk3MjhWMTEuNmEuNzY2NC43NjY0IDAgMCAwIC4zODc5LjY3NjVsNS44MTQ0IDMuMzU0My0yLjAyMDEgMS4xNjg1YS4wNzU3LjA3NTcgMCAwIDEtLjA3MSAwbC00LjgzMDMtMi43ODY1QTQuNTA0IDQuNTA0IDAgMCAxIDIuMzQwOCA3Ljg3MnptMTYuNTk2MyAzLjg1NThMMTMuMTAzOCA4LjM2NCAxNS4xMTkyIDcuMmEuMDc1Ny4wNzU3IDAgMCAxIC4wNzEgMGw0LjgzMDMgMi43OTEzYTQuNDk0NCA0LjQ5NDQgMCAwIDEtLjY3NjUgOC4xMDQydi01LjY3NzJhLjc5Ljc5IDAgMCAwLS40MDctLjY2N3ptMi4wMTA3LTMuMDIzMWwtLjE0Mi0uMDg1Mi00Ljc3MzUtMi43ODE4YS43NzU5Ljc3NTkgMCAwIDAtLjc4NTQgMEw5LjQwOSA5LjIyOTdWNi44OTc0YS4wNjYyLjA2NjIgMCAwIDEgLjAyODQtLjA2MTVsNC44MzAzLTIuNzg2NmE0LjQ5OTIgNC40OTkyIDAgMCAxIDYuNjgwMiA0LjY2ek04LjMwNjUgMTIuODYzbC0yLjAyLTEuMTYzOGEuMDgwNC4wODA0IDAgMCAxLS4wMzgtLjA1NjdWNi4wNzQyYTQuNDk5MiA0LjQ5OTIgMCAwIDEgNy4zNzU3LTMuNDUzN2wtLjE0Mi4wODA1TDguNzA0IDUuNDU5YS43OTQ4Ljc5NDggMCAwIDAtLjM5MjcuNjgxM3ptMS4wOTc2LTIuMzY1NGwyLjYwMi0xLjQ5OTggMi42MDY5IDEuNDk5OHYyLjk5OTRsLTIuNTk3NCAxLjQ5OTctMi42MDY3LTEuNDk5N1oiLz48L3N2Zz4="></a>
   <a href="references/hosts.md#openclaw"><img alt="OpenClaw" src="https://img.shields.io/badge/OpenClaw-3f3f46"></a>
   <a href="references/hosts.md#hermes"><img alt="Hermes" src="https://img.shields.io/badge/Hermes-3f3f46"></a>
 </p>
@@ -38,100 +36,79 @@ Boomerang builds it. Every receipt, the right total, one PDF.
 
 ## Features
 
-| Feature | What it means |
-| --- | --- |
-| **Finds everything** | The whole trip window, late receipts, folios sent as attachments |
-| **Splits who paid** | Company card from yours, eTicket chains, credits in and points out |
-| **Multi-company trips** | Two onsites in one trip, the shared flight and nights split |
-| **Real receipts** | The vendor's own email, amounts untouched, one per page |
-| **One PDF** | Summary page first, every receipt behind it |
-| **Multi-currency** | Claims the posted home amount, notes the local one |
-| **Change fees and cancellations** | The fee you ate and the trip that never happened, both labelled |
-| **Personal days** | Your own days come out, the four airport legs stay in |
-| **Stipends** | Counted by days worked, shown as their own rows above the total |
+<p align="center">🔍<br><b>Finds everything</b><br>The whole trip window, late receipts, folios sent as attachments</p>
 
-Full ruleset in [`policy.md`](policy.md).
+<p align="center">💳<br><b>Splits who paid</b><br>Company card from yours, eTicket chains, credits in and points out</p>
 
-## How it works
+<p align="center">🧾<br><b>Real receipts</b><br>The vendor's own email behind every claimed line, one per page, amounts untouched</p>
 
-<p align="center">
-  <img alt="How boomerang works: two search passes feed a fetch step; cleaning, card fingerprinting and folio text run in parallel; the model applies the policy and shows a candidate list; then one build step produces the packet" src="assets/diagram/architecture.svg" width="900">
-</p>
+<p align="center">🌍<br><b>Multi-currency trips</b><br>The posted home amount plus the local one; two onsites in one trip, the shared flight and nights split</p>
 
-Two search passes, then cleaning, who paid and folio text in parallel, then the model's judgment, then one packet.
+<p align="center">🏖️<br><b>Personal days out</b><br>Your own days come out, the four airport legs stay</p>
 
-## Quick start
+<p align="center">📌<br><b>Stipends, change fees</b><br>Counted by day worked, or the fee you ate, each its own line</p>
 
-1. `npx skills add oficiallyAkshay/boomerang`, which installs the skill into
-   Claude Code, Cursor, Codex and about seventy other agents. By hand instead:
-   clone this repo and copy the folder into `~/.claude/skills/boomerang/`. On
-   Claude.ai and Cowork there is no clone: zip the skill folder and upload it
-   under Customize, Skills, as [`references/hosts.md`](references/hosts.md)
-   sets out.
+## Fit
 
-2. `pip install -r requirements.txt`, or `uv sync`. No browser download is
-   needed when Chrome or Edge is already on the machine.
+Use it when:
 
-3. Ask your agent: "Build my reimbursement packet for the trip on June 11."
+- Your own money went out on a work trip and you want the exact amount back, not a guess.
+- The receipts live in a personal inbox, not a company card feed.
+- You want the vendor's own receipt behind every line you claim.
 
-`python scripts/doctor.py` prints what is present, what is missing, and the one
-command that fixes each thing.
+Look elsewhere when:
 
-## Configuration and security
+- A company card feed already pulls your receipts: a corporate expense tool covers that.
+- You would rather forward or upload each receipt by hand: [assaf/expense](https://github.com/assaf/expense) and [danschultzer/receipt-scanner](https://github.com/danschultzer/receipt-scanner) fit that instead.
 
-| Setting | Where | Default |
-| --- | --- | --- |
-| The shared ruleset | [`policy.md`](policy.md) | Ships with the skill, yours to edit |
-| Your own overrides | `policy.local.md`, ignored by git ([template](references/policy.local.example.md)) | Tips out, ride extras in, alcohol flagged, upgrades out, seat fees in, 60 minute meal window, USD |
-| Browser for the PDF | `BOOMERANG_BROWSER` | Chrome, then Edge, then Chromium, first one found |
-| Gmail fallback | `BOOMERANG_GMAIL_CLIENT_SECRET` | Off, the host's own email tool is used |
-
-### What leaves your machine: nothing
-
-| Concern | What actually happens | The guard |
-| --- | --- | --- |
-| Reading your mail | Read only, never a write and never a delete | The Gmail fallback asks for the read-only scope |
-| Where the token sits | In your home config folder, readable by you alone | Mode 600 inside a 700 directory |
-| Sending data anywhere | No uploads, no telemetry, no analytics | Only your mail provider, plus vendor images when you ask |
-| The packet phoning home | Nothing loads when a reviewer opens it | A content security policy in the packet, scripts off at render |
-| Vendor tracking | Pixels and tracking links are gone before the build | Beacon images dropped, links unwrapped to their own text |
-| A vendor email running code | Nothing inside a receipt can act | Scripts, handlers, iframes and style imports removed first |
-| Dependencies | Two runtime packages, pinned to exact versions | Audited against the advisory database on every run of CI |
-| This repo leaking data | Every sample and example is synthetic | A hashed denylist gate runs on each commit and in CI |
-
-Receipts, the packet and the PDF are files on your disk; you send the claim yourself.
-
-### How usage is counted
-
-The clone badge is GitHub's own rolling 14 day traffic window for this
-repository, read once on every push to `main` and written to the `badges` branch
-as a small JSON file. Nothing is collected from anyone's machine: GitHub counts
-a clone at its own end, the figures are repository totals with no identity
-attached, and boomerang still sends nothing anywhere.
-
-Until the owner adds the `TRAFFIC_TOKEN` secret and the repository is public the
-badge reads "resource not found", because shields cannot fetch a raw file from a
-private repository.
-
-## Common workflows
-
-| Situation | What you say | What comes back |
-| --- | --- | --- |
-| They booked the flight and hotel | "Build my packet for the Redwood onsite on June 11." | Rides, meals and Wi-Fi claimed, their flight and room dropped |
-| You paid in full, with a stipend | "Client trip June 3 to 6, stipend 75 a day." | Flight, hotel and rides claimed, four stipend days above the total |
-| Two companies in one city | "Redwood on Tuesday, Foxglove on Thursday, same trip." | Two packets, the shared flight and nights split evenly |
-| Personal days added | "I stayed through the weekend for myself." | Weekend nights and rides out, all four airport legs kept |
-| The onsite was cancelled | "Redwood cancelled June 11 after I had booked." | Change fee and the non-refundable night in, labelled for the reviewer |
-| A trip abroad | "Berlin onsite, everything was charged in euros." | Posted dollar amounts claimed, each line noting the euro total |
-| The sweep before you send | "Anything new since we built it?" | Late rides added, totals restated, the PDF rebuilt |
+Install it by asking your agent to add the skill from oficiallyAkshay/boomerang; the exact command for each host is in [`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md).
 
 ## How it compares
 
-| | Corporate expense tools | Receipt scanner apps | Asking a chat model | Boomerang |
-| --- | --- | --- | --- | --- |
-| Needs a company account | Yes | No | No | No |
-| Finds receipts for you | From the card feed | You forward each one | You paste each one | Searches your mailbox |
-| Knows who paid | From the card feed | No | Only if you say so | Card fingerprint, in code |
-| Money math in code | Yes | Yes | No, the model adds up | Yes |
-| Real vendor receipts in the output | Photos you upload | Photos you upload | None | The vendor's own email |
-| Follows a written policy you can edit | An admin sets it | No | Only what you retype | Yes, a file you own |
+| | [oficiallyAkshay/boomerang](https://github.com/oficiallyAkshay/boomerang) | [assaf/expense](https://github.com/assaf/expense) | [danschultzer/receipt-scanner](https://github.com/danschultzer/receipt-scanner) |
+| --- | --- | --- | --- |
+| Needs a company account | ❌ | ❌ | ❌ |
+| Finds receipts for you | Searches your mailbox | Forwarded by hand | Provided by hand |
+| Knows who paid | ✅ | ❌ | ❌ |
+| Money math in code | ✅ | ✅ | ✅ |
+| Real vendor receipts in the output | ✅ | ✅ | ❌ |
+| Editable policy file | ✅ | ❌ | ❌ |
+
+## Security and limits
+
+No credential is required for the core flow; the optional Gmail fallback needs a client secret stored at mode 600 inside a mode 700 directory in your home config folder. The render runs on your own machine, and the prose and privacy gate that checks every commit is a deterministic script, never a model call.
+
+- ❌ writes to or deletes anything in your mailbox
+- ❌ sends a receipt or the packet anywhere but where you send it yourself
+- ❌ loads a script, pixel or tracking link when the packet is opened
+- ❌ lets a vendor email run code
+- ❌ sends telemetry
+
+By default, `policy.md` sets the rules; your own copy of the [local override template](references/policy.local.example.md) overrides it.
+By default, the browser is Chrome, then Edge, then Chromium; `BOOMERANG_BROWSER` overrides it.
+By default, email goes through the host's own tool; set `BOOMERANG_GMAIL_CLIENT_SECRET` for the Gmail fallback.
+
+## Badges
+
+Click a badge for its recipe; Both is the recommended shape. Counts come from clonometer, linked above, read once a day and written to a badges branch. Until the owner adds a traffic token and flips the repository public, every cell below reads "resource not found."
+
+<table width="100%">
+  <tr>
+    <th></th>
+    <th align="center">This week</th>
+    <th align="center">All time</th>
+    <th align="center">Both</th>
+  </tr>
+  <tr>
+    <th align="left">Clones</th>
+    <td align="center"><a href="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones.json&query=$.last7_short&label=clones&suffix=%20this%20week&logo=github&logoColor=white"><img alt="Clones, this week" src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones.json&query=$.last7_short&label=clones&suffix=%20this%20week&logo=github&logoColor=white"></a></td>
+    <td align="center"><a href="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones.json&query=$.total_short&label=clones&suffix=%20all-time&logo=github&logoColor=white"><img alt="Clones, all time" src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones.json&query=$.total_short&label=clones&suffix=%20all-time&logo=github&logoColor=white"></a></td>
+    <td align="center"><a href="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones.json&query=$.badge&label=clones&logo=github&logoColor=white"><img alt="Clones, this week and all time" src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones.json&query=$.badge&label=clones&logo=github&logoColor=white"></a></td>
+  </tr>
+  <tr>
+    <th align="left">Views</th>
+    <td align="center"><a href="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/views.json&query=$.last7_short&label=views&suffix=%20this%20week&logo=github&logoColor=white"><img alt="Views, this week" src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/views.json&query=$.last7_short&label=views&suffix=%20this%20week&logo=github&logoColor=white"></a></td>
+    <td align="center"><a href="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/views.json&query=$.total_short&label=views&suffix=%20all-time&logo=github&logoColor=white"><img alt="Views, all time" src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/views.json&query=$.total_short&label=views&suffix=%20all-time&logo=github&logoColor=white"></a></td>
+    <td align="center"><a href="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/views.json&query=$.badge&label=views&logo=github&logoColor=white"><img alt="Views, this week and all time" src="https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/views.json&query=$.badge&label=views&logo=github&logoColor=white"></a></td>
+  </tr>
+</table>

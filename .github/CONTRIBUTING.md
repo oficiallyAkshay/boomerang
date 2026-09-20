@@ -39,19 +39,75 @@ Chrome or Edge on the machine renders the PDF; line three is only for a machine
 with neither, and line two says whether this is one of them. Coverage bar:
 changed lines at 90 percent or above, CI enforces it.
 
-## For agents
+## Install and configure
+
+The one-line installer, `npx skills add oficiallyAkshay/boomerang`, drops the
+skill into Claude Code, Cursor, Codex and about seventy other agents; the
+per-host paths for a manual copy, or for a host the installer does not reach,
+are in [`references/hosts.md`](../references/hosts.md). Either way the Python
+side is `pip install -r requirements.txt` or `uv sync`, and
+`python scripts/doctor.py` prints what is present, what is missing, and the
+one command that fixes each thing. No browser download is needed when Chrome
+or Edge is already on the machine.
+
+| Setting | Where | Default |
+| --- | --- | --- |
+| The shared ruleset | [`policy.md`](../policy.md) | Ships with the skill, yours to edit |
+| Your own overrides | `policy.local.md`, ignored by git ([template](../references/policy.local.example.md)) | Tips out, ride extras in, alcohol flagged, upgrades out, seat fees in, 60 minute meal window, USD |
+| Browser for the PDF | `BOOMERANG_BROWSER` | Chrome, then Edge, then Chromium, first one found |
+| Gmail fallback | `BOOMERANG_GMAIL_CLIENT_SECRET` | Off, the host's own email tool is used |
+
+## Architecture
+
+<p align="center">
+  <img alt="How boomerang works: two search passes feed a fetch step; cleaning, card fingerprinting and folio text run in parallel; the model applies the policy and shows a candidate list; then one build step produces the packet" src="../assets/diagram/architecture.svg" width="900">
+</p>
+
+Two search passes, then cleaning, who paid and folio text in parallel, then
+the model's judgment, then one packet. Drawn with Archify from
+[`assets/diagram/architecture.archify.json`](../assets/diagram/architecture.archify.json);
+rebuild it there if the flow changes.
+
+## Badge recipes
+
+The README's badge row carries only the rendered badges; the URL each one
+reads from lives here. The clone and view counts come from
+[`clonometer`](https://github.com/oficiallyAkshay/clonometer), run daily by
+the `clonometer` workflow described in the table above, writing
+`clones.json` and `views.json` to the `badges` branch. A shields
+dynamic-json badge reads either file with a `query` of `$.badge` for the
+combined form, `$.last7_short` for the week alone, or `$.total_short` for the
+lifetime count, for example:
+
+```
+https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/oficiallyAkshay/boomerang/badges/clones.json&query=$.badge&label=clones&logo=github&logoColor=white
+```
+
+Until the owner adds the `TRAFFIC_TOKEN` secret and the repository is public,
+every one of those badges reads "resource not found": GitHub's traffic
+endpoints need the token, and shields cannot fetch a raw file from a private
+repository either way.
+
+The vendor count badge reads its number from `readmerlin.json`, whose
+`counts.vendors` command counts the vendor folders that ship a sample; the
+same figure `tests/test_vendors.py` checks against the README on every pull
+request.
+
+## Repository layout
 
 The layout.
 
 | Path | What it holds |
 | --- | --- |
 | `SKILL.md` | The workflow, run in order, with the traps that cost a packet |
+| `AGENTS.md` | The short agent block every host reads; this file carries the rest |
 | `policy.md` | The shipped ruleset, one bullet per rule |
 | `scripts/` | Everything deterministic: fetch, clean, cards, build, render, splice, gate |
 | `vendors/<name>/` | One `rules.json` and one scrubbed sample |
 | `references/` | `interfaces.md`, `vendors.md`, `hosts.md`, `policy.local.example.md` |
 | `tests/` | pytest, the fixture maker, the hashed denylist |
 | `examples/` | The committed worked packet, built from the vendor samples |
+| `readmerlin.json` | The count-source command behind the README's vendor badge |
 
 **The split.** If a wrong answer costs money or credibility it belongs in a
 script under `scripts/`. If it costs one clarifying question it belongs to the
@@ -120,6 +176,18 @@ it cannot authenticate until the repository is public.
 A pull request run takes about a minute and a half end to end: `checks` around
 50 seconds, the two test legs about a minute each beside it, the gate in
 seconds.
+
+**What else runs, off the gate.** None of these block a merge; a finding is
+triaged, not a ruleset failure.
+
+| Workflow | What it does | Runs on |
+| --- | --- | --- |
+| `readme-check.yml` | Holds the README, `AGENTS.md` and `.github/CONTRIBUTING.md` to shape and honesty | Every push, every pull request, weekly |
+| `codeql.yml` | Scans the Python source and the workflow files for known vulnerability patterns | Every push to main, every pull request, weekly |
+| `scorecard.yml` | Rates the repository's own supply-chain hygiene and publishes the score | Every push to main, weekly |
+| `dependency-review.yml` | Scans a pull request's manifest changes for a known-vulnerable package | Every pull request |
+| `audit.yml` | The dependency audit split out of the pull request path, so an advisory published later still gets caught | Weekly, and any pull request touching `pyproject.toml` |
+| `clonometer.yml` | Reads the daily clone and view counts the badges read from | Daily, on a schedule |
 
 **Test plan a change must satisfy.** Find your area and write the test that
 proves the row before you open the pull request.

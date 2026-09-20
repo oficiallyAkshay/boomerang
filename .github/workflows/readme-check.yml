@@ -1,0 +1,28 @@
+name: readme check
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 9 * * 1"
+
+permissions: {}
+
+# Keyed the same way ci.yml is: by ref on a pull request, so a second push
+# cancels the first, and by commit sha on a push to a branch, so no two
+# pushes step on each other but neither is ever cancelled outright.
+concurrency:
+  group: readme-check-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  readmerlin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oficiallyAkshay/readmerlin@29b374152205bd8096c011d88a6e9ed153ab41c5   # v1.0.1
