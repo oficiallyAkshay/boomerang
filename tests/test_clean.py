@@ -75,6 +75,50 @@ def test_scripts_are_removed(no_network: None) -> None:
     assert "<p>Fare</p>" in out
 
 
+# CodeQL's py/bad-tag-filter names exactly this bypass for a regex like the one
+# that used to sit here: a browser accepts an end tag with a stray attribute on
+# it, ``</script foo="bar">``, as closing the element, even though it is a
+# parse error. A filter that only recognises a bare ``</script>`` leaves
+# ``alert(1)`` sitting in the page. ``clean_html`` walks the fragment with the
+# standard library's own tokenizer now rather than a hand written pattern, so
+# every shape the tokenizer treats as an end tag is one this drops too.
+def test_script_end_tag_with_a_trailing_attribute_is_removed(no_network: None) -> None:
+    raw = '<p>Fare</p><script>alert(1)</script foo="bar"><p>End</p>'
+    out = clean.clean_html(raw)
+    assert "alert(1)" not in out
+    assert out == "<p>Fare</p><p>End</p>"
+
+
+# The exact shape CodeQL's alert message uses: a tab and a newline before the
+# stray attribute.
+def test_script_end_tag_split_by_a_newline_is_removed(no_network: None) -> None:
+    raw = "<p>Fare</p><script>alert(1)</script\t\n bar><p>End</p>"
+    out = clean.clean_html(raw)
+    assert "alert(1)" not in out
+    assert out == "<p>Fare</p><p>End</p>"
+
+
+# No closing tag at all: a browser reads everything after it as script content
+# until end of document, and so must this, rather than removing only the
+# opening tag and leaving the rest as unremoved but inert-looking text.
+def test_unterminated_script_takes_the_rest_of_the_fragment(no_network: None) -> None:
+    raw = "<p>Fare</p><script>alert(1); the message never closes"
+    out = clean.clean_html(raw)
+    assert out == "<p>Fare</p>"
+    assert "alert(1)" not in out
+
+
+# Odd attribute quoting: a </script> string sitting inside a quoted attribute
+# value on the opening tag is not a real end tag, and a tokenizer has to keep
+# reading attributes past it to find the one that actually closes the
+# element, rather than stopping at the first </script it sees.
+def test_script_attribute_hiding_a_fake_close_tag_is_removed(no_network: None) -> None:
+    raw = '<p>Fare</p><script data-x="</script>">alert(1)</script><p>End</p>'
+    out = clean.clean_html(raw)
+    assert "alert(1)" not in out
+    assert out == "<p>Fare</p><p>End</p>"
+
+
 def test_wrapper_and_head_are_removed() -> None:
     raw = (
         "<!DOCTYPE html><html lang='en'><head><title>Receipt</title>"
