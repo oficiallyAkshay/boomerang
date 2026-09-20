@@ -1,0 +1,46 @@
+# The dependency audit split out of ci.yml: it has no reason to run on every
+# pull request, only when the dependency set can have changed or on a
+# schedule that catches an advisory published after the fact. Not required
+# by the branch ruleset; a finding here is triaged, not a merge gate.
+name: audit
+
+on:
+  schedule:
+    # Weekly, off the other scheduled workflows' own minutes so none of
+    # them compete for a runner.
+    - cron: "51 6 * * 2"
+  pull_request:
+    paths:
+      - pyproject.toml
+
+permissions: {}
+
+concurrency:
+  group: audit-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+      - run: uv sync
+
+      # Audit the resolved dependency set against the advisory database. The
+      # runtime has none, so this is the dev tooling. A known vulnerability
+      # fails the job.
+      - name: dependency audit
+        run: |
+          uv export --format requirements-txt --no-emit-project \
+            > "${RUNNER_TEMP}/requirements.txt"
+          uvx pip-audit --requirement "${RUNNER_TEMP}/requirements.txt"

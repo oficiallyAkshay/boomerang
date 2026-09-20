@@ -5,14 +5,14 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: read
+permissions: {}
 
 # A second push to a pull request supersedes the first, so cancel the run it
-# replaced. Pushes to main are never cancelled: every commit on the default
-# branch keeps its own result.
+# replaced: keyed by ref, so every push to the same branch shares one group.
+# Pushes to main are never cancelled, so each commit keeps its own result:
+# keyed by sha, so no two pushes share a group to begin with.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -30,6 +30,7 @@ jobs:
         with:
           # gitleaks scans the whole history, not the working tree.
           fetch-depth: 0
+          persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           python-version: "3.12"
@@ -85,6 +86,7 @@ jobs:
         with:
           # diff-cover needs history on both sides to find a merge base.
           fetch-depth: 0
+          persist-credentials: false
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           python-version: ${{ matrix.python-version }}
@@ -109,11 +111,17 @@ jobs:
 
       - name: diff coverage
         if: github.event_name == 'pull_request'
-        # Fetch main in full. A shallow fetch leaves no commit in common with
-        # a rebased branch, and diff-cover then has no merge base to compare
-        # against.
+        # Fetch main in full over an authenticated URL. A shallow fetch
+        # leaves no commit in common with a rebased branch, and diff-cover
+        # then has no merge base to compare against; persist-credentials is
+        # false on the checkout above, and the repository is private until
+        # the owner flips it public, so an anonymous fetch would fail too.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPOSITORY: ${{ github.repository }}
         run: |
-          git fetch origin main
+          git fetch "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPOSITORY}.git" \
+            main:refs/remotes/origin/main
           uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=90
       - run: uv run python examples/build_example.py --check
 
@@ -124,6 +132,9 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # This job reads nothing from the repository and writes nothing back; it
+    # only reads the other jobs' results.
+    permissions: {}
     steps:
       - name: gate
         env:
