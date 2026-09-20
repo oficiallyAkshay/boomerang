@@ -1,0 +1,6 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oficiallyAkshay/readmerlin/main/readmerlin.schema.json",
+  "counts": {
+    "vendors": "python3 -c \"import pathlib; vd = pathlib.Path('vendors'); print(sum(1 for d in sorted(vd.iterdir()) if (d / 'rules.json').is_file() and any(f.name.startswith('sample') and f.suffix in ('.html', '.txt') for f in d.iterdir())))\""
+  }
+}

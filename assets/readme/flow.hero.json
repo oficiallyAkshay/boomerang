@@ -1,0 +1,49 @@
+{
+  "style": "flat",
+  "title": "Inbox and calendar feed receipts of every kind into one PDF packet with the receipts behind the summary",
+  "sources": [
+    {
+      "label": "Inbox",
+      "icon": "mail",
+      "gives": "receipts"
+    },
+    {
+      "label": "Calendar",
+      "icon": "calendar",
+      "gives": "trip dates"
+    }
+  ],
+  "handled": [
+    {
+      "label": "Rides",
+      "icon": "car"
+    },
+    {
+      "label": "Meals",
+      "icon": "utensils"
+    },
+    {
+      "label": "Flights",
+      "icon": "plane"
+    },
+    {
+      "label": "Rooms",
+      "icon": "bed"
+    },
+    {
+      "label": "Transit",
+      "icon": "train"
+    },
+    {
+      "label": "Wi-Fi",
+      "icon": "wifi"
+    }
+  ],
+  "more": true,
+  "deliverable": {
+    "label": "one PDF packet",
+    "heading": "Summary",
+    "kind": "table",
+    "backing": "receipts behind the summary"
+  }
+}
