@@ -1,2 +1,2 @@
-playwright==1.63.0
-pypdf==6.19.0
+playwright==1.64.0
+pypdf==6.20.1
