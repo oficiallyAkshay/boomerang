@@ -79,8 +79,11 @@ read. Sequential rather than pooled: the strip-pattern warnings come out in
 the order the files are listed with nothing to collect or re-sort, and one
 shared ``failed-images.json`` can no longer be written by two cleans at once.
 
-Stdlib only. Regex over the markup, deliberately: these are email tables, the
-input is one saved message at a time, and a parser dependency buys nothing here.
+Standard library and tinycss2. Regex over the markup, deliberately: these are
+email tables, the input is one saved message at a time, and an HTML parser
+buys nothing here. tinycss2 is the one dependency, for the CSS scoper only:
+vendor CSS is untrusted, and a brace inside a quoted string must not end a
+block early. The owner lifted the stdlib only rule for this one file.
 """
 
 from __future__ import annotations
@@ -102,6 +105,8 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
+
+import tinycss2
 
 SCOPE = ".rc"
 # The name for no vendor rules at all, on the CLI and in what it prints.
@@ -325,6 +330,8 @@ CSS_DATA_SCHEMES = ("data:image/", "data:font/")
 # Taken off before the keyword is read, so a commented @media is still an
 # at-rule and is never handed to the selector scoping as if it were one.
 CSS_LEAD_RE = re.compile(r"\A\s*(?:/\*.*?\*/\s*)+", re.DOTALL)
+# Where tinycss2 starts a new line: it reads these four as one break each.
+CSS_LINE_BREAK_RE = re.compile(r"\r\n|[\r\n\f]")
 
 # A money string as a receipt prints one. Counted before and after each vendor
 # strip pattern, never parsed. The comma is there because a euro receipt writes
@@ -606,35 +613,32 @@ def _scope_selectors(prelude: str, scope: str = SCOPE) -> str:
 def _scope_css(css: str, scope: str = SCOPE) -> str:
     """Scope every rule in a stylesheet to the receipt container.
 
-    The brace scanning here is not string aware: a literal ``}`` written inside
-    a quoted value, as in ``content: "}"``, would close a block early and
-    desync the rest of the sheet. That is acceptable because the sheet reaching
-    this point has already been through ``sanitize_css``, which is where
-    anything that could act has gone, so the worst a desync can do is leave a
-    receipt looking wrong. Comments are skipped, because they are common in
-    vendor mail; a quoted brace in a receipt stylesheet is not.
+    tinycss2 finds where each top level block and statement starts, so a brace
+    or semicolon inside a quoted string or a comment never ends one early. The
+    text is cut from the original by those positions and left byte for byte as
+    the vendor wrote it; only the selectors get the scope in front.
     """
+    nodes = tinycss2.parse_component_value_list(css, skip_comments=False)
+    # tinycss2 reports a line and column; a line ends at \r\n, \r, \n or \f.
+    starts = [0] + [found.end() for found in CSS_LINE_BREAK_RE.finditer(css)]
+
+    def offset(node) -> int:
+        return starts[node.source_line - 1] + node.source_column - 1
+
+    ends = [offset(node) for node in nodes[1:]] + [len(css)]
     out: list[str] = []
-    index = 0
-    length = len(css)
-    while index < length:
-        if css.startswith("/*", index):
-            end = css.find("*/", index + 2)
-            end = length if end < 0 else end + 2
-            out.append(css[index:end])
-            index = end
+    cut = 0
+    for node, end in zip(nodes, ends, strict=True):
+        if node.type == "literal" and node.value == ";":
+            out.append(css[cut:end])
+            cut = end
             continue
-        brace = css.find("{", index)
-        if brace < 0:
-            out.append(css[index:])
-            break
-        semicolon = css.find(";", index)
-        if 0 <= semicolon < brace:
-            out.append(css[index : semicolon + 1])
-            index = semicolon + 1
+        if node.type != "{} block":
             continue
-        prelude = css[index:brace]
-        body, index = _read_block(css, brace + 1)
+        brace = offset(node)
+        body = css[brace + 1 : end - 1] if css[end - 1] == "}" else css[brace + 1 : end]
+        prelude = css[cut:brace]
+        cut = end
         lead = CSS_LEAD_RE.match(prelude)
         head = prelude[lead.end() :] if lead else prelude
         stripped = head.strip()
@@ -646,28 +650,8 @@ def _scope_css(css: str, scope: str = SCOPE) -> str:
         else:
             front = prelude[: lead.end()] if lead else ""
             out.append(f"{front}{_scope_selectors(head, scope)}{{{body}}}")
+    out.append(css[cut:])
     return "".join(out)
-
-
-def _read_block(css: str, start: int) -> tuple[str, int]:
-    """Text of a brace block starting just after its open brace, and the index after it."""
-    depth = 1
-    index = start
-    length = len(css)
-    while index < length and depth:
-        if css.startswith("/*", index):
-            end = css.find("*/", index + 2)
-            index = length if end < 0 else end + 2
-            continue
-        char = css[index]
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-        index += 1
-    if depth:
-        return css[start:], length
-    return css[start : index - 1], index
 
 
 # --------------------------------------------------------------------- images
