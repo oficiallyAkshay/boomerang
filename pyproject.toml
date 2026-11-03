@@ -8,6 +8,7 @@ license = { text = "MIT" }
 dependencies = [
     "playwright==1.64.0",
     "pypdf==6.21.2",
+    "tinycss2==1.5.1",
 ]
 
 [project.optional-dependencies]

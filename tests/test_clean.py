@@ -553,6 +553,22 @@ def test_css_comments_and_unterminated_blocks_do_not_break_scoping() -> None:
     assert ".rc .b{color:blue}" in out
 
 
+def test_a_brace_inside_a_css_string_does_not_desync_the_scoper() -> None:
+    css = (
+        '.a:after{content:"}"}'
+        ".b{color:blue}"
+        "@media print{.c:before{content:'{';color:red}.d{margin:0}}"
+        '.e[title="a{b;c"]{color:green}'
+        ".f{color:black}"
+    )
+    out = clean.clean_html(f"<style>{css}</style><p>x</p>")
+    assert '.rc .a:after{content:"}"}' in out
+    assert ".rc .b{color:blue}" in out
+    assert "@media print{.rc .c:before{content:'{';color:red}.rc .d{margin:0}}" in out
+    assert '.rc .e[title="a{b;c"]{color:green}' in out
+    assert ".rc .f{color:black}" in out
+
+
 def test_a_comment_in_front_of_an_at_rule_leaves_it_an_at_rule() -> None:
     """The prelude carried the comment, so the keyword was never read.
 
