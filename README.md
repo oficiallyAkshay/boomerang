@@ -91,7 +91,7 @@ By default, email goes through the host's own tool; set `BOOMERANG_GMAIL_CLIENT_
 
 ## Badges
 
-Click a badge for its recipe; Both is the recommended shape. Counts come from clonometer, linked above, read once a day and written to a badges branch. Until the owner adds a traffic token and flips the repository public, every cell below reads "resource not found."
+Click a badge for its recipe; Both is the recommended shape. Counts come from clonometer, linked above, read once a day and written to a badges branch.
 
 <table width="100%">
   <tr>
