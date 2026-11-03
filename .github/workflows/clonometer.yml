@@ -12,9 +12,25 @@ jobs:
   count:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions: {}
+    # The action uses TRAFFIC_TOKEN for its reads and writes. The workflow
+    # token only opens the failure issue below.
+    permissions:
+      issues: write
     steps:
       - uses: oficiallyAkshay/clonometer@bc07967d1aafcbf67af9eb0ad230650de0be8ca4 # v1.1.0
         with:
           token: ${{ secrets.TRAFFIC_TOKEN }}
           metrics: clones,views
+      # A failed run opens one issue, or comments on the one already open.
+      - if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="The nightly clonometer run failed"
+          open=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" -R "$GITHUB_REPOSITORY" --body "$RUN_URL"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body "$RUN_URL"
+          fi
