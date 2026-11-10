@@ -37,10 +37,10 @@ jobs:
       - run: uv sync
 
       # Audit the resolved dependency set against the advisory database. The
-      # runtime has none, so this is the dev tooling. A known vulnerability
-      # fails the job.
+      # runtime has none, so this is the dev tooling, and the scan covers
+      # every extra. A known vulnerability fails the job.
       - name: dependency audit
         run: |
-          uv export --format requirements-txt --no-emit-project \
+          uv export --format requirements-txt --all-extras --no-emit-project \
             > "${RUNNER_TEMP}/requirements.txt"
           uvx pip-audit --requirement "${RUNNER_TEMP}/requirements.txt"
