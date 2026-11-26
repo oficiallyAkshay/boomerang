@@ -1,4 +1,5 @@
 .venv/
+.build-packages/
 uv.lock
 __pycache__/
 *.pyc
