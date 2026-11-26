@@ -103,6 +103,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
+import build
+
 SCOPE = ".rc"
 # The name for no vendor rules at all, on the CLI and in what it prints.
 GENERIC = "generic"
@@ -123,8 +125,8 @@ IMAGE_SIGNATURES = (
 
 # What a directory clean carries across untouched. A text body, a folio and a
 # receipt photo are already what the packet needs; only markup gets cleaned.
-COPY_SUFFIXES = (".txt", ".pdf", ".png", ".jpg")
 CLEAN_SUFFIX = ".html"
+COPY_SUFFIXES = tuple(suffix for suffix in build.SUFFIX_ORDER if suffix != CLEAN_SUFFIX)
 
 REQUIRED_KEYS = (
     "name",
@@ -682,9 +684,21 @@ def _mime_for(url: str) -> str:
     return mimetypes.guess_type(urlsplit(url).path)[0] or "image/png"
 
 
+CHAR_REF_RE = re.compile(r"&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);")
+
+
+def _decode_url(url: str) -> str:
+    """The address a markup URL stands for.
+
+    Only references that end in a semicolon are decoded. A bare ``&para`` or
+    ``&reg`` in a query string stays as written, as it fetches today.
+    """
+    return CHAR_REF_RE.sub(lambda ref: html_module.unescape(ref.group(0)), url)
+
+
 def _src_url(match: re.Match[str]) -> str:
-    """The URL out of a ``SRC_RE`` match, whichever quoting form matched."""
-    return next(group for group in match.groups() if group is not None)
+    """The decoded URL out of a ``SRC_RE`` match, whichever quoting form matched."""
+    return _decode_url(next(group for group in match.groups() if group is not None))
 
 
 def _is_cached(cache_dir: Path, url: str) -> bool:
@@ -756,7 +770,7 @@ def drop_failed_images(html: str, cache_dir: Path) -> str:
 
     def replace(match: re.Match[str]) -> str:
         tag = match.group(0)
-        if (_attr(tag, "src") or "") not in failed:
+        if _decode_url(_attr(tag, "src") or "") not in failed:
             return tag
         alt = html_module.unescape(_attr(tag, "alt") or "").strip()
         return f'<span class="img-alt">{html_module.escape(alt, quote=False)}</span>'

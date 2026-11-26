@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
+import build
 import clean
 import pytest
 
@@ -1126,6 +1127,50 @@ def test_fetch_images_downloads_into_the_cache(
     assert not (cache / clean.cache_name(blank)).exists()
 
 
+def test_an_encoded_ampersand_in_an_image_address_is_fetched_decoded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, public_dns: None
+) -> None:
+    decoded = "https://cdn.example.com/p.png?a=1&b=2"
+    calls: list[str] = []
+
+    def fake_urlopen(url: str, timeout: int = 0) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(PNG)
+
+    monkeypatch.setattr(clean, "urlopen", fake_urlopen)
+    html = '<img src="https://cdn.example.com/p.png?a=1&amp;b=2">'
+    assert clean.fetch_images(html, tmp_path) == 1
+    assert calls == [decoded]
+    assert (tmp_path / clean.cache_name(decoded)).read_bytes() == PNG
+    inlined = clean.inline_images(html, tmp_path)
+    assert inlined.startswith('<img src="data:image/png;base64,')
+
+
+def test_a_plain_ampersand_before_a_name_like_param_is_fetched_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, public_dns: None
+) -> None:
+    url = "https://cdn.example.com/p.png?a=1&param=2&reg=3"
+    calls: list[str] = []
+
+    def fake_urlopen(url: str, timeout: int = 0) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(PNG)
+
+    monkeypatch.setattr(clean, "urlopen", fake_urlopen)
+    assert clean.fetch_images(f'<img src="{url}">', tmp_path) == 1
+    assert calls == [url]
+
+
+def test_an_encoded_address_whose_fetch_failed_becomes_its_alt_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, public_dns: None
+) -> None:
+    html = '<img src="https://cdn.example.com/p.png?a=1&amp;b=2" alt="Logo">'
+    _answer_with(monkeypatch, HTTPError("u", 404, "Not Found", {}, None))
+    clean.fetch_images(html, tmp_path)
+    assert clean.failed_images(tmp_path) == {"https://cdn.example.com/p.png?a=1&b=2"}
+    assert clean.inline_images(html, tmp_path) == '<span class="img-alt">Logo</span>'
+
+
 # ------------------------------------------------------- images that never came
 
 
@@ -2028,6 +2073,18 @@ def test_the_listing_is_in_filename_order_with_the_vendor_of_each_file(
 
     assert listed == [("a.html", "uber"), ("b.html", "lyft"), ("c.html", "generic")]
     assert (tmp_path / "clean" / "a.html").read_text(encoding="utf-8") == "<p>Fare $12.50</p>\n"
+
+
+def test_a_hand_added_jpeg_receipt_is_carried_across(tmp_path: Path) -> None:
+    source = tmp_path / "receipts"
+    source.mkdir()
+    (source / "photo.jpeg").write_bytes(b"\xff\xd8 hand added")
+    clean.clean_dir(source, tmp_path / "clean", VENDORS_DIR)
+    assert (tmp_path / "clean" / "photo.jpeg").read_bytes() == b"\xff\xd8 hand added"
+
+
+def test_the_copy_list_is_the_build_list_less_the_markup_suffix() -> None:
+    assert set(clean.COPY_SUFFIXES) == set(build.SUFFIX_ORDER) - {clean.CLEAN_SUFFIX}
 
 
 def test_text_pdf_and_image_receipts_are_carried_across_untouched(tmp_path: Path) -> None:
