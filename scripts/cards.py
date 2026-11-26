@@ -151,6 +151,20 @@ def receipt_text(path: Path) -> str | None:
     return strip_tags(raw) if suffix == ".html" else raw
 
 
+def receipt_id(path: Path) -> str:
+    """The email this file came from: ``<rid>`` for ``<rid>.1.pdf`` as for ``<rid>.pdf``.
+
+    ``fetch.py`` names a second attachment ``<rid>.<n>.<ext>``, and a folio and
+    an invoice of one booking are one purchase, not two. Only a name with the
+    ``<rid>.meta.json`` fetch writes beside it is folded, so a file added by
+    hand keeps its own stem.
+    """
+    rid, _, number = path.stem.rpartition(".")
+    if rid and number.isdigit() and (path.parent / f"{rid}.meta.json").is_file():
+        return rid
+    return path.stem
+
+
 def rules_for(path: Path, vendor_rules: dict | None) -> dict | None:
     """The rules of the folder that sent this receipt, or None for the defaults.
 
@@ -162,7 +176,7 @@ def rules_for(path: Path, vendor_rules: dict | None) -> dict | None:
     """
     if not vendor_rules:
         return None
-    meta = clean.read_meta(path)
+    meta = clean.read_meta(path.with_name(receipt_id(path) + path.suffix))
     if not meta:
         return None
     name = clean.detect_vendor(
@@ -187,7 +201,7 @@ def fingerprint(receipts_dir: Path, rules: dict | None = None) -> dict[str, list
         if text is None:
             continue
         for last4 in find_last4(text, rules_for(path, rules)):
-            hits.setdefault(last4, set()).add(path.stem)
+            hits.setdefault(last4, set()).add(receipt_id(path))
     return {last4: sorted(rids) for last4, rids in sorted(hits.items())}
 
 

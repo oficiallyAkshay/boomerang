@@ -236,6 +236,31 @@ def test_a_stripe_card_seen_once_is_named_as_someone_else_s(tmp_path: Path):
     assert singletons(fp) == {"4321", "7788"}
 
 
+def test_two_attachments_of_one_email_printing_one_card_count_as_one_receipt(tmp_path: Path):
+    """A folio and an invoice on one booking email are one purchase, not two.
+
+    fetch saves the second attachment as ``<rid>.1.pdf``; it still belongs to
+    the email ``<rid>``, so the company card it prints stays a singleton. Files
+    fetch did not name, with no meta file beside them, keep their own stems.
+    """
+    (tmp_path / "booking.meta.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "booking.pdf").write_bytes(pdf_bytes([["Folio charged to Visa ending 8802"]]))
+    (tmp_path / "booking.1.pdf").write_bytes(pdf_bytes([["Invoice paid by Visa ending 8802"]]))
+    (tmp_path / "trip.pdf").write_bytes(pdf_bytes([["Visa ending 4321"]]))
+    (tmp_path / "trip.1.pdf").write_bytes(pdf_bytes([["Visa ending 4321"]]))
+    fp = fingerprint(tmp_path)
+    assert fp == {"4321": ["trip", "trip.1"], "8802": ["booking"]}
+    assert singletons(fp) == {"8802"}
+
+
+def test_a_numbered_attachment_is_read_with_its_email_s_vendor_rules(tmp_path: Path):
+    """The headers sit beside ``<rid>``, so ``<rid>.1.pdf`` is read by them too."""
+    write_stripe_receipt(tmp_path)
+    (tmp_path / f"{STRIPE_RID}.1.pdf").write_bytes(pdf_bytes([["Payment method - 5566"]]))
+    fp = fingerprint(tmp_path, clean.load_vendor_rules(VENDORS_DIR))
+    assert fp == {"5566": [STRIPE_RID], "7788": [STRIPE_RID]}
+
+
 def test_a_receipt_with_no_meta_file_falls_back_to_the_default_shapes(tmp_path: Path):
     """Nothing names the vendor, so the built-in reading is what is left."""
     (tmp_path / "loose.txt").write_text("Visa *4321", encoding="utf-8")
