@@ -36,11 +36,10 @@ jobs:
           cache-dependency-glob: "pyproject.toml"
       - run: uv sync
 
-      # Audit the resolved dependency set against the advisory database. The
-      # runtime has none, so this is the dev tooling. A known vulnerability
-      # fails the job.
+      # Audit the resolved dependency set, runtime and dev alike, against the
+      # advisory database. A known vulnerability fails the job.
       - name: dependency audit
         run: |
-          uv export --format requirements-txt --no-emit-project \
-            > "${RUNNER_TEMP}/requirements.txt"
+          uv export --format requirements-txt --all-extras \
+            --no-emit-project > "${RUNNER_TEMP}/requirements.txt"
           uvx pip-audit --requirement "${RUNNER_TEMP}/requirements.txt"
