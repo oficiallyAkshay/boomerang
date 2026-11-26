@@ -77,7 +77,7 @@ CLI: build.py DATA.json --receipts DIR --out packet.html   # totals, then "pages
 CLI: clean.py IN.html --out OUT.html [--vendor NAME|generic] [--vendors DIR] [--images DIR] [--fetch-images]
 CLI: clean.py --dir RECEIPTS --out CLEAN [--vendors DIR] [--images DIR] [--fetch-images]
   # cleans every .html in RECEIPTS, one after another in filename order, reading each file's vendor
-  # from its own <rid>.meta.json; .txt, .pdf, .png and .jpg are copied through unchanged and
+  # from its own <rid>.meta.json; .txt, .pdf, .png, .jpg and .jpeg are copied through unchanged and
   # everything else, meta files included, stays behind. One "clean: <file> vendor <name>" line
   # per receipt on stderr, in filename order, and the amount guard warnings in that order too
 CLI: cards.py RECEIPTS_DIR [--vendors DIR]  # reads .html, .txt and .pdf, so folios count too

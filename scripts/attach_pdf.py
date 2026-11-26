@@ -132,7 +132,9 @@ def splice(packet_pdf: Path, data: dict, receipts_dir: Path, out_pdf: Path) -> i
     for index, receipt in enumerate(receipts):
         last_page += per_receipt[index]
         source = sources[index]
-        if not source.exists():
+        # Only a receipt the packet shows as its PDF gets the PDF's pages.
+        shown = build.find_receipt_file(receipts_dir, receipt["rid"], receipt.get("kind"))
+        if shown is None or shown.suffix.lower() != ".pdf":
             continue
         attachment = _read_receipt(source, receipt["rid"])
         for step, page in enumerate(attachment.pages, start=1):

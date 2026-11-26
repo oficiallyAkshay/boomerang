@@ -187,6 +187,36 @@ def test_splice_keeps_two_attachments_in_place(tmp_path: Path) -> None:
     assert "Omega folio single sheet" in pages[6]
 
 
+@pytest.mark.parametrize("shown", [".html", ".png"])
+def test_a_receipt_not_shown_as_pdf_gets_no_spliced_pages(tmp_path: Path, shown: str) -> None:
+    receipts_dir = tmp_path / "receipts"
+    receipts_dir.mkdir()
+    (receipts_dir / "alpha.pdf").write_bytes(pdf_bytes([["Stray alpha sheet"]]))
+    (receipts_dir / "alpha.html").write_text("<p>the email body</p>", encoding="utf-8")
+    if shown == ".png":
+        (receipts_dir / "alpha.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    kind = "html" if shown == ".html" else "image"
+    data = {"receipts": [{"rid": "alpha", "title": "Alpha", "kind": kind}]}
+    html = write_packet(tmp_path / "packet.html", data, receipts_dir)
+    before, _channel, _map = render_pdf.render(html, tmp_path / "packet.pdf")
+    out = tmp_path / "final.pdf"
+    assert attach_pdf.splice(tmp_path / "packet.pdf", data, receipts_dir, out) == before
+    assert "Stray alpha sheet" not in attach_pdf.extract_text(out)
+
+
+def test_a_receipt_shown_as_pdf_still_gets_its_pages(tmp_path: Path) -> None:
+    receipts_dir = tmp_path / "receipts"
+    receipts_dir.mkdir()
+    (receipts_dir / "alpha.pdf").write_bytes(pdf_bytes([["Real alpha sheet"]]))
+    (receipts_dir / "alpha.html").write_text("<p>the email body</p>", encoding="utf-8")
+    data = {"receipts": [{"rid": "alpha", "title": "Alpha", "kind": "pdf"}]}
+    html = write_packet(tmp_path / "packet.html", data, receipts_dir)
+    before, _channel, _map = render_pdf.render(html, tmp_path / "packet.pdf")
+    out = tmp_path / "final.pdf"
+    assert attach_pdf.splice(tmp_path / "packet.pdf", data, receipts_dir, out) == before + 1
+    assert "Real alpha sheet" in attach_pdf.extract_text(out)
+
+
 def test_a_folio_behind_a_long_receipt_lands_after_its_last_page(tmp_path: Path) -> None:
     """The arithmetic the splice used to do puts this folio a page early.
 

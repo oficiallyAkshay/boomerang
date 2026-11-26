@@ -940,6 +940,18 @@ def test_jpg_receipts_get_the_jpeg_media_type(tmp_path: Path, receipts: Path) ->
     assert build._receipt_body(shot).startswith('<img src="data:image/jpeg;base64,')
 
 
+def test_a_cleaned_jpeg_receipt_reaches_the_packet(tmp_path: Path, receipts: Path) -> None:
+    import clean
+
+    source = tmp_path / "raw"
+    source.mkdir()
+    (source / "photo.jpeg").write_bytes((receipts / "de472d8a39854951.png").read_bytes())
+    clean.clean_dir(source, tmp_path / "clean", Path(__file__).resolve().parents[1] / "vendors")
+    found = build.find_receipt_file(tmp_path / "clean", "photo")
+    assert found is not None
+    assert build._receipt_body(found).startswith('<img src="data:image/jpeg;base64,')
+
+
 def test_text_receipts_are_escaped(tmp_path: Path, data: dict) -> None:
     rid = data["receipts"][0]["rid"]
     folder = tmp_path / "receipts"
