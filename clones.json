@@ -1,0 +1,18 @@
+{
+  "badge": "144 (7d) \u2022 2,134 (all-time)",
+  "last7": 144,
+  "last7_short": "144",
+  "metric": "clones",
+  "repo": "oficiallyAkshay/boomerang",
+  "schema": 1,
+  "since": "2026-09-06",
+  "total": 2134,
+  "total_short": "2,134",
+  "updated": "2026-11-28",
+  "window": {
+    "count": 282,
+    "days": 14,
+    "uniques": 87
+  },
+  "window_short": "282"
+}
